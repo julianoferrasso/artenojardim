@@ -1,0 +1,166 @@
+// Schema da Fase 0 — a fundação. Catálogo, pedidos e estoque chegam na Fase 1.
+//
+// Convenções (docs/arquitetura.md §7):
+//   - PK cuid(): ordenável no tempo, não vaza contagem de pedidos, seguro em URL
+//   - Dinheiro em Int (centavos). Peso em gramas. Dimensão em milímetros.
+//   - onDelete: Restrict por padrão. Cascade só de pai para filho do mesmo agregado.
+//   - storeId nas raízes de agregado + onde a unicidade precisa ser por loja.
+//
+// Enums duplicam packages/shared/src/constants/enums.ts porque o browser não pode
+// importar @prisma/client. test/enum-drift.test.ts impede a divergência silenciosa.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// As URLs de conexão vivem em prisma.config.ts (o Prisma 6 as removeu daqui).
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+/// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
+/// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
+/// Eles nascem na Fase 4, junto com a funcionalidade.
+model Store {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  domain   String  @unique
+  email    String
+  phone    String?
+  document String?
+
+  /// Endereço de origem do frete. JSON porque é lido inteiro e nunca filtrado.
+  addressJson Json?
+
+  currency String @default("BRL")
+  timezone String @default("America/Sao_Paulo")
+  locale   String @default("pt-BR")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  settings  Setting[]
+  auditLogs AuditLog[]
+  uploads   Upload[]
+}
+
+/// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
+/// ciclos de vida distintos, e na Fase 4 divergem ainda mais.
+model User {
+  id           String   @id @default(cuid())
+  storeId      String
+  name         String
+  email        String
+  passwordHash String
+  role         UserRole @default(STAFF)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+  uploads       Upload[]
+
+  /// Hoje redundante (uma loja). Na Fase 4 é o que impede colisão entre lojas.
+  @@unique([storeId, email])
+  @@index([storeId])
+}
+
+/// Guardamos o HASH, não o token: um dump do banco não dá sessões ao atacante.
+/// replacedById forma a cadeia de rotação — ver detecção de reúso em auth/service.ts.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String?
+  /// customerId entra na Fase 1. A constraint "exatamente um preenchido" é CHECK
+  /// na migration — o Prisma não modela isso.
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  /// Aponta para o token que substituiu este. Presença + revokedAt = rotacionado.
+  replacedById String?       @unique
+  replacedBy   RefreshToken? @relation("TokenChain", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaces     RefreshToken? @relation("TokenChain")
+
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Chave-valor tipado com Zod por chave (shared/settings). Alternativa rejeitada:
+/// tabela larga com uma coluna por config — cada nova config viraria migração.
+model Setting {
+  id        String   @id @default(cuid())
+  storeId   String
+  key       String
+  valueJson Json
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, key])
+}
+
+/// Nasce junto com o primeiro CRUD, não no endurecimento: auditoria adicionada
+/// depois não é retroativa — os meses sem ela são um buraco permanente.
+model AuditLog {
+  id         String  @id @default(cuid())
+  storeId    String
+  userId     String?
+  /// Vocabulário de EVENTS em shared/constants: "product.updated".
+  action     String
+  entityType String
+  entityId   String
+  /// Diff { campo: { from, to } }. Sem valores sensíveis — o redator é no service.
+  changesJson Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, createdAt])
+  @@index([entityType, entityId])
+  @@index([userId])
+}
+
+/// Guarda `key`, NÃO `url`: a URL é derivada por getPublicUrl(key).
+/// Persistir a URL completa amarraria os dados ao provedor de hoje — trocar de
+/// storage viraria UPDATE em toda a tabela.
+model Upload {
+  id       String  @id @default(cuid())
+  storeId  String
+  key      String  @unique
+  filename String
+  mimeType String
+  size     Int
+  width    Int?
+  height   Int?
+  folder   String?
+  userId   String?
+
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, createdAt])
+}

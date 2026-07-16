@@ -1,0 +1,29 @@
+{
+  "name": "@ecommerce/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "development": "./src/contracts/index.ts",
+      "default": "./dist/contracts/index.js"
+    },
+    "./constants": {
+      "types": "./dist/constants/index.d.ts",
+      "development": "./src/constants/index.ts",
+      "default": "./dist/constants/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

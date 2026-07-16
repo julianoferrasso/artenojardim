@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# Segredos — nunca versionar. .env.example é o contrato, .env é a instância.
+.env
+.env.*
+!.env.example
+
+# Storage local (driver de desenvolvimento). Em produção é R2.
+uploads/
+
+# Logs
+*.log
+logs/
+
+coverage/
+.turbo/
+.DS_Store
+Thumbs.db
+*.tsbuildinfo

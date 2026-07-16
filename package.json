@@ -1,0 +1,25 @@
+{
+  "name": "artenojardim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter @ecommerce/api dev",
+    "dev:store": "pnpm --filter @ecommerce/store dev",
+    "dev:admin": "pnpm --filter @ecommerce/admin dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @ecommerce/api db:migrate",
+    "db:seed": "pnpm --filter @ecommerce/api db:seed",
+    "db:studio": "pnpm --filter @ecommerce/api db:studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

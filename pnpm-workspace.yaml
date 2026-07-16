@@ -1,0 +1,21 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 11 exige aprovação explícita de postinstall — defesa contra supply chain.
+# Cada um aqui foi verificado: Prisma baixa engines, argon2 e esbuild compilam
+# binário nativo. Nenhum pacote entra nesta lista sem motivo conhecido.
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  argon2: true
+  esbuild: true
+  prisma: true
+  # Otimizador de imagem do next/image. É ele que redimensiona e converte para
+  # WebP/AVIF sob demanda — a razão de não existir worker gerando derivadas.
+  sharp: true
+
+# pnpm 10 e não 11: o undici do pnpm 11 aborta conexões com o registry neste
+# ambiente (UND_ERR_DESTROYED) e chega a derrubar o libuv em src/win/async.c.
+# npm baixa os mesmos pacotes em menos de 1s, então não é rede. Revisar quando
+# uma 11.x posterior corrigir; a versão está fixada em packageManager.
