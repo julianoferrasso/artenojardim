@@ -1,36 +1,47 @@
+'use client'
+
+import { useAuth } from '@/lib/auth'
+
 /**
- * Placeholder da Fase 0. O shell real (login + layout) é o item 1 da Fase 1.
+ * Shell mínimo da Fase 1, item 1. As telas reais (produtos, pedidos, estoque)
+ * entram nos itens seguintes — cada uma depende do módulo dela na API.
  */
 export default function AdminHomePage() {
-  return (
-    <main className="min-h-svh bg-background text-foreground">
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-24">
-        <span className="w-fit rounded-md bg-secondary px-3 py-1 text-sm text-secondary-foreground">
-          Fase 0 — fundação
-        </span>
-        <h1 className="text-3xl font-semibold tracking-tight">Admin — Arte no Jardim</h1>
-        <p className="text-muted-foreground">
-          Painel em construção. Login e shell chegam no item 1 da Fase 1.
-        </p>
+  const { user, logout } = useAuth()
 
-        <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-card p-6">
-          <span className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-            primary
-          </span>
-          <span className="rounded-md bg-muted px-3 py-1.5 text-sm text-muted-foreground">
-            muted
-          </span>
-          <span className="rounded-md bg-warning px-3 py-1.5 text-sm text-warning-foreground">
-            warning
-          </span>
-          <span className="rounded-md bg-success px-3 py-1.5 text-sm text-success-foreground">
-            success
-          </span>
-          <span className="rounded-md bg-destructive px-3 py-1.5 text-sm text-destructive-foreground">
-            destructive
-          </span>
+  return (
+    <div className="min-h-svh bg-muted">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+          <span className="font-semibold tracking-tight">Arte no Jardim</span>
+
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-sm">{user?.name}</span>
+              <span className="text-xs text-muted-foreground">{user?.role}</span>
+            </div>
+            <button
+              onClick={() => void logout()}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
+            >
+              Sair
+            </button>
+          </div>
         </div>
-      </div>
-    </main>
+      </header>
+
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-8">
+          <span className="w-fit rounded-md bg-secondary px-3 py-1 text-xs text-secondary-foreground">
+            Fase 1 · item 1 de 18
+          </span>
+          <h1 className="text-2xl font-semibold tracking-tight">Autenticação pronta</h1>
+          <p className="text-sm text-muted-foreground">
+            Sessão ativa com refresh transparente. As próximas telas chegam com os módulos:
+            uploads, categorias, produtos, estoque e pedidos.
+          </p>
+        </div>
+      </main>
+    </div>
   )
 }

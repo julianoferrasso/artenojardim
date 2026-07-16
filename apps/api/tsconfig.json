@@ -3,7 +3,14 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "types": ["node"]
+    "types": ["node"],
+
+    // A API é aplicação, não biblioteca: ninguém importa os tipos dela.
+    // Emitir .d.ts força o tsc a *nomear* todo tipo inferido, e com o layout do
+    // pnpm ele não consegue nomear os genéricos internos do Express (TS2742) —
+    // um erro de portabilidade de declaração que não tem por que existir aqui.
+    // packages/shared mantém `declaration: true`, porque lá é consumido.
+    "declaration": false
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules", "test"]

@@ -13,6 +13,7 @@ export const ROUTES = {
       login: `${base}/auth/admin/login`,
       refresh: `${base}/auth/admin/refresh`,
       logout: `${base}/auth/admin/logout`,
+      me: `${base}/auth/admin/me`,
     },
     register: `${base}/auth/register`,
     login: `${base}/auth/login`,

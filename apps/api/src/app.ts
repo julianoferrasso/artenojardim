@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import { env, isProduction } from './config/env.js'
 import { requestContext } from './middlewares/request-context.js'
 import { errorHandler, notFoundHandler } from './middlewares/error-handler.js'
+import { globalLimiter } from './middlewares/rate-limit.js'
 import { apiRoutes, API_PREFIX } from './routes.js'
 
 export const createApp = (): Express => {
@@ -44,6 +45,15 @@ export const createApp = (): Express => {
   if (env.STORAGE_DRIVER === 'local' && !isProduction) {
     app.use('/uploads', express.static(env.LOCAL_UPLOAD_DIR, { maxAge: '1h' }))
   }
+
+  // Depois do body parser (o limitador de login precisa ler req.body.email) e
+  // antes das rotas. /health fica de fora: um monitor batendo de minuto em
+  // minuto não pode consumir a cota, e derrubar o healthcheck por rate limit
+  // faria o PM2 achar que a instância morreu.
+  app.use(API_PREFIX, (req, res, next) => {
+    if (req.path === '/health') return next()
+    globalLimiter(req, res, next)
+  })
 
   app.use(API_PREFIX, apiRoutes)
 

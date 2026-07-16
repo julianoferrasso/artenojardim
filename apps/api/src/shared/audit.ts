@@ -13,10 +13,16 @@ import { getActiveStoreId } from './store-context.js'
  * (o pedido já é o registro).
  */
 
+/**
+ * `| undefined` explícito e não só `?`: com exactOptionalPropertyTypes, `ip?: string`
+ * significa "a chave pode não existir", e não "o valor pode ser undefined".
+ * `req.ip` do Express é `string | undefined`, então o tipo precisa admitir isso —
+ * a alternativa seria espalhar spreads condicionais em cada chamada.
+ */
 export type AuditContext = {
-  userId?: string
-  ip?: string
-  userAgent?: string
+  userId?: string | undefined
+  ip?: string | undefined
+  userAgent?: string | undefined
 }
 
 export type AuditInput = {

@@ -3,6 +3,21 @@
 Arquitetura completa: [docs/arquitetura.md](docs/arquitetura.md). Este arquivo é o resumo **operativo** —
 o que fazer e o que não fazer ao escrever código. Em caso de dúvida, o documento manda.
 
+## Antes de rodar qualquer coisa
+
+O Postgres vive na VPS e **não** é exposto na internet. Ligue o túnel e deixe aberto:
+
+```powershell
+.\scripts\db-tunnel.ps1     # 127.0.0.1:5433 -> VPS:5432
+pnpm dev:api                # em outro terminal
+```
+
+`ECONNREFUSED 127.0.0.1:5433` significa que o túnel caiu, não que o banco morreu.
+Detalhes e o estado da VPS: [docs/infra-vps.md](docs/infra-vps.md).
+
+> A VPS é **compartilhada** com outro projeto (`rag_sefaz` + apps no PM2). Use `reload`,
+> nunca `restart`, em serviços compartilhados — e nunca toque no banco `rag_sefaz`.
+
 ## Stack
 
 Node 24 LTS · pnpm workspaces · TypeScript ESM · Express 5 · Prisma · PostgreSQL · RabbitMQ

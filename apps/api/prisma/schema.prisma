@@ -142,6 +142,21 @@ model AuditLog {
   @@index([userId])
 }
 
+/// Contador do rate limit. Vive no BANCO, não em memória: com `pm2 cluster` de 4
+/// instâncias, um contador em memória por processo faz o limite real virar 4x o
+/// configurado — e quem faz brute force cai na instância que ainda tem folga.
+///
+/// Sem storeId de propósito: a chave já embute o escopo (ip, email), e na Fase 4
+/// um atacante não deve ganhar N tentativas por loja existente.
+model RateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  /// Varrido por job; sem isto a tabela cresce para sempre.
+  @@index([expiresAt])
+}
+
 /// Guarda `key`, NÃO `url`: a URL é derivada por getPublicUrl(key).
 /// Persistir a URL completa amarraria os dados ao provedor de hoje — trocar de
 /// storage viraria UPDATE em toda a tabela.
