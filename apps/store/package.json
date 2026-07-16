@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
-    "start": "next start --port 3000",
+    "//start": "sem --port: o flag venceria a env PORT do PM2. Com --port 3000 fixo aqui, producao tentava subir na porta do OUTRO projeto desta VPS.",
+    "start": "next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

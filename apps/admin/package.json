@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --port 3001",
     "build": "next build",
-    "start": "next start --port 3001",
+    "//start": "sem --port: o flag venceria a env PORT do PM2, e o app subia numa porta que o nginx nao procura.",
+    "start": "next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
