@@ -50,7 +50,9 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       // 3000 é do rag_sefaz/web. Colidir derrubaria o outro projeto.
-      env: { NODE_ENV: 'production', PORT: '3010' },
+      // HOSTNAME: quem fala com o Next é o Nginx, na mesma máquina. Escutar em
+      // 0.0.0.0 deixaria a porta aberta em toda interface, dependendo só do UFW.
+      env: { NODE_ENV: 'production', PORT: '3010', HOSTNAME: '127.0.0.1' },
 
       max_memory_restart: '500M',
       autorestart: true,
@@ -70,7 +72,7 @@ module.exports = {
 
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production', PORT: '3011' },
+      env: { NODE_ENV: 'production', PORT: '3011', HOSTNAME: '127.0.0.1' },
 
       max_memory_restart: '400M',
       autorestart: true,

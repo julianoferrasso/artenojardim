@@ -17,8 +17,12 @@ const start = async (): Promise<void> => {
 
   const app = createApp()
 
-  const server = app.listen(env.PORT, () => {
-    logger.info(`API em http://localhost:${env.PORT}${'/api/v1/health'}`)
+  // '127.0.0.1' explícito: sem o host, o Express escuta em 0.0.0.0 e a porta
+  // fica exposta em toda interface. Hoje o UFW bloqueia — mas depender só do
+  // firewall é ter uma única camada. Quem fala com estes processos é o Nginx,
+  // que roda na mesma máquina, então não há motivo para escutar mais que isso.
+  const server = app.listen(env.PORT, '127.0.0.1', () => {
+    logger.info(`API em http://127.0.0.1:${env.PORT}/api/v1/health`)
   })
 
   /**
