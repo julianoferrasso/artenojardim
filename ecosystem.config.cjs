@@ -44,15 +44,15 @@ module.exports = {
       // pnpm e não `next`: o binário do next vive no store do pnpm, num caminho
       // com hash que muda a cada install. `pnpm start` resolve isso sozinho.
       script: 'pnpm',
-      args: 'start',
+      // -- repassa o flag ao next. Next 16 ignora a env HOSTNAME (o --help so
+      // declara 'env: PORT' no --port), entao a unica via e a linha de comando.
+      args: 'start -- --hostname 127.0.0.1',
       interpreter: 'none',
 
       exec_mode: 'fork',
       instances: 1,
       // 3000 é do rag_sefaz/web. Colidir derrubaria o outro projeto.
-      // HOSTNAME: quem fala com o Next é o Nginx, na mesma máquina. Escutar em
-      // 0.0.0.0 deixaria a porta aberta em toda interface, dependendo só do UFW.
-      env: { NODE_ENV: 'production', PORT: '3010', HOSTNAME: '127.0.0.1' },
+      env: { NODE_ENV: 'production', PORT: '3010' },
 
       max_memory_restart: '500M',
       autorestart: true,
@@ -67,12 +67,14 @@ module.exports = {
       name: 'artenojardim-admin',
       cwd: '/var/www/artenojardim/apps/admin',
       script: 'pnpm',
-      args: 'start',
+      // -- repassa o flag ao next. Next 16 ignora a env HOSTNAME (o --help so
+      // declara 'env: PORT' no --port), entao a unica via e a linha de comando.
+      args: 'start -- --hostname 127.0.0.1',
       interpreter: 'none',
 
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production', PORT: '3011', HOSTNAME: '127.0.0.1' },
+      env: { NODE_ENV: 'production', PORT: '3011' },
 
       max_memory_restart: '400M',
       autorestart: true,
