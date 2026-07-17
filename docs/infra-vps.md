@@ -1,11 +1,75 @@
 # VPS — estado e decisões de infraestrutura
 
-**Host:** `23.29.114.96` · Ubuntu 22.04.5 LTS · PostgreSQL 16.14
+**Host:** `23.29.114.96` · Ubuntu 22.04.5 LTS · PostgreSQL 16.14 · Node 24.18 · nginx 1.18
 **Acesso:** `root` por chave (`placeadmin_vps.ppk`, formato PuTTY)
+**Código:** `/var/www/artenojardim` · **Logs:** `/var/www/artenojardim/logs/`
 
 > Esta VPS é **compartilhada** com outro projeto (`rag_sefaz` + apps `api`/`web`/`ai-service`
-> no PM2). Toda mudança aqui foi feita com `reload` em vez de `restart` justamente para não
-> derrubar as conexões deles. **Continue nesse cuidado.**
+> no PM2, e `insightia`, parado). Toda mudança aqui foi feita com `reload` em vez de
+> `restart` justamente para não derrubar as conexões deles. **Continue nesse cuidado.**
+
+---
+
+## Deploy
+
+```bash
+ssh root@23.29.114.96
+cd /var/www/artenojardim
+git pull
+pnpm install --frozen-lockfile        # frozen: produção usa o que foi testado
+pnpm --filter @ecommerce/shared build # primeiro: os outros resolvem tipos pelo dist/
+pnpm -r build
+cd apps/api && pnpm exec prisma migrate deploy && cd -   # deploy, NUNCA dev
+pm2 reload ecosystem.config.cjs       # reload, não restart: sem downtime
+```
+
+### Topologia
+
+| Domínio | App | Porta | PM2 |
+|---|---|---|---|
+| `artenojardim.com.br` | store (Next) | 3010 | `artenojardim-store` |
+| `admin.artenojardim.com.br` | admin (Next) | 3011 | `artenojardim-admin` |
+| `api.artenojardim.com.br` | api (Express) | 4000 | `artenojardim-api` |
+
+Os três escutam **só em `127.0.0.1`** — quem fala com eles é o Nginx, na mesma máquina.
+`artenojardim.com`, `www.*` e `http://` redirecionam 301 para o canônico.
+
+> **Nomes com prefixo `artenojardim-`**: o outro projeto já usa `api`, `web` e `ai-service`
+> no PM2. Um `pm2 restart api` distraído derrubaria a produção alheia.
+>
+> **Porta 3000 é do `rag_sefaz/web`.** Não use.
+
+### Armadilhas que custaram tempo (não repita)
+
+**`next start --port 3000` no `package.json`.** Um flag de CLI vence a env `PORT` do PM2,
+então o store tentava subir na porta do OUTRO projeto (`EADDRINUSE`, 9 restarts) e o admin
+subia na 3001 em vez da 3011 — "online" no PM2, e o Nginx procurando onde não havia ninguém.
+`start` não leva `--port`; quem manda é a env.
+
+**Next 16 não lê a env `HOSTNAME`.** No `--help`, `--port` declara `(env: PORT)` e
+`--hostname` não declara nada. Só o flag funciona — e no `pnpm` ele vai **sem `--`**, senão
+o next lê `--hostname` como diretório do projeto.
+
+**`gzip on` no contexto `http`** é duplicata do `nginx.conf` global e o nginx recusa subir
+inteiro. O global tem `gzip on` com todos os `gzip_types` **comentados** (só comprime HTML);
+declarar os tipos no `http` consertaria isso para o outro projeto também — daí a repetição
+por `server`.
+
+**`http2 on;` não existe no nginx 1.18** (veio no 1.25.1). Aqui é `listen 443 ssl http2;`.
+
+> Nas três vezes em que a config quebrou, o `nginx -t` pegou **antes** do reload e o script
+> reverteu sozinho. Os sites do outro projeto nunca saíram do ar. **Sempre valide antes de
+> recarregar.**
+
+### Node 24
+
+Atualizado de 20 (EOL desde abril/2026) via NodeSource, com o Node do sistema compartilhado
+com o outro projeto. Os apps deles foram reiniciados **um por vez** e verificados: os erros
+que aparecem no log são "Failed to find Server Action" de horas antes (bundle velho no
+cliente, normal no Next) e um `psycopg AdminShutdown` do restart do Postgres — nenhum do
+Node 24. O `ai-service` é Python e nem é afetado.
+
+Rollback, se preciso: `curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs`.
 
 ---
 
@@ -98,6 +162,25 @@ no `sshd_config`.
    reconectaram sozinhos em segundos.
 
 ## Pendências
+
+**DNS: `api.` e `admin.` não existem** (NXDOMAIN; nameservers na GoDaddy). O Nginx já está
+configurado e responde 200 quando testado por `Host` header — falta só o registro:
+
+```
+A  api    -> 23.29.114.96
+A  admin  -> 23.29.114.96
+```
+
+Assim que propagar, o certificado precisa incluir os subdomínios:
+
+```bash
+certbot --nginx -d artenojardim.com -d www.artenojardim.com \
+        -d artenojardim.com.br -d www.artenojardim.com.br \
+        -d api.artenojardim.com.br -d admin.artenojardim.com.br
+```
+
+Até lá o **admin não é utilizável**: o browser precisa alcançar `api.artenojardim.com.br`,
+que é a URL assada no bundle em tempo de build.
 
 **A senha do banco é fraca.** `@rteNoJardim!` é o nome da marca com leetspeak — cai em
 ataque de dicionário. Enquanto a 5432 estava aberta isso era urgente; com ela fechada, o
