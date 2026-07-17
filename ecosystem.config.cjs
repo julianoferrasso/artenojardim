@@ -44,9 +44,11 @@ module.exports = {
       // pnpm e não `next`: o binário do next vive no store do pnpm, num caminho
       // com hash que muda a cada install. `pnpm start` resolve isso sozinho.
       script: 'pnpm',
-      // -- repassa o flag ao next. Next 16 ignora a env HOSTNAME (o --help so
-      // declara 'env: PORT' no --port), entao a unica via e a linha de comando.
-      args: 'start -- --hostname 127.0.0.1',
+      // Sem o `--`: o pnpm o repassaria literalmente e o next leria '--hostname'
+      // como diretorio do projeto. Sem ele, o pnpm anexa o flag ao script.
+      // O flag e a unica via: o Next 16 nao le a env HOSTNAME (no --help, so o
+      // --port declara 'env: PORT').
+      args: 'start --hostname 127.0.0.1',
       interpreter: 'none',
 
       exec_mode: 'fork',
@@ -67,9 +69,11 @@ module.exports = {
       name: 'artenojardim-admin',
       cwd: '/var/www/artenojardim/apps/admin',
       script: 'pnpm',
-      // -- repassa o flag ao next. Next 16 ignora a env HOSTNAME (o --help so
-      // declara 'env: PORT' no --port), entao a unica via e a linha de comando.
-      args: 'start -- --hostname 127.0.0.1',
+      // Sem o `--`: o pnpm o repassaria literalmente e o next leria '--hostname'
+      // como diretorio do projeto. Sem ele, o pnpm anexa o flag ao script.
+      // O flag e a unica via: o Next 16 nao le a env HOSTNAME (no --help, so o
+      // --port declara 'env: PORT').
+      args: 'start --hostname 127.0.0.1',
       interpreter: 'none',
 
       exec_mode: 'fork',
