@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { API_VERSION } from '@ecommerce/shared/constants'
 import { healthRoutes } from './modules/health/routes.js'
 import { authRoutes } from './modules/auth/routes.js'
+import { customerAuthRoutes } from './modules/customer-auth/routes.js'
 import { uploadRoutes } from './modules/uploads/routes.js'
 import { categoryRoutes } from './modules/categories/routes.js'
 import { productRoutes } from './modules/products/routes.js'
@@ -18,6 +19,9 @@ export const apiRoutes: Router = Router()
 
 apiRoutes.use('/health', healthRoutes)
 apiRoutes.use('/auth', authRoutes)
+// Staff usa /auth/admin/*; cliente usa /auth/{login,register,refresh,logout,me}.
+// Caminhos distintos, sem conflito; os dois routers coexistem em /auth.
+apiRoutes.use('/auth', customerAuthRoutes)
 apiRoutes.use('/uploads', uploadRoutes)
 apiRoutes.use('/categories', categoryRoutes)
 apiRoutes.use('/products', productRoutes)

@@ -19,6 +19,7 @@ export const ROUTES = {
     login: `${base}/auth/login`,
     refresh: `${base}/auth/refresh`,
     logout: `${base}/auth/logout`,
+    me: `${base}/auth/me`,
     forgotPassword: `${base}/auth/forgot-password`,
     resetPassword: `${base}/auth/reset-password`,
   },

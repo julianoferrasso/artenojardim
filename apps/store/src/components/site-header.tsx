@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { CategoryTreeNode } from '@ecommerce/shared/contracts'
+import { AccountNav } from './account-nav'
 
 /**
  * Cabeçalho da loja. Server Component: as categorias vêm da API no servidor e
@@ -43,6 +44,8 @@ export const SiteHeader = ({
             className="h-9 w-32 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:w-48 focus-visible:ring-2 focus-visible:ring-ring transition-[width]"
           />
         </form>
+
+        <AccountNav />
       </div>
 
       {/* Categorias no mobile: linha rolável abaixo do header. */}

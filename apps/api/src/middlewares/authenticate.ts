@@ -75,3 +75,28 @@ export const optionalAuthenticate: RequestHandler = async (req, _res, next) => {
   if (result.ok) req.auth = result.claims
   next()
 }
+
+/**
+ * Valida o access token de CLIENTE (segredo próprio) e exige type 'customer'.
+ * Segredos diferentes já separam staff de cliente: um token de staff nem valida
+ * aqui, porque foi assinado com outro segredo.
+ */
+export const authenticateCustomer: RequestHandler = async (req, _res, next) => {
+  const token = bearer(req)
+  if (!token) return next(unauthorized('Token não informado'))
+
+  const result = await verifyAccessToken(token, env.JWT_CUSTOMER_ACCESS_SECRET)
+  if (!result.ok) {
+    return next(
+      result.reason === 'expired'
+        ? appError(ERROR_CODES.TOKEN_EXPIRED, 'Token expirado', 401)
+        : appError(ERROR_CODES.TOKEN_INVALID, 'Token inválido', 401),
+    )
+  }
+  if (result.claims.type !== 'customer') {
+    return next(unauthorized('Rota exclusiva de clientes'))
+  }
+
+  req.auth = result.claims
+  next()
+}

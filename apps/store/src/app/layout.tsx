@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getStore, getCategoryTree } from '@/lib/catalog'
 import { SiteHeader } from '@/components/site-header'
+import { Providers } from '@/components/providers'
 import './globals.css'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -26,11 +27,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className="flex min-h-svh flex-col">
-        <SiteHeader storeName={store?.name ?? 'Arte no Jardim'} categories={categories} />
-        <div className="flex-1">{children}</div>
-        <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-          <p>{store?.name ?? 'Arte no Jardim'} · feito à mão</p>
-        </footer>
+        <Providers>
+          <SiteHeader storeName={store?.name ?? 'Arte no Jardim'} categories={categories} />
+          <div className="flex-1">{children}</div>
+          <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
+            <p>{store?.name ?? 'Arte no Jardim'} · feito à mão</p>
+          </footer>
+        </Providers>
       </body>
     </html>
   )
