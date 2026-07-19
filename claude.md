@@ -5,18 +5,41 @@ o que fazer e o que não fazer ao escrever código. Em caso de dúvida, o docume
 
 ## Antes de rodar qualquer coisa
 
-O Postgres vive na VPS e **não** é exposto na internet. Ligue o túnel e deixe aberto:
+O Postgres vive na VPS e **não** é exposto na internet (só 22/80/443 abertas). Para a API
+dev do seu PC alcançar o banco, abra um **túnel SSH** e deixe a janela aberta:
 
 ```powershell
-.\scripts\db-tunnel.ps1     # 127.0.0.1:5433 -> VPS:5432
-pnpm dev:api                # em outro terminal
+.\scripts\db-tunnel.ps1     # cano: 127.0.0.1:5433 (local) -> VPS:5432 (Postgres)
+pnpm dev:api                # em outro terminal; conecta em 127.0.0.1:5433
 ```
 
-`ECONNREFUSED 127.0.0.1:5433` significa que o túnel caiu, não que o banco morreu.
-Detalhes e o estado da VPS: [docs/infra-vps.md](docs/infra-vps.md).
+A API pensa que o banco está em `127.0.0.1:5433`, mas cada query viaja pelo túnel até a VPS.
+`ECONNREFUSED 127.0.0.1:5433` = o túnel caiu, **não** que o banco morreu — reabra o script.
 
-> A VPS é **compartilhada** com outro projeto (`rag_sefaz` + apps no PM2). Use `reload`,
-> nunca `restart`, em serviços compartilhados — e nunca toque no banco `rag_sefaz`.
+> **dev e produção compartilham o MESMO banco** (o da VPS). Uma migration rodada em dev
+> (`migrate dev`) já vale para produção — por isso `migrate deploy` no deploy costuma dizer
+> "No pending migrations". Não existe base local separada.
+
+## Deploy (VPS `/var/www/artenojardim`)
+
+Fluxo padrão: `git pull` → `pnpm install --frozen-lockfile` → `build:shared` →
+`pnpm -r build` → `prisma migrate deploy` → recarregar os processos. Passo a passo, portas,
+PM2 e armadilhas de Nginx: [docs/infra-vps.md](docs/infra-vps.md). O que **não** pode esquecer:
+
+- **Apps Next (`store`/`admin`) precisam de `pm2 restart`, não `reload`.** `next start` lê o
+  `.next` uma vez no boot; `reload` serve o build antigo (rota nova dá 404). A **API** (Express) pode `reload`.
+- A VPS é **compartilhada** com outro projeto (`rag_sefaz` + apps `api`/`web`/`ai-service` no
+  PM2). Nossos processos têm prefixo `artenojardim-`. Nunca toque nos deles nem no banco `rag_sefaz`.
+- SSH por `plink -i C:\Users\2cta\Documents\placeadmin_vps.ppk root@23.29.114.96`. Scripts longos
+  vão base64 (`echo <b64> | base64 -d | bash`) para o PowerShell não mastigar as aspas.
+
+## Estado atual do projeto (onde olhar num contexto novo)
+
+- **Fases concluídas e no ar** e gotchas vivos: a **memória do projeto** (índice `MEMORY.md`,
+  carregado automático) — ex.: frete Melhor Envio, checkout, dimensões provisórias das velas.
+- **O que aconteceu por último:** `git log --oneline -15`.
+- **Roadmap completo e decisões:** [docs/arquitetura.md](docs/arquitetura.md) (§21 Roadmap).
+- **Credenciais** (Stripe, Melhor Envio, DB) vivem em `apps/api/.env` — fora do git, nunca em log.
 
 ## Stack
 
