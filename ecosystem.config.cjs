@@ -7,6 +7,18 @@
  * Prefixo `artenojardim-` em TODO nome: esta VPS é compartilhada com outro
  * projeto, que já usa `api`, `web` e `ai-service` no PM2. Um `pm2 restart api`
  * distraído derrubaria a produção alheia.
+ *
+ * ── DEPLOY: `restart`, não `reload`, para os apps Next ──────────────────────
+ * O `next start` lê o diretório `.next` UMA vez, no boot. `pm2 reload` faz um
+ * graceful restart que reaproveita o processo e NÃO relê o build — então um
+ * deploy com reload serve o `.next` antigo, e as rotas novas dão 404 enquanto
+ * as antigas funcionam (o sintoma que confunde). Use:
+ *
+ *   pm2 restart artenojardim-store artenojardim-admin   # relê o .next novo
+ *   pm2 reload  artenojardim-api                        # a API é Express, reload ok
+ *
+ * A API pode usar reload (o dist/server.js é relido no restart do processo, e
+ * ela não tem o cache de build do Next). Os fronts precisam de restart.
  */
 module.exports = {
   apps: [

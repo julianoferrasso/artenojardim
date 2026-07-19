@@ -182,7 +182,17 @@ subdomínios porque o cookie de refresh é `Domain=.artenojardim.com.br; Secure;
 
 Deploy de atualização (o fluxo padrão daqui pra frente): `git pull` → `pnpm install
 --frozen-lockfile` → `build:shared` → `pnpm -r build` → `prisma migrate deploy` →
-`pm2 reload ecosystem.config.cjs`.
+recarregar os processos.
+
+> **`restart`, não `reload`, para os apps Next.** O `next start` lê o `.next` uma vez,
+> no boot; `pm2 reload` faz graceful restart e NÃO relê o build, servindo o `.next`
+> antigo — rotas novas dão 404 e as antigas funcionam (o sintoma que confunde). A API
+> (Express) pode usar reload. Os fronts precisam de `pm2 restart artenojardim-store
+> artenojardim-admin`.
+
+> **dev e produção compartilham o MESMO banco.** Rodar `migrate dev` da máquina local
+> já aplica na base de produção — por isso `migrate deploy` no deploy costuma dizer
+> "No pending migrations". OK para uma loja/dev solo; quando houver staging, separar.
 
 ## Pendências
 
