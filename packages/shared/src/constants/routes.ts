@@ -26,6 +26,9 @@ export const ROUTES = {
 
   store: `${base}/store`,
 
+  /** Consulta de CEP (ViaCEP) — pública; usada no autopreenchimento e no guest checkout. */
+  cep: (cep: string) => `${base}/cep/${cep}`,
+
   products: {
     list: `${base}/products`,
     create: `${base}/products`,

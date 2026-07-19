@@ -154,9 +154,38 @@ model Customer {
   store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
   carts         Cart[]
+  addresses     Address[]
 
   @@unique([storeId, email])
   @@index([storeId])
+}
+
+/// Endereço do cliente (entrega/cobrança). Filho de Customer — a posse é sempre
+/// pelo customerId no service (nunca só pela rota; requireAuth não impede IDOR).
+/// zipCode é normalizado: 8 dígitos, sem hífen (a máscara é da UI, o dado é limpo).
+/// Ao virar pedido, o endereço é COPIADO (snapshot em Order.shippingAddressJson):
+/// mudar o endereço depois não altera o histórico de entregas.
+model Address {
+  id         String  @id @default(cuid())
+  customerId String
+  label      String? // "Casa", "Trabalho"
+  recipient  String // quem recebe (pode não ser o titular da conta)
+  zipCode    String
+  street     String
+  number     String
+  complement String?
+  district   String
+  city       String
+  state      String // UF, 2 letras
+  country    String  @default("BR")
+  isDefault  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 // ─── Carrinho (Fase 1.8) ──────────────────────────────────────────────────────

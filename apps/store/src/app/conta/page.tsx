@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 
 /**
@@ -38,6 +39,16 @@ export default function ContaPage() {
           <p className="font-medium">{customer.email}</p>
         </div>
       </div>
+
+      <nav className="mt-6 flex flex-col gap-2">
+        <Link
+          href="/conta/enderecos"
+          className="flex items-center justify-between rounded-lg border border-border bg-card px-6 py-4 text-sm font-medium hover:bg-accent"
+        >
+          Endereços
+          <span className="text-muted-foreground">→</span>
+        </Link>
+      </nav>
 
       <section className="mt-6 rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
         Seus pedidos aparecerão aqui.
