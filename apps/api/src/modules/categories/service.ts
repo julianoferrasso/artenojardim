@@ -101,7 +101,9 @@ export const createCategory = async (
 
   if (input.parentId) await assertParentValid(input.parentId)
 
-  const slug = await resolveSlug(input.slug ? slugify(input.slug) : slugify(input.name))
+  // Slug SEMPRE do nome — o contrato nem aceita slug do cliente. resolveSlug
+  // garante unicidade (sufixa -2, -3 na colisão).
+  const slug = await resolveSlug(slugify(input.name))
 
   const row = await prisma.category.create({
     data: {
@@ -166,12 +168,10 @@ export const updateCategory = async (
     }
   }
 
-  const nextSlug =
-    input.slug !== undefined ? await resolveSlug(slugify(input.slug), id) : undefined
-
+  // O slug NÃO muda na edição: mudá-lo quebraria links já indexados pelo Google.
+  // Ele foi gerado na criação e é imutável pela UI.
   const data: Prisma.CategoryUpdateInput = {}
   if (input.name !== undefined) data.name = input.name
-  if (nextSlug !== undefined) data.slug = nextSlug
   if (input.description !== undefined) data.description = input.description
   if (input.parentId !== undefined) data.parent = input.parentId
     ? { connect: { id: input.parentId } }
@@ -189,14 +189,12 @@ export const updateCategory = async (
   const changes = diff(
     {
       name: current.name,
-      slug: current.slug,
       parentId: current.parentId,
       isActive: current.isActive,
       position: current.position,
     },
     {
       name: row.name,
-      slug: row.slug,
       parentId: row.parentId,
       isActive: row.isActive,
       position: row.position,

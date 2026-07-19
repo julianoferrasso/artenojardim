@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { slugSchema, moneySchema } from './common.js'
+import { optionalSlugSchema, moneySchema } from './common.js'
 import { productStatusSchema } from '../constants/enums.js'
 
 /**
@@ -103,7 +103,7 @@ export type ProductImage = z.infer<typeof productImageSchema>
 
 export const createProductSchema = z.object({
   name: z.string().min(1, 'Informe o nome').max(200).trim(),
-  slug: slugSchema.optional(),
+  slug: optionalSlugSchema,
   description: z.string().max(20000).optional(),
   shortDescription: z.string().max(500).optional(),
   status: productStatusSchema.default('DRAFT'),

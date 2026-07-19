@@ -58,6 +58,23 @@ export const slugSchema = z
   .max(160)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug inválido')
 
+/**
+ * Slug opcional que trata string vazia como AUSENTE.
+ *
+ * O formulário manda `slug: ''` quando o campo fica em branco (o usuário
+ * esperando geração automática). `slugSchema.optional()` só cobre `undefined`,
+ * então `''` caía no min(1) e dava "Slug inválido" — o oposto de automático.
+ *
+ * O input continua `string` (o React Hook Form registra um campo de texto), e a
+ * SAÍDA vira `string | undefined`: `''` e undefined viram undefined, e aí o
+ * backend gera do nome. `transform` (não `preprocess`) preserva o tipo de input.
+ */
+export const optionalSlugSchema = z
+  .string()
+  .optional()
+  .transform((v) => (v ? v : undefined))
+  .pipe(slugSchema.optional())
+
 export const emailSchema = z.string().email('E-mail inválido').toLowerCase().trim()
 
 /**

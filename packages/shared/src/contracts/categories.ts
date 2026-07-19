@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { slugSchema } from './common.js'
 
 /**
  * Formato HTTP das categorias. O admin valida os formulários com estes mesmos
@@ -8,9 +7,9 @@ import { slugSchema } from './common.js'
 
 export const createCategorySchema = z.object({
   name: z.string().min(1, 'Informe o nome').max(120).trim(),
-  // Slug opcional: se vazio, o backend gera a partir do nome. Nunca é o front
-  // que decide o slug final — colisão é resolvida no service.
-  slug: slugSchema.optional(),
+  // Sem `slug` no contrato: ele é 100% do backend — gerado do nome, validado e
+  // com unicidade garantida. O cliente não define nem edita, e um request
+  // forjado com slug é simplesmente ignorado (o campo não existe aqui).
   description: z.string().max(2000).optional(),
   parentId: z.string().nullable().optional(),
   imageId: z.string().nullable().optional(),

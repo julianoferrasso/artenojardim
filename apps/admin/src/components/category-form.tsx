@@ -30,10 +30,11 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
     formState: { errors },
   } = useForm<CreateCategoryInput>({
     resolver: zodResolver(createCategorySchema),
+    // Sem `slug`: ele é 100% do backend (gera do nome, valida, garante único).
+    // O usuário nunca o define nem edita — não há campo, e não enviamos o valor.
     defaultValues: initial
       ? {
           name: initial.name,
-          slug: initial.slug,
           description: initial.description ?? undefined,
           parentId: initial.parentId,
           position: initial.position,
@@ -77,13 +78,14 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
         {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="slug" className="text-sm font-medium">
-          Slug <span className="font-normal text-muted-foreground">(opcional)</span>
-        </label>
-        <input id="slug" placeholder="gerado do nome" {...register('slug')} className={cn(field, errors.slug && 'border-destructive')} />
-        {errors.slug && <p className="text-xs text-destructive">{errors.slug.message}</p>}
-      </div>
+      {/* Sem campo de slug: o backend gera do nome, valida e garante único. Na
+          edição o slug NÃO muda (mudá-lo quebraria links já indexados). O
+          endereço atual é mostrado apenas como referência, em leitura. */}
+      {initial && (
+        <p className="text-xs text-muted-foreground">
+          Endereço: <code className="rounded bg-muted px-1">/{initial.slug}</code>
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="parentId" className="text-sm font-medium">Categoria pai</label>
