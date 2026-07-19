@@ -1,7 +1,7 @@
 'use client'
 
 import { ROUTES } from '@ecommerce/shared/constants'
-import type { ConfirmCheckoutInput, Order } from '@ecommerce/shared/contracts'
+import type { ConfirmCheckoutInput, Order, OrderPayment, OrderStatus } from '@ecommerce/shared/contracts'
 import { getAccessToken } from './auth'
 import { ApiError } from './api'
 
@@ -39,3 +39,11 @@ export const confirmCheckout = (input: ConfirmCheckoutInput): Promise<Order> =>
   call<Order>(ROUTES.checkout.confirm, { method: 'POST', body: JSON.stringify(input) })
 
 export const getOrder = (id: string): Promise<Order> => call<Order>(ROUTES.orders.detail(id))
+
+/** Cria/reusa o PaymentIntent do pedido e devolve clientSecret + publishable. */
+export const getOrderPayment = (id: string): Promise<OrderPayment> =>
+  call<OrderPayment>(ROUTES.orders.payment(id))
+
+/** Status enxuto para o polling da tela de pagamento (a verdade é o webhook). */
+export const getOrderStatus = (id: string): Promise<OrderStatus> =>
+  call<OrderStatus>(ROUTES.orders.status(id))
