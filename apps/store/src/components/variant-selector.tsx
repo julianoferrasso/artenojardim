@@ -7,6 +7,7 @@ import type { Product, Variant } from '@ecommerce/shared/contracts'
 import { formatBRL } from '@/lib/utils'
 import { useCart } from '@/lib/cart'
 import { ApiError } from '@/lib/api'
+import { ShippingCalculator } from './shipping-calculator'
 
 /**
  * Seletor de variação — Client Component porque troca preço, imagem e
@@ -139,6 +140,11 @@ export const VariantSelector = ({ product }: { product: Product }) => {
           {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
         </button>
         {feedback && <p role="alert" className="text-sm text-destructive">{feedback}</p>}
+
+        <ShippingCalculator
+          items={current ? [{ variantId: current.id, quantity: 1 }] : []}
+          disabled={!current}
+        />
 
         {product.shortDescription && (
           <p className="text-sm text-muted-foreground">{product.shortDescription}</p>

@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { useCart } from '@/lib/cart'
 import { formatBRL } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { ShippingCalculator } from '@/components/shipping-calculator'
 
 export default function CartPage() {
   const { cart, loading, setQuantity, remove } = useCart()
@@ -106,12 +107,21 @@ export default function CartPage() {
         </p>
       )}
 
+      <div className="mt-6">
+        <ShippingCalculator
+          items={items
+            .filter((i) => i.purchasable)
+            .map((i) => ({ variantId: i.variantId, quantity: i.quantity }))}
+          disabled={!items.some((i) => i.purchasable)}
+        />
+      </div>
+
       <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
         <span className="text-muted-foreground">Subtotal</span>
         <span className="text-xl font-semibold">{formatBRL(cart?.subtotal ?? 0)}</span>
       </div>
       <p className="mt-1 text-right text-xs text-muted-foreground">
-        Frete calculado no checkout.
+        Frete confirmado no checkout.
       </p>
 
       <button
