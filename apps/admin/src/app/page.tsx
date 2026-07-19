@@ -49,6 +49,12 @@ export default function AdminHomePage() {
               Produtos
             </a>
             <a
+              href="/estoque"
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+            >
+              Estoque
+            </a>
+            <a
               href="/categorias"
               className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
             >
