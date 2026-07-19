@@ -1,4 +1,4 @@
-import type { ErrorResponse } from '@ecommerce/shared/contracts'
+import type { ErrorResponse, PaginationMeta } from '@ecommerce/shared/contracts'
 
 /**
  * O ÚNICO caminho da loja para os dados.
@@ -49,7 +49,7 @@ type RequestOptions = RequestInit & {
   tags?: string[]
 }
 
-export const apiFetch = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
+const doFetch = async (path: string, options: RequestOptions): Promise<Response> => {
   const { revalidate, tags, ...init } = options
 
   const res = await fetch(`${baseUrl()}${path}`, {
@@ -79,8 +79,21 @@ export const apiFetch = async <T>(path: string, options: RequestOptions = {}): P
     )
   }
 
-  if (res.status === 204) return undefined as T
+  return res
+}
 
+export const apiFetch = async <T>(path: string, options: RequestOptions = {}): Promise<T> => {
+  const res = await doFetch(path, options)
+  if (res.status === 204) return undefined as T
   const json = (await res.json()) as { data: T }
   return json.data
+}
+
+/** Preserva o envelope paginado (data + meta) que apiFetch descartaria. */
+export const apiFetchPaginated = async <T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ data: T[]; meta: PaginationMeta }> => {
+  const res = await doFetch(path, options)
+  return (await res.json()) as { data: T[]; meta: PaginationMeta }
 }

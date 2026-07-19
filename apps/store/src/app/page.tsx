@@ -1,63 +1,62 @@
-import { formatBRL } from '@/lib/utils'
+import Link from 'next/link'
+import { listProducts, getCategoryTree } from '@/lib/catalog'
+import { ProductCard } from '@/components/product-card'
 
 /**
- * Placeholder da Fase 0. A home real (banners, destaques, categorias) é o item 6
- * da Fase 1 e depende de Products.
- *
- * Serve para uma coisa: provar que os tokens estão ligados. Nenhuma cor literal
- * abaixo — tudo vem de globals.css.
+ * Home. Server Component com ISR (o revalidate vem do catalog). Mostra as
+ * novidades (últimos produtos ACTIVE) e as categorias. SEO renderizado no
+ * servidor — o Google vê o HTML completo, não um shell vazio.
  */
-export default function HomePage() {
+export default async function HomePage() {
+  const [{ data: products }, categories] = await Promise.all([
+    listProducts({}),
+    getCategoryTree(),
+  ])
+
+  const topCategories = categories.filter((c) => c.isActive).slice(0, 6)
+
   return (
-    <main className="min-h-svh bg-background text-foreground">
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-24">
-        <header className="flex flex-col gap-3">
-          <span className="w-fit rounded-md bg-secondary px-3 py-1 text-sm text-secondary-foreground">
-            Fase 0 — fundação
-          </span>
-          <h1 className="text-4xl font-semibold tracking-tight">Arte no Jardim</h1>
-          <p className="text-muted-foreground">
-            Loja em construção. Esta página existe para validar os design tokens.
-          </p>
-        </header>
+    <main className="mx-auto max-w-6xl px-4 py-8">
+      <section className="mb-10 rounded-xl bg-secondary px-6 py-12 text-center">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          Peças que dão vida ao seu jardim
+        </h1>
+        <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
+          Vasos e objetos artesanais, feitos à mão, escolhidos um a um.
+        </p>
+      </section>
 
-        <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6 text-card-foreground">
-          <h2 className="font-medium">Tokens semânticos</h2>
-
+      {topCategories.length > 0 && (
+        <section className="mb-12">
+          <h2 className="mb-4 text-lg font-medium">Categorias</h2>
           <div className="flex flex-wrap gap-2">
-            <span className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground">
-              primary
-            </span>
-            <span className="rounded-md bg-secondary px-3 py-1.5 text-sm text-secondary-foreground">
-              secondary
-            </span>
-            <span className="rounded-md bg-muted px-3 py-1.5 text-sm text-muted-foreground">
-              muted
-            </span>
-            <span className="rounded-md bg-sale px-3 py-1.5 text-sm text-sale-foreground">sale</span>
-            <span className="rounded-md bg-warning px-3 py-1.5 text-sm text-warning-foreground">
-              warning
-            </span>
-            <span className="rounded-md bg-success px-3 py-1.5 text-sm text-success-foreground">
-              success
-            </span>
-            <span className="rounded-md bg-destructive px-3 py-1.5 text-sm text-destructive-foreground">
-              destructive
-            </span>
+            {topCategories.map((cat) => (
+              <Link
+                key={cat.id}
+                href={`/categorias/${cat.slug}`}
+                className="rounded-full border border-border px-4 py-1.5 text-sm transition-colors hover:bg-accent"
+              >
+                {cat.name}
+              </Link>
+            ))}
           </div>
+        </section>
+      )}
 
-          <p className="text-sm text-muted-foreground">
-            Trocar <code className="rounded bg-muted px-1">--primary</code> em globals.css muda a
-            loja inteira. É o ensaio da Fase 4.
+      <section>
+        <h2 className="mb-4 text-lg font-medium">Novidades</h2>
+        {products.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border p-10 text-center text-muted-foreground">
+            Em breve, novos produtos.
           </p>
-        </section>
-
-        <section className="flex items-baseline gap-3 rounded-lg border border-border p-6">
-          <span className="text-2xl font-semibold">{formatBRL(14900)}</span>
-          <span className="text-sm text-muted-foreground line-through">{formatBRL(19900)}</span>
-          <span className="rounded-md bg-sale px-2 py-0.5 text-xs text-sale-foreground">-25%</span>
-        </section>
-      </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {products.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        )}
+      </section>
     </main>
   )
 }
