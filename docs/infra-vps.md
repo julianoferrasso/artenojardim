@@ -167,26 +167,24 @@ no `sshd_config`.
    seguiram online, site em HTTP 200, zero erros de conexão; nosso túnel e o pool do Prisma
    reconectaram sozinhos em segundos.
 
+## No ar (19/07/2026)
+
+Os três domínios respondem pela internet com TLS válido:
+
+- `https://artenojardim.com.br` — loja
+- `https://api.artenojardim.com.br` — API (`/health` → `database: up`)
+- `https://admin.artenojardim.com.br` — painel (login OWNER verificado end-to-end)
+
+O certificado `artenojardim.com` foi **expandido** (não recriado) para os 6 nomes, via
+`certbot certonly --webroot -w /var/www/html --cert-name artenojardim.com --expand -d ...`.
+Válido até 17/10/2026, renovação automática pelo `certbot.timer`. O login funciona entre
+subdomínios porque o cookie de refresh é `Domain=.artenojardim.com.br; Secure; HttpOnly`.
+
+Deploy de atualização (o fluxo padrão daqui pra frente): `git pull` → `pnpm install
+--frozen-lockfile` → `build:shared` → `pnpm -r build` → `prisma migrate deploy` →
+`pm2 reload ecosystem.config.cjs`.
+
 ## Pendências
-
-**DNS: `api.` e `admin.` não existem** (NXDOMAIN; nameservers na GoDaddy). O Nginx já está
-configurado e responde 200 quando testado por `Host` header — falta só o registro:
-
-```
-A  api    -> 23.29.114.96
-A  admin  -> 23.29.114.96
-```
-
-Assim que propagar, o certificado precisa incluir os subdomínios:
-
-```bash
-certbot --nginx -d artenojardim.com -d www.artenojardim.com \
-        -d artenojardim.com.br -d www.artenojardim.com.br \
-        -d api.artenojardim.com.br -d admin.artenojardim.com.br
-```
-
-Até lá o **admin não é utilizável**: o browser precisa alcançar `api.artenojardim.com.br`,
-que é a URL assada no bundle em tempo de build.
 
 **A senha do banco é fraca.** `@rteNoJardim!` é o nome da marca com leetspeak — cai em
 ataque de dicionário. Enquanto a 5432 estava aberta isso era urgente; com ela fechada, o
