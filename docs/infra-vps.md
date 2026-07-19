@@ -194,6 +194,39 @@ recarregar os processos.
 > já aplica na base de produção — por isso `migrate deploy` no deploy costuma dizer
 > "No pending migrations". OK para uma loja/dev solo; quando houver staging, separar.
 
+## Backup (19/07/2026)
+
+`pg_dump` diário do banco `artenojardim` (nunca toca `rag_sefaz`), agendado no
+cron para **03:17**. Scripts versionados em `scripts/`, instalados na VPS:
+
+```
+/usr/local/bin/artenojardim-pg-backup    # dump -Fc, retenção 14 dias
+/usr/local/bin/artenojardim-pg-restore   # restaura p/ banco de TESTE por padrão
+/etc/cron.d/artenojardim-backup          # 17 3 * * *  (MAILTO=root)
+/var/backups/artenojardim/*.dump         # 700 postgres:postgres, dumps 600
+/var/log/artenojardim-backup.log         # saída do cron
+```
+
+O backup **valida a si mesmo**: recusa dump vazio e confere que o `pg_restore`
+lê o header — pega corrupção antes de o arquivo virar o único backup restante.
+Falha com exit ≠ 0, e o cron manda e-mail ao root.
+
+**O restore foi TESTADO**, não presumido: restaurei um dump num banco temporário
+e conferi as contagens de linha. Refazer o teste a qualquer momento:
+
+```bash
+artenojardim-pg-restore /var/backups/artenojardim/<arquivo>.dump
+# restaura em artenojardim_restore_test; para produção, passe o nome dela de propósito.
+```
+
+### Ainda falta: cópia off-site
+
+Os dumps vivem na **mesma VPS** que o banco. Isso cobre o comum — DROP
+acidental, migration ruim, corrupção — mas **se a VPS for perdida por inteiro, o
+backup vai junto.** O próximo tier é copiar cada dump para fora (R2/S3 ou outro
+host). Depende das credenciais de storage, que ainda não estão configuradas
+(mesma pendência do driver de upload em produção). Documentado como gap conhecido.
+
 ## Pendências
 
 **A senha do banco é fraca.** `@rteNoJardim!` é o nome da marca com leetspeak — cai em

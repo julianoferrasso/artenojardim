@@ -45,6 +45,10 @@ if ! sudo -u postgres pg_restore --list "$FILE" >/dev/null 2>&1; then
   exit 1
 fi
 
+# 600 no arquivo: o dir 700 já protege, mas defesa em profundidade. pg_dump como
+# postgres cria com umask 664; o script roda como root e ajusta.
+chmod 600 "$FILE"
+
 # Remove dumps mais velhos que a retenção. -mtime +N = mais de N dias.
 find "$DIR" -name "${DB}-*.dump" -type f -mtime +$RETENTION_DAYS -delete
 
