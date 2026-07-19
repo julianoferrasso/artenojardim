@@ -183,6 +183,47 @@ export const releaseReservation = async (reservationId: string): Promise<void> =
   })
 }
 
+/**
+ * Liquida as reservas de um pedido PAGO: a intenção vira fato. Para cada reserva
+ * ainda não liberada, lança um movimento SALE (negativo, sai da prateleira) E
+ * decrementa `onHand` junto com `reserved` — a peça deixa o físico e a reserva ao
+ * mesmo tempo. Roda DENTRO da transação do webhook (recebe o `tx`).
+ *
+ * Idempotente pelo filtro `releasedAt: null`: reexecutar (Stripe reentrega o
+ * evento) não encontra reserva a liquidar e não duplica movimento. `onHand -= qty`
+ * nunca fica negativo — a reserva só existe porque havia `available >= qty`.
+ */
+export const settleOrderReservations = async (
+  tx: Prisma.TransactionClient,
+  storeId: string,
+  orderId: string,
+): Promise<void> => {
+  const reservations = await tx.inventoryReservation.findMany({
+    where: { orderId, releasedAt: null },
+    select: { id: true, variantId: true, quantity: true },
+  })
+
+  for (const r of reservations) {
+    await tx.inventoryMovement.create({
+      data: {
+        storeId,
+        variantId: r.variantId,
+        type: 'SALE',
+        quantity: -r.quantity,
+        reference: `order:${orderId}`,
+      },
+    })
+    await tx.inventoryLevel.update({
+      where: { variantId: r.variantId },
+      data: { onHand: { decrement: r.quantity }, reserved: { decrement: r.quantity } },
+    })
+    await tx.inventoryReservation.update({
+      where: { id: r.id },
+      data: { releasedAt: new Date() },
+    })
+  }
+}
+
 // ── Leitura ───────────────────────────────────────────────────────────────────
 
 export const getLevel = async (variantId: string): Promise<InventoryLevel> => {

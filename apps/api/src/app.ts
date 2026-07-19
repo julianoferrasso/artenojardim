@@ -2,11 +2,13 @@ import express, { type Express } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import { ROUTES } from '@ecommerce/shared/constants'
 import { env } from './config/env.js'
 import { requestContext } from './middlewares/request-context.js'
 import { errorHandler, notFoundHandler } from './middlewares/error-handler.js'
 import { globalLimiter } from './middlewares/rate-limit.js'
 import { apiRoutes, API_PREFIX } from './routes.js'
+import { stripeWebhookRoutes } from './modules/webhooks/routes.js'
 
 export const createApp = (): Express => {
   const app = express()
@@ -33,8 +35,9 @@ export const createApp = (): Express => {
   // ── Webhooks vêm ANTES do parser de JSON ───────────────────────────────────
   // A verificação de assinatura do Stripe precisa do corpo CRU, byte a byte.
   // Se o express.json() correr primeiro, o corpo vira objeto, a assinatura não
-  // confere e todo webhook falha. Fase 1 monta a rota aqui.
-  // app.use(ROUTES.webhooks.stripe, express.raw({ type: 'application/json' }), stripeWebhookRoutes)
+  // confere e todo webhook falha. Também fica FORA do prefixo com rate-limit: o
+  // Stripe não pode ser barrado por cota.
+  app.use(ROUTES.webhooks.stripe, express.raw({ type: 'application/json' }), stripeWebhookRoutes)
 
   app.use(express.json({ limit: '1mb' }))
   app.use(express.urlencoded({ extended: true, limit: '1mb' }))
