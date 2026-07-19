@@ -46,6 +46,8 @@ export const ERROR_CODES = {
   SHIPPING_QUOTE_EXPIRED: 'SHIPPING_QUOTE_EXPIRED',
   ADDRESS_REQUIRED: 'ADDRESS_REQUIRED',
   PAYMENT_FAILED: 'PAYMENT_FAILED',
+  /// Cartão recusado pelo emissor: erro de negócio (402), não falha de servidor.
+  PAYMENT_DECLINED: 'PAYMENT_DECLINED',
   ORDER_NOT_CANCELABLE: 'ORDER_NOT_CANCELABLE',
 
   // Uploads

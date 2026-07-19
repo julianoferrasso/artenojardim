@@ -48,6 +48,15 @@ const baseSchema = z.object({
   MELHOR_ENVIO_CLIENT_SECRET: z.string().optional(),
   MELHOR_ENVIO_REDIRECT_URI: z.string().url().optional(),
   MELHOR_ENVIO_CONTACT_EMAIL: z.string().email().optional(),
+
+  // Pagamentos via Stripe. Opcionais: sem elas o boot sobe e a criação de
+  // pagamento responde erro de negócio claro, não derruba a API. STRIPE_PUBLIC
+  // (publishable) chega ao front pelo retorno do confirm — não é segredo. O
+  // STRIPE_WEBHOOK_SECRET só existe depois de registrar o endpoint (dashboard
+  // em prod, `stripe listen` em dev) e é o que valida a assinatura do webhook.
+  STRIPE_PUBLIC: z.string().optional(),
+  STRIPE_SECRET: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 })
 
 /**

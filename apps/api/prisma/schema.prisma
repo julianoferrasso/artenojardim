@@ -62,6 +62,14 @@ enum FulfillmentStatus {
   RETURNED
 }
 
+/// Método com que o cliente pagou. BOLETO existe no enum (espelha PAYMENT_METHODS
+/// em constants, guardado pelo drift), mas só CARD/PIX são habilitados por ora.
+enum PaymentMethod {
+  CARD
+  PIX
+  BOLETO
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -622,6 +630,7 @@ model Order {
   customer Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items    OrderItem[]
   events   OrderEvent[]
+  payments Payment[]
 
   @@unique([storeId, number])
   @@index([storeId, paymentStatus])
@@ -664,4 +673,40 @@ model OrderEvent {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+/// Tentativa de pagamento de um pedido, espelhando um PaymentIntent do Stripe.
+/// O status é escrito SÓ pelo webhook (regra de ouro): nasce PROCESSING quando o
+/// PI é criado, vira PAID/FAILED pelo evento. `amount` em centavos, do total do
+/// pedido — o front nunca decide. Um pedido pode ter mais de uma tentativa.
+model Payment {
+  id                    String         @id @default(cuid())
+  storeId               String
+  orderId               String
+  /// Chave natural do Stripe: garante idempotência e liga o webhook ao pagamento.
+  stripePaymentIntentId String         @unique
+  stripeChargeId        String?
+  status                PaymentStatus  @default(PROCESSING)
+  method                PaymentMethod?
+  amount                Int
+  currency              String         @default("brl")
+  paidAt                DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+/// Livro de eventos recebidos do Stripe. A PK é o `event.id` do Stripe: inserir o
+/// mesmo evento duas vezes bate no unique e é ignorado — é o que torna o webhook
+/// idempotente (o Stripe reentrega em caso de timeout/erro). `processedAt` marca
+/// que o efeito colateral já rodou.
+model StripeEvent {
+  id          String    @id
+  type        String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  payloadJson Json?
 }
