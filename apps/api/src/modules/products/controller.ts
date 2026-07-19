@@ -3,6 +3,8 @@ import type {
   CreateProductInput,
   UpdateProductInput,
   UpdateVariantInput,
+  UpdateProductImagesInput,
+  CreateVariantInput,
   ProductListQuery,
 } from '@ecommerce/shared/contracts'
 import { ok, created, noContent, paginated } from '../../shared/http.js'
@@ -36,6 +38,11 @@ export const updateController = async (req: Request, res: Response): Promise<voi
   )
 }
 
+export const updateImagesController = async (req: Request, res: Response): Promise<void> => {
+  const body = req.body as UpdateProductImagesInput
+  ok(res, await service.updateProductImages(req.params['id'] as string, body.images, auditContext(req)))
+}
+
 export const updateVariantController = async (req: Request, res: Response): Promise<void> => {
   ok(
     res,
@@ -43,6 +50,24 @@ export const updateVariantController = async (req: Request, res: Response): Prom
       req.params['id'] as string,
       req.params['variantId'] as string,
       req.body as UpdateVariantInput,
+      auditContext(req),
+    ),
+  )
+}
+
+export const addVariantController = async (req: Request, res: Response): Promise<void> => {
+  created(
+    res,
+    await service.addVariant(req.params['id'] as string, req.body as CreateVariantInput, auditContext(req)),
+  )
+}
+
+export const removeVariantController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await service.removeVariant(
+      req.params['id'] as string,
+      req.params['variantId'] as string,
       auditContext(req),
     ),
   )

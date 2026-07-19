@@ -49,11 +49,15 @@ export type Category = z.infer<typeof categorySchema>
  * Nó da árvore: a categoria mais seus filhos, recursivo. A API monta a árvore
  * inteira em memória (adjacency list é barato nessa escala) e devolve pronta,
  * para o front não ter que reconstruir a hierarquia a partir de uma lista plana.
+ *
+ * `productCount` é a contagem de produtos NÃO arquivados vinculados a ESTA
+ * categoria (não soma os filhos) — o admin mostra "(12)" ao lado do nome.
  */
-export type CategoryTreeNode = Category & { children: CategoryTreeNode[] }
+export type CategoryTreeNode = Category & { productCount: number; children: CategoryTreeNode[] }
 
 // z.lazy para o tipo recursivo.
 export const categoryTreeNodeSchema: z.ZodType<CategoryTreeNode> = categorySchema.extend({
+  productCount: z.number().int().nonnegative(),
   children: z.lazy(() => z.array(categoryTreeNodeSchema)),
 })
 

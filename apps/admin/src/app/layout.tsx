@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Providers } from '@/components/providers'
 import { AuthGuard } from '@/components/auth-guard'
+import { AppShell } from '@/components/app-shell'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <Providers>
-          <AuthGuard>{children}</AuthGuard>
+          <AuthGuard>
+            <AppShell>{children}</AppShell>
+          </AuthGuard>
         </Providers>
       </body>
     </html>

@@ -4,6 +4,7 @@ import {
   type UpdateProductInput,
   type CreateVariantInput,
   type UpdateVariantInput,
+  type UpdateProductImagesInput,
   type Product,
   type ProductListItem,
   type ProductListQuery,
@@ -16,7 +17,7 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { slugify, uniqueSlug } from '../../utils/slug.js'
-import { deriveOptions, validateVariants } from './domain/variants.js'
+import { deriveOptions, validateVariants, optionKey } from './domain/variants.js'
 import { publishBlockers, BLOCKER_MESSAGES } from './domain/publish.js'
 import { PRODUCT_SELECT, LIST_SELECT, toProductDTO, toListItem } from './repository.js'
 
@@ -244,6 +245,20 @@ export const getProduct = async (
   return toProductDTO(row)
 }
 
+/**
+ * Traduz o `sort` da query (ex.: "name", "-createdAt") em orderBy do Prisma.
+ * Allowlist obrigatória: só campos indexados/baratos. Valor inválido ou ausente
+ * cai no padrão (mais recente primeiro).
+ */
+const SORTABLE = new Set(['name', 'createdAt', 'updatedAt'])
+const parseSort = (sort?: string): Prisma.ProductOrderByWithRelationInput => {
+  if (!sort) return { updatedAt: 'desc' }
+  const desc = sort.startsWith('-')
+  const field = desc ? sort.slice(1) : sort
+  if (!SORTABLE.has(field)) return { updatedAt: 'desc' }
+  return { [field]: desc ? 'desc' : 'asc' }
+}
+
 export const listProducts = async (
   query: ProductListQuery,
   opts: { publicOnly: boolean },
@@ -262,7 +277,7 @@ export const listProducts = async (
     prisma.product.findMany({
       where,
       select: LIST_SELECT,
-      orderBy: { updatedAt: 'desc' },
+      orderBy: parseSort(query.sort),
       skip: (query.page - 1) * query.perPage,
       take: query.perPage,
     }),
@@ -371,6 +386,76 @@ export const updateProduct = async (
 }
 
 /**
+ * Substitui a galeria do produto. Reconcilia por `uploadId`: mantém as imagens
+ * que continuam (preservando o ProductImage.id, para não invalidar referências),
+ * cria as novas e apaga as ausentes. A ordem do array vira a `position`.
+ */
+export const updateProductImages = async (
+  id: string,
+  images: UpdateProductImagesInput['images'],
+  ctx: AuditContext,
+): Promise<Product> => {
+  const storeId = getActiveStoreId()
+
+  const product = await prisma.product.findFirst({
+    where: { id, storeId, deletedAt: null },
+    select: { id: true, images: { select: { id: true, uploadId: true } } },
+  })
+  if (!product) throw notFound('Produto')
+
+  const uploadIds = images.map((i) => i.uploadId)
+  // Mesma imagem duas vezes na galeria é sempre engano — e não há unique que
+  // barre no banco, então barramos aqui antes de criar linhas duplicadas.
+  if (new Set(uploadIds).size !== uploadIds.length) {
+    throw appError(ERROR_CODES.VALIDATION_ERROR, 'A mesma imagem aparece mais de uma vez', 422)
+  }
+  // Uploads têm que ser da loja. O FK Restrict pegaria, mas com erro cru — aqui a
+  // mensagem é clara e o status certo (422, não 500).
+  if (uploadIds.length > 0) {
+    const count = await prisma.upload.count({ where: { id: { in: uploadIds }, storeId } })
+    if (count !== uploadIds.length) {
+      throw appError(ERROR_CODES.VALIDATION_ERROR, 'Uma ou mais imagens não existem', 422)
+    }
+  }
+
+  const currentByUpload = new Map(product.images.map((img) => [img.uploadId, img.id]))
+  const desiredUploads = new Set(uploadIds)
+
+  await prisma.$transaction(async (tx) => {
+    const toDelete = product.images
+      .filter((img) => !desiredUploads.has(img.uploadId))
+      .map((img) => img.id)
+    if (toDelete.length > 0) {
+      await tx.productImage.deleteMany({ where: { id: { in: toDelete } } })
+    }
+
+    for (const [index, img] of images.entries()) {
+      const existingId = currentByUpload.get(img.uploadId)
+      if (existingId) {
+        await tx.productImage.update({
+          where: { id: existingId },
+          data: { alt: img.alt ?? null, position: index },
+        })
+      } else {
+        await tx.productImage.create({
+          data: { productId: id, uploadId: img.uploadId, alt: img.alt ?? null, position: index },
+        })
+      }
+    }
+  })
+
+  await audit({
+    action: EVENTS.product.updated,
+    entityType: 'Product',
+    entityId: id,
+    changes: { images: { from: product.images.length, to: images.length } },
+    context: ctx,
+  })
+
+  return getProduct(id, { publicOnly: false })
+}
+
+/**
  * Edita os campos de UMA variante em lugar (preço, peso, dimensões, SKU, ativa) —
  * sem tocar na estrutura de opções. A posse é aqui: o where inclui storeId e o
  * productId, então trocar ids na URL não alcança a variante de outro produto/loja.
@@ -435,6 +520,179 @@ export const updateVariant = async (
       context: ctx,
     })
   }
+
+  return getProduct(productId, { publicOnly: false })
+}
+
+const optionNamesKey = (names: string[]): string =>
+  names.map((n) => n.toLowerCase().trim()).sort().join('|')
+
+/**
+ * Adiciona UMA variante a um produto existente. A grade de opções do produto é a
+ * fonte da verdade: a nova variante tem que usar exatamente as mesmas opções, e
+ * sua combinação não pode colidir com outra já existente. Valores de opção novos
+ * (uma cor inédita, p.ex.) são materializados aqui.
+ */
+export const addVariant = async (
+  productId: string,
+  input: CreateVariantInput,
+  ctx: AuditContext,
+): Promise<Product> => {
+  const storeId = getActiveStoreId()
+
+  const product = await prisma.product.findFirst({
+    where: { id: productId, storeId, deletedAt: null },
+    select: {
+      id: true,
+      options: {
+        select: { id: true, name: true, values: { select: { id: true, value: true } } },
+      },
+      variants: {
+        select: {
+          optionValues: {
+            select: { optionValue: { select: { value: true, option: { select: { name: true } } } } },
+          },
+        },
+      },
+    },
+  })
+  if (!product) throw notFound('Produto')
+
+  // Mesma grade de opções do produto? Uma variante com {Cor} num produto {Cor,
+  // Tamanho} deixaria a grade ambígua.
+  if (optionNamesKey(product.options.map((o) => o.name)) !== optionNamesKey(input.options.map((o) => o.option))) {
+    throw appError(ERROR_CODES.VALIDATION_ERROR, 'A variação deve usar as mesmas opções do produto', 422)
+  }
+
+  // Combinação (ex.: Verde+G) já existe? optionKey ignora a ordem das opções.
+  const existingKeys = new Set(
+    product.variants.map((v) =>
+      optionKey(v.optionValues.map((ov) => ({ option: ov.optionValue.option.name, value: ov.optionValue.value }))),
+    ),
+  )
+  if (existingKeys.has(optionKey(input.options))) {
+    throw appError(ERROR_CODES.VALIDATION_ERROR, 'Já existe uma variação com essa combinação de opções', 422)
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    // Coleta os ids dos valores de opção, criando os que ainda não existem.
+    const valueIds: string[] = []
+    for (const { option, value } of input.options) {
+      const productOption = product.options.find(
+        (o) => o.name.toLowerCase().trim() === option.toLowerCase().trim(),
+      )
+      if (!productOption) throw appError(ERROR_CODES.VALIDATION_ERROR, `Opção desconhecida: ${option}`, 422)
+
+      const existing = productOption.values.find((x) => x.value === value)
+      if (existing) {
+        valueIds.push(existing.id)
+      } else {
+        const createdValue = await tx.productOptionValue.create({
+          data: { optionId: productOption.id, value, position: productOption.values.length },
+          select: { id: true },
+        })
+        valueIds.push(createdValue.id)
+      }
+    }
+
+    const position = await tx.productVariant.count({ where: { productId } })
+
+    await tx.productVariant.create({
+      data: {
+        storeId,
+        productId,
+        sku: input.sku,
+        barcode: input.barcode ?? null,
+        price: input.price,
+        compareAtPrice: input.compareAtPrice ?? null,
+        costPrice: input.costPrice ?? null,
+        weight: input.weight,
+        length: input.length,
+        width: input.width,
+        height: input.height,
+        position,
+        isActive: input.isActive,
+        imageId: input.imageId ?? null,
+        optionValues: { create: valueIds.map((id) => ({ optionValueId: id })) },
+      },
+    })
+
+    return tx.product.findUniqueOrThrow({ where: { id: productId }, select: PRODUCT_SELECT })
+  }).catch((err) => {
+    // SKU único por loja: colisão vira conflito de negócio, não 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw businessError(ERROR_CODES.CONFLICT, 'Já existe uma variação com este SKU.', 409)
+    }
+    throw err
+  })
+
+  await audit({
+    action: EVENTS.product.updated,
+    entityType: 'Product',
+    entityId: productId,
+    changes: { variant: { from: null, to: input.sku } },
+    context: ctx,
+  })
+
+  return toProductDTO(created)
+}
+
+/**
+ * Remove uma variante. Duas guardas de negócio:
+ * 1. Nunca a última — um produto sem variante não tem nada vendável.
+ * 2. Se tem histórico (movimento de estoque ou item de pedido), NÃO apaga:
+ *    desativa. Apagar cascatearia o razão de estoque e anularia o vínculo do
+ *    pedido (OrderItem.variantId vira null) — perda de histórico silenciosa.
+ * Sem histórico, o delete cascateia com segurança (nível, reserva, carrinho,
+ * valores de opção) — é uma variante criada por engano, some limpa.
+ */
+export const removeVariant = async (
+  productId: string,
+  variantId: string,
+  ctx: AuditContext,
+): Promise<Product> => {
+  const storeId = getActiveStoreId()
+
+  const variant = await prisma.productVariant.findFirst({
+    where: { id: variantId, productId, storeId, product: { deletedAt: null } },
+    select: {
+      id: true,
+      sku: true,
+      isActive: true,
+      _count: { select: { movements: true, orderItems: true } },
+    },
+  })
+  if (!variant) throw notFound('Variação')
+
+  const total = await prisma.productVariant.count({ where: { productId } })
+  if (total <= 1) {
+    throw businessError(ERROR_CODES.CONFLICT, 'O produto precisa de ao menos uma variação.', 409)
+  }
+
+  const hasHistory = variant._count.movements > 0 || variant._count.orderItems > 0
+
+  if (hasHistory) {
+    if (!variant.isActive) return getProduct(productId, { publicOnly: false })
+    await prisma.productVariant.update({ where: { id: variantId }, data: { isActive: false } })
+    await audit({
+      action: EVENTS.product.updated,
+      entityType: 'ProductVariant',
+      entityId: variantId,
+      changes: { isActive: { from: true, to: false } },
+      context: ctx,
+    })
+    return getProduct(productId, { publicOnly: false })
+  }
+
+  await prisma.productVariant.delete({ where: { id: variantId } })
+
+  await audit({
+    action: EVENTS.product.updated,
+    entityType: 'Product',
+    entityId: productId,
+    changes: { variant: { from: variant.sku, to: null } },
+    context: ctx,
+  })
 
   return getProduct(productId, { publicOnly: false })
 }

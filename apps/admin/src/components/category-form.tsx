@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createCategorySchema, type CreateCategoryInput, type Category } from '@ecommerce/shared/contracts'
 import { useCreateCategory, useUpdateCategory } from '@/lib/categories'
+import { ImageUploader } from '@/components/image-uploader'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +28,7 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<CreateCategoryInput>({
     resolver: zodResolver(createCategorySchema),
@@ -37,6 +39,7 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
           name: initial.name,
           description: initial.description ?? undefined,
           parentId: initial.parentId,
+          imageId: initial.imageId,
           position: initial.position,
           isActive: initial.isActive,
           seoTitle: initial.seoTitle ?? undefined,
@@ -44,6 +47,11 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
         }
       : { isActive: true, position: 0 },
   })
+
+  // A imagem vive fora do fluxo de texto do RHF: o uploader devolve um Upload, e
+  // guardamos o id (enviado à API) e a URL (só para o preview). register('imageId')
+  // é oculto — o setValue mantém o RHF em sincronia com o que o uploader entregou.
+  const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? null)
 
   const busy = create.isPending || update.isPending
 
@@ -100,6 +108,57 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
       <div className="flex flex-col gap-1.5">
         <label htmlFor="description" className="text-sm font-medium">Descrição</label>
         <textarea id="description" rows={3} {...register('description')} className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+      </div>
+
+      <input type="hidden" {...register('imageId')} />
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">Imagem</span>
+        {imageUrl ? (
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="" className="size-16 rounded-md border border-border object-cover" />
+            <button
+              type="button"
+              onClick={() => {
+                setImageUrl(null)
+                setValue('imageId', null, { shouldDirty: true })
+              }}
+              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent"
+            >
+              Remover
+            </button>
+          </div>
+        ) : (
+          <ImageUploader
+            folder="categories"
+            onUploaded={(upload) => {
+              setImageUrl(upload.url)
+              setValue('imageId', upload.id, { shouldDirty: true })
+            }}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="position" className="text-sm font-medium">Posição</label>
+        <input
+          id="position"
+          type="number"
+          min={0}
+          {...register('position', { valueAsNumber: true })}
+          className={cn(field, errors.position && 'border-destructive')}
+        />
+        <p className="text-xs text-muted-foreground">Ordena entre categorias irmãs (menor primeiro).</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="seoTitle" className="text-sm font-medium">Título SEO</label>
+        <input id="seoTitle" {...register('seoTitle')} className={field} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="seoDescription" className="text-sm font-medium">Descrição SEO</label>
+        <textarea id="seoDescription" rows={2} {...register('seoDescription')} className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
       </div>
 
       <label className="flex items-center gap-2 text-sm">

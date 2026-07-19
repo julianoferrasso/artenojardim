@@ -12,18 +12,10 @@ export default function StockPage() {
   const [selected, setSelected] = useState<StockItem | null>(null)
 
   return (
-    <div className="min-h-svh bg-muted">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Estoque</span>
-          <a href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Voltar
-          </a>
-        </div>
-      </header>
+    <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8">
+      <h1 className="text-xl font-semibold tracking-tight">Estoque</h1>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8">
-        <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={lowStock}
@@ -83,7 +75,6 @@ export default function StockPage() {
             </table>
           </div>
         )}
-      </main>
 
       {selected && <LedgerDrawer item={selected} onClose={() => setSelected(null)} />}
     </div>

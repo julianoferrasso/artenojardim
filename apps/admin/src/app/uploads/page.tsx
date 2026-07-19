@@ -26,18 +26,10 @@ export default function UploadsPage() {
   })
 
   return (
-    <div className="min-h-svh bg-muted">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Biblioteca de mídia</span>
-          <a href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Voltar
-          </a>
-        </div>
-      </header>
+    <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8">
+      <h1 className="text-xl font-semibold tracking-tight">Biblioteca de mídia</h1>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8">
-        <section className="max-w-md">
+      <section className="max-w-md">
           <ImageUploader
             folder="products"
             onUploaded={() => qc.invalidateQueries({ queryKey: ['uploads'] })}
@@ -93,7 +85,6 @@ export default function UploadsPage() {
             </>
           )}
         </section>
-      </main>
     </div>
   )
 }

@@ -16,39 +16,70 @@ const STATUS_CLASS: Record<string, string> = {
   ARCHIVED: 'bg-muted text-muted-foreground line-through',
 }
 
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '-updatedAt', label: 'Atualizado recentemente' },
+  { value: '-createdAt', label: 'Mais novos' },
+  { value: 'createdAt', label: 'Mais antigos' },
+  { value: 'name', label: 'Nome (A–Z)' },
+  { value: '-name', label: 'Nome (Z–A)' },
+]
+
 export default function ProductsPage() {
   const [status, setStatus] = useState<string>('')
   const [q, setQ] = useState('')
-  const { data, isLoading, error } = useProducts({ status: status || undefined, q: q || undefined })
+  const [sort, setSort] = useState('-updatedAt')
+  const [page, setPage] = useState(1)
+  const { data, isLoading, error } = useProducts({
+    status: status || undefined,
+    q: q || undefined,
+    sort,
+    page,
+  })
+
+  // Trocar filtro/busca/ordenação volta para a primeira página — senão a página 3
+  // de um resultado antigo fica pedindo um offset que o novo resultado não tem.
+  const resetPage = () => setPage(1)
 
   return (
-    <div className="min-h-svh bg-muted">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Produtos</span>
-          <a href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Voltar
-          </a>
-        </div>
-      </header>
+    <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8">
+      <h1 className="text-xl font-semibold tracking-tight">Produtos</h1>
 
-      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
           <input
             placeholder="Buscar por nome…"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              resetPage()
+            }}
             className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value)}
+            onChange={(e) => {
+              setStatus(e.target.value)
+              resetPage()
+            }}
             className="h-10 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">Todos os status</option>
             <option value="DRAFT">Rascunho</option>
             <option value="ACTIVE">Ativo</option>
             <option value="ARCHIVED">Arquivado</option>
+          </select>
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value)
+              resetPage()
+            }}
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
           <a
             href="/produtos/novo"
@@ -106,14 +137,30 @@ export default function ProductsPage() {
                 </a>
               </li>
             ))}
-            {data.meta.totalPages > 1 && (
-              <p className="pt-2 text-center text-xs text-muted-foreground">
-                {data.meta.total} produtos · página {data.meta.page} de {data.meta.totalPages}
-              </p>
-            )}
           </ul>
         )}
-      </main>
+
+        {data && data.meta.totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={data.meta.page <= 1}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-40"
+            >
+              ← Anterior
+            </button>
+            <span className="text-xs text-muted-foreground">
+              {data.meta.total} produtos · página {data.meta.page} de {data.meta.totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(data.meta.totalPages, p + 1))}
+              disabled={data.meta.page >= data.meta.totalPages}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-40"
+            >
+              Próxima →
+            </button>
+          </div>
+        )}
     </div>
   )
 }

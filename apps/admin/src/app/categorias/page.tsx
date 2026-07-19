@@ -27,17 +27,10 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="min-h-svh bg-muted">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Categorias</span>
-          <a href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Voltar
-          </a>
-        </div>
-      </header>
+    <div className="mx-auto max-w-5xl px-6 py-8">
+      <h1 className="mb-6 text-xl font-semibold tracking-tight">Categorias</h1>
 
-      <main className="mx-auto grid max-w-5xl gap-8 px-6 py-8 md:grid-cols-[1fr_360px]">
+      <div className="grid gap-8 md:grid-cols-[1fr_360px]">
         <section>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-medium text-muted-foreground">Árvore</h2>
@@ -91,7 +84,7 @@ export default function CategoriesPage() {
             </p>
           )}
         </aside>
-      </main>
+      </div>
     </div>
   )
 }
@@ -118,6 +111,9 @@ function CategoryRow({
         <span className="flex items-center gap-2 text-sm">
           <span className={cn(!node.isActive && 'text-muted-foreground line-through')}>
             {node.name}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            ({node.productCount} produto{node.productCount === 1 ? '' : 's'})
           </span>
           {!node.isActive && (
             <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">

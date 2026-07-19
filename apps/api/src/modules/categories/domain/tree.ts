@@ -13,7 +13,9 @@ import type { Category, CategoryTreeNode } from '@ecommerce/shared/contracts'
  * pai; os sem pai (ou com pai fora da lista) viram raízes. Irmãos saem ordenados
  * por position e depois name — a mesma ordem que o admin exibe.
  */
-export const buildTree = (categories: Category[]): CategoryTreeNode[] => {
+export const buildTree = (
+  categories: Array<Category & { productCount: number }>,
+): CategoryTreeNode[] => {
   const nodes = new Map<string, CategoryTreeNode>()
   for (const c of categories) nodes.set(c.id, { ...c, children: [] })
 

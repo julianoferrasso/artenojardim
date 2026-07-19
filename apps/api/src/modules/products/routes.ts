@@ -2,6 +2,8 @@ import { Router } from 'express'
 import {
   createProductSchema,
   updateProductSchema,
+  updateProductImagesSchema,
+  createVariantSchema,
   updateVariantSchema,
   productListQuerySchema,
 } from '@ecommerce/shared/contracts'
@@ -41,11 +43,31 @@ productRoutes.patch(
   validate({ body: updateProductSchema }),
   controller.updateController,
 )
+productRoutes.put(
+  '/:id/images',
+  authenticate,
+  requireStaff,
+  validate({ body: updateProductImagesSchema }),
+  controller.updateImagesController,
+)
+productRoutes.post(
+  '/:id/variants',
+  authenticate,
+  requireStaff,
+  validate({ body: createVariantSchema }),
+  controller.addVariantController,
+)
 productRoutes.patch(
   '/:id/variants/:variantId',
   authenticate,
   requireStaff,
   validate({ body: updateVariantSchema }),
   controller.updateVariantController,
+)
+productRoutes.delete(
+  '/:id/variants/:variantId',
+  authenticate,
+  requireStaff,
+  controller.removeVariantController,
 )
 productRoutes.delete('/:id', authenticate, requireStaff, controller.deleteController)

@@ -12,6 +12,8 @@ import { addressRoutes, cepRoutes } from './modules/addresses/routes.js'
 import { shippingRoutes } from './modules/shipping/routes.js'
 import { checkoutRoutes } from './modules/checkout/routes.js'
 import { orderRoutes } from './modules/orders/routes.js'
+import { productViewRoutes } from './modules/product-views/routes.js'
+import { dashboardRoutes } from './modules/dashboard/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -37,5 +39,7 @@ apiRoutes.use('/cep', cepRoutes)
 apiRoutes.use('/shipping', shippingRoutes)
 apiRoutes.use('/checkout', checkoutRoutes)
 apiRoutes.use('/orders', orderRoutes)
+apiRoutes.use('/product-views', productViewRoutes)
+apiRoutes.use('/dashboard', dashboardRoutes)
 
 export const API_PREFIX = `/api/${API_VERSION}`

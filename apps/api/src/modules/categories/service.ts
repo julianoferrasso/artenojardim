@@ -58,8 +58,23 @@ const listAll = async (): Promise<Category[]> => {
   return rows.map(toDTO)
 }
 
-export const getCategoryTree = async (): Promise<CategoryTreeNode[]> =>
-  buildTree(await listAll())
+export const getCategoryTree = async (): Promise<CategoryTreeNode[]> => {
+  const storeId = getActiveStoreId()
+
+  // Contagem por categoria numa query só (groupBy), em vez de N+1. Conta apenas
+  // produtos vivos (deletedAt: null) — um produto arquivado não deve inflar o "(12)".
+  const [categories, counts] = await Promise.all([
+    listAll(),
+    prisma.productCategory.groupBy({
+      by: ['categoryId'],
+      where: { product: { storeId, deletedAt: null } },
+      _count: { productId: true },
+    }),
+  ])
+
+  const countBy = new Map(counts.map((c) => [c.categoryId, c._count.productId]))
+  return buildTree(categories.map((c) => ({ ...c, productCount: countBy.get(c.id) ?? 0 })))
+}
 
 export const listCategories = listAll
 

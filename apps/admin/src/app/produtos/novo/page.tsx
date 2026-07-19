@@ -57,17 +57,14 @@ export default function NewProductPage() {
   const section = 'flex flex-col gap-4 rounded-lg border border-border bg-card p-6'
 
   return (
-    <div className="min-h-svh bg-muted">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3">
-          <span className="font-semibold tracking-tight">Novo produto</span>
-          <a href="/produtos" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Produtos
-          </a>
-        </div>
-      </header>
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold tracking-tight">Novo produto</h1>
+        <a href="/produtos" className="text-sm text-muted-foreground hover:text-foreground">
+          ← Produtos
+        </a>
+      </div>
 
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
         <section className={section}>
           <h2 className="font-medium">Informações</h2>
           <div className="flex flex-col gap-1.5">
@@ -174,7 +171,6 @@ export default function NewProductPage() {
             {create.isPending ? 'Salvando…' : 'Publicar'}
           </button>
         </div>
-      </main>
     </div>
   )
 }

@@ -123,6 +123,17 @@ export const productImageSchema = z.object({
 
 export type ProductImage = z.infer<typeof productImageSchema>
 
+/**
+ * Substitui a galeria inteira do produto. A API reconcilia por `uploadId`:
+ * mantém as que continuam, cria as novas e apaga as ausentes. O `position` de
+ * cada item define a ordem — a posição no array é o que vale.
+ */
+export const updateProductImagesSchema = z.object({
+  images: z.array(productImageInputSchema),
+})
+
+export type UpdateProductImagesInput = z.infer<typeof updateProductImagesSchema>
+
 // ── Produto ───────────────────────────────────────────────────────────────────
 
 export const createProductSchema = z.object({

@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { getProduct } from '@/lib/catalog'
 import { ApiError } from '@/lib/api'
 import { VariantSelector } from '@/components/variant-selector'
+import { ProductViewBeacon } from './product-view-beacon'
 import { formatBRL } from '@/lib/utils'
 
 type Params = { slug: string }
@@ -75,6 +76,8 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
         <span className="mx-2">/</span>
         <span className="text-foreground">{product.name}</span>
       </nav>
+
+      <ProductViewBeacon slug={product.slug} />
 
       <VariantSelector product={product} />
 

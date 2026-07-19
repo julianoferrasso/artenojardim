@@ -35,6 +35,7 @@ export const ROUTES = {
     detail: (idOrSlug: string) => `${base}/products/${idOrSlug}`,
     update: (id: string) => `${base}/products/${id}`,
     remove: (id: string) => `${base}/products/${id}`,
+    images: (id: string) => `${base}/products/${id}/images`,
     variants: (productId: string) => `${base}/products/${productId}/variants`,
     variant: (productId: string, variantId: string) =>
       `${base}/products/${productId}/variants/${variantId}`,
@@ -120,6 +121,16 @@ export const ROUTES = {
   },
 
   settings: `${base}/settings`,
+
+  /** Registro de visita de produto (público, disparado pela loja). */
+  productViews: {
+    track: `${base}/product-views`,
+  },
+
+  /** Métricas do painel (staff). */
+  dashboard: {
+    overview: `${base}/dashboard/overview`,
+  },
 
   webhooks: {
     stripe: `${base}/webhooks/stripe`,
