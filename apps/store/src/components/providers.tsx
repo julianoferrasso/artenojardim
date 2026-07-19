@@ -2,12 +2,20 @@
 
 import type { ReactNode } from 'react'
 import { AuthProvider } from '@/lib/auth'
+import { CartProvider } from '@/lib/cart'
 
 /**
  * Providers client no topo da loja. A maior parte da loja é Server Component;
- * o AuthProvider só faz efeito nas ilhas que usam useAuth (header, conta, e o
- * carrinho na Fase 1.8). Não força a árvore inteira a virar client.
+ * estes contextos só fazem efeito nas ilhas que usam useAuth/useCart (header,
+ * conta, carrinho). Não forçam a árvore inteira a virar client.
+ *
+ * CartProvider DENTRO de AuthProvider: o carrinho reage ao login (merge do
+ * anônimo) via useAuth. A ordem importa.
  */
 export const Providers = ({ children }: { children: ReactNode }) => {
-  return <AuthProvider>{children}</AuthProvider>
+  return (
+    <AuthProvider>
+      <CartProvider>{children}</CartProvider>
+    </AuthProvider>
+  )
 }

@@ -1,9 +1,12 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import type { Product, Variant } from '@ecommerce/shared/contracts'
 import { formatBRL } from '@/lib/utils'
+import { useCart } from '@/lib/cart'
+import { ApiError } from '@/lib/api'
 
 /**
  * Seletor de variação — Client Component porque troca preço, imagem e
@@ -27,12 +30,32 @@ export const VariantSelector = ({ product }: { product: Product }) => {
   }, [product.variants])
 
   const hasOptions = options.length > 0
+  const { add } = useCart()
+  const router = useRouter()
+  const [adding, setAdding] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   // Seleção inicial: a primeira variante ativa.
   const firstActive = product.variants.find((v) => v.isActive) ?? product.variants[0]!
   const [selected, setSelected] = useState<Record<string, string>>(
     () => Object.fromEntries(firstActive.options.map((o) => [o.option, o.value])),
   )
+
+  const onAdd = async () => {
+    if (!current) return
+    setAdding(true)
+    setFeedback(null)
+    try {
+      await add({ variantId: current.id, quantity: 1 })
+      router.push('/carrinho')
+    } catch (e) {
+      // A API é a barreira: estoque insuficiente, produto indisponível → mostra
+      // o motivo em vez de reimplementar a regra aqui.
+      setFeedback(e instanceof ApiError ? e.message : 'Não foi possível adicionar.')
+    } finally {
+      setAdding(false)
+    }
+  }
 
   // Variante que casa com a seleção atual.
   const current: Variant | undefined = useMemo(() => {
@@ -109,13 +132,13 @@ export const VariantSelector = ({ product }: { product: Product }) => {
           ))}
 
         <button
-          disabled={!current || !current.isActive}
+          onClick={onAdd}
+          disabled={!current || !current.isActive || adding}
           className="mt-2 h-12 rounded-md bg-primary text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {/* O carrinho entra na Fase 1.8. Por ora o botão existe e é desabilitado
-              quando a combinação não está disponível. */}
-          Adicionar ao carrinho
+          {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
         </button>
+        {feedback && <p role="alert" className="text-sm text-destructive">{feedback}</p>}
 
         {product.shortDescription && (
           <p className="text-sm text-muted-foreground">{product.shortDescription}</p>

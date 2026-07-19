@@ -16,6 +16,9 @@ import { ApiError } from './api'
 
 let accessToken: string | undefined
 
+/** O carrinho (outro contexto) precisa do token para anexar o Bearer. */
+export const getAccessToken = (): string | undefined => accessToken
+
 const apiBase = (): string => {
   const url = process.env.NEXT_PUBLIC_API_URL
   if (!url) throw new Error('NEXT_PUBLIC_API_URL não configurada')
