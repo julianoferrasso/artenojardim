@@ -19,11 +19,17 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 FILE="$DIR/${DB}-${STAMP}.dump"
 RETENTION_DAYS=14
 
+# O diretório e os dumps pertencem ao `postgres`: assim ele ESCREVE o dump e o
+# LÊ de volta para verificar, direto, sem redirect do root (que criaria um
+# arquivo root-owned num dir 700 que o postgres nem consegue abrir). 700 mantém
+# os dados de cliente longe de outros usuários; o root lê tudo de qualquer forma.
 mkdir -p "$DIR"
-chmod 700 "$DIR" # o dump tem dados de cliente; só o root lê
+chown postgres:postgres "$DIR"
+chmod 700 "$DIR"
 
-# -Fc custom, comprimido. O `sudo -u postgres` usa peer auth (sem senha).
-sudo -u postgres pg_dump -Fc "$DB" > "$FILE"
+# -Fc custom, comprimido. -f faz o próprio postgres escrever o arquivo (peer auth,
+# sem senha), em vez de o root redirecionar a saída.
+sudo -u postgres pg_dump -Fc -f "$FILE" "$DB"
 
 # Um dump de 0 byte é um backup que não existe. Falha alto se for vazio.
 if [ ! -s "$FILE" ]; then
@@ -33,13 +39,11 @@ if [ ! -s "$FILE" ]; then
 fi
 
 # Verifica que o pg_restore consegue LER o header — pega dump corrompido antes
-# de ele virar o único backup restante.
+# de ele virar o único backup restante. postgres lê o arquivo que ele mesmo criou.
 if ! sudo -u postgres pg_restore --list "$FILE" >/dev/null 2>&1; then
   echo "ERRO: dump ilegível pelo pg_restore ($FILE)" >&2
   exit 1
 fi
-
-chmod 600 "$FILE"
 
 # Remove dumps mais velhos que a retenção. -mtime +N = mais de N dias.
 find "$DIR" -name "${DB}-*.dump" -type f -mtime +$RETENTION_DAYS -delete
