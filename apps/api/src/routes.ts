@@ -5,6 +5,7 @@ import { authRoutes } from './modules/auth/routes.js'
 import { uploadRoutes } from './modules/uploads/routes.js'
 import { categoryRoutes } from './modules/categories/routes.js'
 import { productRoutes } from './modules/products/routes.js'
+import { inventoryRoutes } from './modules/inventory/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -20,5 +21,6 @@ apiRoutes.use('/auth', authRoutes)
 apiRoutes.use('/uploads', uploadRoutes)
 apiRoutes.use('/categories', categoryRoutes)
 apiRoutes.use('/products', productRoutes)
+apiRoutes.use('/inventory', inventoryRoutes)
 
 export const API_PREFIX = `/api/${API_VERSION}`

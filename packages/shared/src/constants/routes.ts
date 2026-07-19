@@ -78,7 +78,10 @@ export const ROUTES = {
   },
 
   inventory: {
-    levels: `${base}/inventory/levels`,
+    list: `${base}/inventory`,
+    reconcile: `${base}/inventory/reconcile`,
+    level: (variantId: string) => `${base}/inventory/${variantId}`,
+    ledger: (variantId: string) => `${base}/inventory/${variantId}/ledger`,
     movements: `${base}/inventory/movements`,
   },
 

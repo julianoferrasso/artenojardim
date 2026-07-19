@@ -31,6 +31,16 @@ enum ProductStatus {
   ARCHIVED
 }
 
+/// Movimento de estoque. O sinal fica em `quantity`, não no tipo.
+enum MovementType {
+  PURCHASE // + fornecedor, produção, estoque inicial (admin)
+  SALE // − venda confirmada (sistema, via webhook)
+  RETURN // + devolução reintegrada (admin)
+  CANCELLATION // + pedido pago cancelado (sistema)
+  ADJUSTMENT // ± quebra, perda, correção (admin, motivo obrigatório)
+  COUNT // ± inventário físico, grava a diferença (admin)
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -60,6 +70,7 @@ model Store {
   categories Category[]
   products   Product[]
   variants   ProductVariant[]
+  movements  InventoryMovement[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -81,6 +92,7 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   uploads       Upload[]
+  movements     InventoryMovement[]
 
   /// Hoje redundante (uma loja). Na Fase 4 é o que impede colisão entre lojas.
   @@unique([storeId, email])
@@ -270,6 +282,9 @@ model ProductVariant {
   product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
   optionValues  VariantOptionValue[]
   images        ProductImage[]
+  level         InventoryLevel?
+  movements     InventoryMovement[]
+  reservations  InventoryReservation[]
 
   @@unique([storeId, sku])
   @@index([productId])
@@ -285,6 +300,65 @@ model VariantOptionValue {
 
   @@id([variantId, optionValueId])
   @@index([optionValueId])
+}
+
+// ─── Estoque (Fase 1.5) ───────────────────────────────────────────────────────
+//
+// Livro-razão append-only (InventoryMovement) + projeção materializada
+// (InventoryLevel). O movimento registra FATOS FÍSICOS; a projeção é o cache da
+// verdade, reconstruível a qualquer momento por SUM(quantity). Reserva NÃO é
+// movimento: é intenção (o produto continua na prateleira até a venda).
+
+/// Projeção materializada. `available = onHand - reserved`. NÃO é a verdade —
+/// é o cache dela. Reconstruível de InventoryMovement.
+model InventoryLevel {
+  id        String   @id @default(cuid())
+  variantId String   @unique
+  onHand    Int      @default(0)
+  reserved  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+}
+
+/// APPEND-ONLY. Nunca UPDATE, nunca DELETE. Errou? Lance um movimento contrário.
+/// `quantity` tem sinal (PURCHASE +, SALE −). `reference` liga ao pedido: "order:xyz".
+model InventoryMovement {
+  id        String       @id @default(cuid())
+  storeId   String
+  variantId String
+  type      MovementType
+  quantity  Int
+  reason    String?
+  reference String?
+  userId    String?
+  createdAt DateTime     @default(now())
+
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  user    User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([variantId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([reference])
+}
+
+/// Reserva de estoque durante o checkout. Intenção, não fato: `reserved += qty`
+/// no InventoryLevel, mas NENHUM movimento. Pagou → vira SALE e libera a reserva.
+/// Expirou/falhou → só libera. orderId sem FK ainda: Order nasce na Fase 1.11.
+model InventoryReservation {
+  id         String    @id @default(cuid())
+  variantId  String
+  orderId    String
+  quantity   Int
+  expiresAt  DateTime
+  releasedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt, releasedAt])
+  @@index([orderId])
 }
 
 /// Árvore de categorias por ADJACENCY LIST (só `parentId`), não nested set nem
