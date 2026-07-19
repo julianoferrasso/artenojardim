@@ -39,6 +39,15 @@ const baseSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   R2_PUBLIC_URL: z.string().url().optional(),
+
+  // Frete via Melhor Envio (OAuth2). Opcional: sem isso a cotação responde um
+  // erro de negócio claro ("frete não configurado"), não derruba o boot. O
+  // access token NÃO vem daqui — é obtido pelo fluxo OAuth e guardado em Setting.
+  MELHOR_ENVIO_BASE_URL: z.string().url().default('https://melhorenvio.com.br'),
+  MELHOR_ENVIO_CLIENT_ID: z.string().optional(),
+  MELHOR_ENVIO_CLIENT_SECRET: z.string().optional(),
+  MELHOR_ENVIO_REDIRECT_URI: z.string().url().optional(),
+  MELHOR_ENVIO_CONTACT_EMAIL: z.string().email().optional(),
 })
 
 /**

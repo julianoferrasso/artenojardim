@@ -110,3 +110,10 @@ export const forgotPasswordLimiter = build({
   max: 3,
   keyBy: (req) => (req.body as { email?: string })?.email?.toLowerCase().trim() ?? (req.ip ?? ''),
 })
+
+/**
+ * Cotação de frete: cada chamada bate no Melhor Envio (custo e latência de 1–3s).
+ * Público (loja anônima cota no produto), então o limite protege a nossa cota na
+ * API deles contra abuso.
+ */
+export const shippingQuoteLimiter = build({ name: 'shipping-quote', windowMs: 60 * 60_000, max: 60 })

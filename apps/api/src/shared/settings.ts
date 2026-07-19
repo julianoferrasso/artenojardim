@@ -30,6 +30,21 @@ export const SETTING_SCHEMAS = {
     }),
     default: { freeShippingAboveCents: null, additionalDays: 2, enabledServices: [] },
   },
+  /**
+   * Estado do OAuth do Melhor Envio. `state` é o anti-CSRF do fluxo (existe só
+   * entre o connect e o callback). Os tokens ficam aqui — no banco, nunca em log
+   * nem no código. O access token é curto; o refresh renova sozinho.
+   */
+  melhor_envio_oauth: {
+    schema: z.object({
+      state: z.string().nullable(),
+      accessToken: z.string().nullable(),
+      refreshToken: z.string().nullable(),
+      /** epoch em ms de expiração do access token. */
+      expiresAt: z.number().int().nullable(),
+    }),
+    default: { state: null, accessToken: null, refreshToken: null, expiresAt: null },
+  },
 } as const
 
 type SettingKey = keyof typeof SETTING_SCHEMAS

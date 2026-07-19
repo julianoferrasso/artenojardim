@@ -54,6 +54,15 @@ export const ROUTES = {
     merge: `${base}/cart/merge`,
   },
 
+  shipping: {
+    /** Cotação pública (produto/checkout). Corpo: { zipCode, items }. */
+    quote: `${base}/shipping/quote`,
+    /** OAuth do Melhor Envio (staff inicia, loja recebe o callback). */
+    connect: `${base}/shipping/melhor-envio/connect`,
+    callback: `${base}/shipping/melhor-envio/callback`,
+    status: `${base}/shipping/melhor-envio/status`,
+  },
+
   checkout: {
     address: `${base}/checkout/address`,
     shipping: `${base}/checkout/shipping`,
