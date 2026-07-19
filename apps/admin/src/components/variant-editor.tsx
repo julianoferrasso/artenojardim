@@ -161,6 +161,9 @@ export const VariantEditor = ({ value, onChange }: Props) => {
                 <th className="py-2 pr-3">SKU</th>
                 <th className="py-2 pr-3">Preço (R$)</th>
                 <th className="py-2 pr-3">Peso (g)</th>
+                <th className="py-2 pr-3">Comp. (cm)</th>
+                <th className="py-2 pr-3">Larg. (cm)</th>
+                <th className="py-2 pr-3">Alt. (cm)</th>
                 <th className="py-2 pr-3">Ativa</th>
               </tr>
             </thead>
@@ -204,6 +207,24 @@ export const VariantEditor = ({ value, onChange }: Props) => {
                       )}
                     />
                   </td>
+                  {/* Dimensões em cm na UI, milímetros no contrato: converte na borda. */}
+                  {(['length', 'width', 'height'] as const).map((dim) => (
+                    <td key={dim} className="py-2 pr-3">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={v[dim] ? v[dim] / 10 : ''}
+                        onChange={(e) =>
+                          patchVariant(i, { [dim]: Math.round(Number(e.target.value) * 10) })
+                        }
+                        className={cn(
+                          'h-8 w-16 rounded border border-input bg-background px-2',
+                          v.isActive && !v[dim] && 'border-warning',
+                        )}
+                      />
+                    </td>
+                  ))}
                   <td className="py-2 pr-3">
                     <input
                       type="checkbox"

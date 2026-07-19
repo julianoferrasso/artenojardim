@@ -48,11 +48,13 @@ export const createVariantSchema = z.object({
   price: moneySchema,
   compareAtPrice: moneySchema.optional(),
   costPrice: moneySchema.optional(),
-  // Peso em GRAMAS. Publicar sem peso é bloqueado no service: sem ele não há frete.
-  weight: z.number().int().nonnegative().default(0),
-  length: z.number().int().nonnegative().default(0),
-  width: z.number().int().nonnegative().default(0),
-  height: z.number().int().nonnegative().default(0),
+  // Peso (GRAMAS) e dimensões (MILÍMETROS) são OBRIGATÓRIOS: sem eles o frete não
+  // cota, e um produto sem frete não vende. Exigir na criação (não só na
+  // publicação) evita o produto nascer quebrado e o lojista descobrir no checkout.
+  weight: z.number().int().positive('Informe o peso em gramas'),
+  length: z.number().int().positive('Informe o comprimento em mm'),
+  width: z.number().int().positive('Informe a largura em mm'),
+  height: z.number().int().positive('Informe a altura em mm'),
   position: z.number().int().nonnegative().default(0),
   isActive: z.boolean().default(true),
   imageId: z.string().nullable().optional(),
@@ -61,6 +63,28 @@ export const createVariantSchema = z.object({
 })
 
 export type CreateVariantInput = z.infer<typeof createVariantSchema>
+
+/**
+ * Edição de uma variante existente — o dado mais sensível (preço, estoque). Só os
+ * campos editáveis em lugar, sem mexer na estrutura de opções. Dimensões e peso,
+ * se enviados, seguem obrigatoriamente positivos.
+ */
+export const updateVariantSchema = z
+  .object({
+    sku: z.string().min(1, 'SKU obrigatório').max(80).trim(),
+    barcode: z.string().max(80).nullable(),
+    price: moneySchema,
+    compareAtPrice: moneySchema.nullable(),
+    costPrice: moneySchema.nullable(),
+    weight: z.number().int().positive('Informe o peso em gramas'),
+    length: z.number().int().positive('Informe o comprimento em mm'),
+    width: z.number().int().positive('Informe a largura em mm'),
+    height: z.number().int().positive('Informe a altura em mm'),
+    isActive: z.boolean(),
+  })
+  .partial()
+
+export type UpdateVariantInput = z.infer<typeof updateVariantSchema>
 
 export const variantSchema = z.object({
   id: z.string(),

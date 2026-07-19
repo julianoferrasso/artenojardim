@@ -5,6 +5,7 @@ import type {
   ProductListItem,
   CreateProductInput,
   UpdateProductInput,
+  UpdateVariantInput,
 } from '@ecommerce/shared/contracts'
 import { apiFetch, apiFetchPaginated } from './api'
 
@@ -45,6 +46,21 @@ export const useUpdateProduct = () => {
     onSuccess: (_d, { id }) => {
       qc.invalidateQueries({ queryKey: ['products'] })
       qc.invalidateQueries({ queryKey: ['product', id] })
+    },
+  })
+}
+
+export const useUpdateVariant = (productId: string) => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ variantId, input }: { variantId: string; input: UpdateVariantInput }) =>
+      apiFetch<Product>(ROUTES.products.variant(productId, variantId), {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] })
+      qc.invalidateQueries({ queryKey: ['product', productId] })
     },
   })
 }

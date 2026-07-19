@@ -10,7 +10,9 @@ import type { CreateVariantInput } from '@ecommerce/shared/contracts'
 
 export type ProductForPublish = {
   imageCount: number
-  variants: Array<Pick<CreateVariantInput, 'isActive' | 'price' | 'weight'>>
+  variants: Array<
+    Pick<CreateVariantInput, 'isActive' | 'price' | 'weight' | 'length' | 'width' | 'height'>
+  >
 }
 
 export type PublishBlocker =
@@ -18,6 +20,7 @@ export type PublishBlocker =
   | 'NO_ACTIVE_VARIANT'
   | 'VARIANT_WITHOUT_PRICE'
   | 'VARIANT_WITHOUT_WEIGHT'
+  | 'VARIANT_WITHOUT_DIMENSIONS'
 
 /**
  * O que impede publicar. Lista vazia = pode publicar.
@@ -41,6 +44,9 @@ export const publishBlockers = (product: ProductForPublish): PublishBlocker[] =>
 
   if (active.some((v) => v.price <= 0)) blockers.push('VARIANT_WITHOUT_PRICE')
   if (active.some((v) => v.weight <= 0)) blockers.push('VARIANT_WITHOUT_WEIGHT')
+  if (active.some((v) => v.length <= 0 || v.width <= 0 || v.height <= 0)) {
+    blockers.push('VARIANT_WITHOUT_DIMENSIONS')
+  }
 
   return blockers
 }
@@ -50,4 +56,5 @@ export const BLOCKER_MESSAGES: Record<PublishBlocker, string> = {
   NO_ACTIVE_VARIANT: 'O produto precisa de ao menos uma variação ativa.',
   VARIANT_WITHOUT_PRICE: 'Toda variação ativa precisa de preço.',
   VARIANT_WITHOUT_WEIGHT: 'Toda variação ativa precisa de peso (para calcular o frete).',
+  VARIANT_WITHOUT_DIMENSIONS: 'Toda variação ativa precisa de dimensões (para calcular o frete).',
 }

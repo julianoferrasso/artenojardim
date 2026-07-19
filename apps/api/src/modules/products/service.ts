@@ -3,6 +3,7 @@ import {
   type CreateProductInput,
   type UpdateProductInput,
   type CreateVariantInput,
+  type UpdateVariantInput,
   type Product,
   type ProductListItem,
   type ProductListQuery,
@@ -207,7 +208,14 @@ const normalizeVariants = (variants: CreateVariantInput[]): CreateVariantInput[]
 const assertPublishable = (imageCount: number, variants: CreateVariantInput[]): void => {
   const blockers = publishBlockers({
     imageCount,
-    variants: variants.map((v) => ({ isActive: v.isActive, price: v.price, weight: v.weight })),
+    variants: variants.map((v) => ({
+      isActive: v.isActive,
+      price: v.price,
+      weight: v.weight,
+      length: v.length,
+      width: v.width,
+      height: v.height,
+    })),
   })
   if (blockers.length > 0) {
     throw businessError(
@@ -292,7 +300,9 @@ export const updateProduct = async (
       slug: true,
       status: true,
       _count: { select: { images: true } },
-      variants: { select: { isActive: true, price: true, weight: true } },
+      variants: {
+        select: { isActive: true, price: true, weight: true, length: true, width: true, height: true },
+      },
     },
   })
   if (!current) throw notFound('Produto')
@@ -358,6 +368,75 @@ export const updateProduct = async (
   }
 
   return toProductDTO(updated)
+}
+
+/**
+ * Edita os campos de UMA variante em lugar (preço, peso, dimensões, SKU, ativa) —
+ * sem tocar na estrutura de opções. A posse é aqui: o where inclui storeId e o
+ * productId, então trocar ids na URL não alcança a variante de outro produto/loja.
+ */
+export const updateVariant = async (
+  productId: string,
+  variantId: string,
+  input: UpdateVariantInput,
+  ctx: AuditContext,
+): Promise<Product> => {
+  const storeId = getActiveStoreId()
+
+  const current = await prisma.productVariant.findFirst({
+    where: { id: variantId, productId, storeId, product: { deletedAt: null } },
+    select: {
+      sku: true,
+      barcode: true,
+      price: true,
+      compareAtPrice: true,
+      costPrice: true,
+      weight: true,
+      length: true,
+      width: true,
+      height: true,
+      isActive: true,
+    },
+  })
+  if (!current) throw notFound('Variação')
+
+  // Spreads explícitos (não `data[key] = input[key]`): o TS não correlaciona a
+  // chave dinâmica com o tipo de campo do Prisma. Só entra o que veio no input.
+  const data: Prisma.ProductVariantUpdateInput = {
+    ...(input.sku !== undefined ? { sku: input.sku } : {}),
+    ...(input.barcode !== undefined ? { barcode: input.barcode } : {}),
+    ...(input.price !== undefined ? { price: input.price } : {}),
+    ...(input.compareAtPrice !== undefined ? { compareAtPrice: input.compareAtPrice } : {}),
+    ...(input.costPrice !== undefined ? { costPrice: input.costPrice } : {}),
+    ...(input.weight !== undefined ? { weight: input.weight } : {}),
+    ...(input.length !== undefined ? { length: input.length } : {}),
+    ...(input.width !== undefined ? { width: input.width } : {}),
+    ...(input.height !== undefined ? { height: input.height } : {}),
+    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+  }
+
+  try {
+    await prisma.productVariant.update({ where: { id: variantId }, data })
+  } catch (err) {
+    // SKU único por loja: colisão vira conflito de negócio, não 500.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw businessError(ERROR_CODES.CONFLICT, 'Já existe uma variação com este SKU.', 409)
+    }
+    throw err
+  }
+
+  const changes = diff(current, input as Partial<typeof current>)
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      action: EVENTS.product.updated,
+      entityType: 'ProductVariant',
+      entityId: variantId,
+      changes,
+      context: ctx,
+    })
+  }
+
+  return getProduct(productId, { publicOnly: false })
 }
 
 /**

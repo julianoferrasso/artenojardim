@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import type {
   CreateProductInput,
   UpdateProductInput,
+  UpdateVariantInput,
   ProductListQuery,
 } from '@ecommerce/shared/contracts'
 import { ok, created, noContent, paginated } from '../../shared/http.js'
@@ -32,6 +33,18 @@ export const updateController = async (req: Request, res: Response): Promise<voi
   ok(
     res,
     await service.updateProduct(req.params['id'] as string, req.body as UpdateProductInput, auditContext(req)),
+  )
+}
+
+export const updateVariantController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await service.updateVariant(
+      req.params['id'] as string,
+      req.params['variantId'] as string,
+      req.body as UpdateVariantInput,
+      auditContext(req),
+    ),
   )
 }
 

@@ -1,5 +1,10 @@
 import { Router } from 'express'
-import { createProductSchema, updateProductSchema, productListQuerySchema } from '@ecommerce/shared/contracts'
+import {
+  createProductSchema,
+  updateProductSchema,
+  updateVariantSchema,
+  productListQuerySchema,
+} from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticate, requireStaff, optionalAuthenticate } from '../../middlewares/authenticate.js'
 import * as controller from './controller.js'
@@ -35,5 +40,12 @@ productRoutes.patch(
   requireStaff,
   validate({ body: updateProductSchema }),
   controller.updateController,
+)
+productRoutes.patch(
+  '/:id/variants/:variantId',
+  authenticate,
+  requireStaff,
+  validate({ body: updateVariantSchema }),
+  controller.updateVariantController,
 )
 productRoutes.delete('/:id', authenticate, requireStaff, controller.deleteController)

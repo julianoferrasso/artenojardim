@@ -148,7 +148,8 @@ describe('deriveOptions', () => {
 })
 
 describe('publishBlockers', () => {
-  const ok = { imageCount: 1, variants: [{ isActive: true, price: 1000, weight: 500 }] }
+  const dims = { length: 110, width: 90, height: 90 }
+  const ok = { imageCount: 1, variants: [{ isActive: true, price: 1000, weight: 500, ...dims }] }
 
   it('produto completo pode publicar', () => {
     expect(publishBlockers(ok)).toEqual([])
@@ -159,28 +160,43 @@ describe('publishBlockers', () => {
   })
 
   it('sem variante ativa bloqueia e nem checa preço/peso', () => {
-    const b = publishBlockers({ imageCount: 1, variants: [{ isActive: false, price: 0, weight: 0 }] })
+    const b = publishBlockers({
+      imageCount: 1,
+      variants: [{ isActive: false, price: 0, weight: 0, length: 0, width: 0, height: 0 }],
+    })
     expect(b).toEqual(['NO_ACTIVE_VARIANT'])
   })
 
   it('variante ativa sem preço bloqueia', () => {
     expect(
-      publishBlockers({ imageCount: 1, variants: [{ isActive: true, price: 0, weight: 500 }] }),
+      publishBlockers({ imageCount: 1, variants: [{ isActive: true, price: 0, weight: 500, ...dims }] }),
     ).toContain('VARIANT_WITHOUT_PRICE')
   })
 
   it('variante ativa sem peso bloqueia (frete)', () => {
     expect(
-      publishBlockers({ imageCount: 1, variants: [{ isActive: true, price: 1000, weight: 0 }] }),
+      publishBlockers({
+        imageCount: 1,
+        variants: [{ isActive: true, price: 1000, weight: 0, ...dims }],
+      }),
     ).toContain('VARIANT_WITHOUT_WEIGHT')
+  })
+
+  it('variante ativa sem dimensões bloqueia (frete)', () => {
+    expect(
+      publishBlockers({
+        imageCount: 1,
+        variants: [{ isActive: true, price: 1000, weight: 500, length: 0, width: 90, height: 90 }],
+      }),
+    ).toContain('VARIANT_WITHOUT_DIMENSIONS')
   })
 
   it('variante INATIVA sem preço/peso não bloqueia', () => {
     const b = publishBlockers({
       imageCount: 1,
       variants: [
-        { isActive: true, price: 1000, weight: 500 },
-        { isActive: false, price: 0, weight: 0 },
+        { isActive: true, price: 1000, weight: 500, ...dims },
+        { isActive: false, price: 0, weight: 0, length: 0, width: 0, height: 0 },
       ],
     })
     expect(b).toEqual([])

@@ -36,6 +36,8 @@ export const ROUTES = {
     update: (id: string) => `${base}/products/${id}`,
     remove: (id: string) => `${base}/products/${id}`,
     variants: (productId: string) => `${base}/products/${productId}/variants`,
+    variant: (productId: string, variantId: string) =>
+      `${base}/products/${productId}/variants/${variantId}`,
   },
 
   categories: {
