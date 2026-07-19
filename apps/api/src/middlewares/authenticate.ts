@@ -59,3 +59,19 @@ export const requireStaff: RequestHandler = (req, _res, next) => {
   if (req.auth?.type !== 'user') return next(unauthorized('Rota exclusiva do painel'))
   next()
 }
+
+/**
+ * Popula req.auth SE houver um token válido, mas não rejeita se faltar.
+ *
+ * Para rotas cujo comportamento muda com a sessão sem exigi-la: `GET /products`
+ * mostra só ACTIVE ao público e tudo (inclusive DRAFT) ao staff logado. Um token
+ * inválido é ignorado como se ausente — a rota é pública, não é lugar de erro.
+ */
+export const optionalAuthenticate: RequestHandler = async (req, _res, next) => {
+  const token = bearer(req)
+  if (!token) return next()
+
+  const result = await verifyAccessToken(token, env.JWT_ACCESS_SECRET)
+  if (result.ok) req.auth = result.claims
+  next()
+}

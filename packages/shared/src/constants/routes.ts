@@ -29,6 +29,8 @@ export const ROUTES = {
     list: `${base}/products`,
     create: `${base}/products`,
     detail: (idOrSlug: string) => `${base}/products/${idOrSlug}`,
+    update: (id: string) => `${base}/products/${id}`,
+    remove: (id: string) => `${base}/products/${id}`,
     variants: (productId: string) => `${base}/products/${productId}/variants`,
   },
 
