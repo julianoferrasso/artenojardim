@@ -3,6 +3,7 @@ import { API_VERSION } from '@ecommerce/shared/constants'
 import { healthRoutes } from './modules/health/routes.js'
 import { authRoutes } from './modules/auth/routes.js'
 import { uploadRoutes } from './modules/uploads/routes.js'
+import { categoryRoutes } from './modules/categories/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -16,5 +17,6 @@ export const apiRoutes: Router = Router()
 apiRoutes.use('/health', healthRoutes)
 apiRoutes.use('/auth', authRoutes)
 apiRoutes.use('/uploads', uploadRoutes)
+apiRoutes.use('/categories', categoryRoutes)
 
 export const API_PREFIX = `/api/${API_VERSION}`

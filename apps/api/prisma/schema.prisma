@@ -47,10 +47,11 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
-  settings  Setting[]
-  auditLogs AuditLog[]
-  uploads   Upload[]
+  users      User[]
+  settings   Setting[]
+  auditLogs  AuditLog[]
+  uploads    Upload[]
+  categories Category[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -142,6 +143,43 @@ model AuditLog {
   @@index([userId])
 }
 
+/// Árvore de categorias por ADJACENCY LIST (só `parentId`), não nested set nem
+/// closure table. Com ~50 categorias e 2-3 níveis, uma query carrega tudo e a
+/// árvore se monta em memória em microssegundos. Nested set otimizaria uma
+/// leitura que já é instantânea e complicaria toda escrita.
+model Category {
+  id          String  @id @default(cuid())
+  storeId     String
+  name        String
+  slug        String
+  description String?
+  imageId     String?
+
+  /// Auto-relação. onDelete: Restrict — apagar uma categoria com filhas deve
+  /// falhar alto, não deixar filhas órfãs apontando para o vazio.
+  parentId String?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryTree")
+
+  /// Ordem de exibição entre irmãs. O front ordena por isto, não por nome.
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  seoTitle       String?
+  seoDescription String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  image Upload? @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  /// Slug único POR LOJA, não global: é o que a Fase 4 vai precisar, e criar o
+  /// índice composto agora evita reescrevê-lo em produção depois.
+  @@unique([storeId, slug])
+  @@index([storeId, parentId])
+}
+
 /// Contador do rate limit. Vive no BANCO, não em memória: com `pm2 cluster` de 4
 /// instâncias, um contador em memória por processo faz o limite real virar 4x o
 /// configurado — e quem faz brute force cai na instância que ainda tem folga.
@@ -176,6 +214,9 @@ model Upload {
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
   user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Lado inverso da imagem de categoria. Produtos/CMS entram aqui nas próximas fases.
+  categories Category[]
 
   @@index([storeId, createdAt])
 }

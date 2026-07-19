@@ -34,7 +34,11 @@ export const ROUTES = {
 
   categories: {
     list: `${base}/categories`,
+    tree: `${base}/categories/tree`,
+    create: `${base}/categories`,
     detail: (idOrSlug: string) => `${base}/categories/${idOrSlug}`,
+    update: (id: string) => `${base}/categories/${id}`,
+    remove: (id: string) => `${base}/categories/${id}`,
   },
 
   cart: {
