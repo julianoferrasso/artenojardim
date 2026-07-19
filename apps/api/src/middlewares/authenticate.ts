@@ -100,3 +100,17 @@ export const authenticateCustomer: RequestHandler = async (req, _res, next) => {
   req.auth = result.claims
   next()
 }
+
+/**
+ * Reconhece o cliente logado SE houver token válido, mas não rejeita anônimo.
+ * Para o carrinho: funciona tanto para visitante (sessão em cookie) quanto para
+ * cliente logado (token). Um token inválido é ignorado como se ausente.
+ */
+export const optionalAuthenticateCustomer: RequestHandler = async (req, _res, next) => {
+  const token = bearer(req)
+  if (!token) return next()
+
+  const result = await verifyAccessToken(token, env.JWT_CUSTOMER_ACCESS_SECRET)
+  if (result.ok && result.claims.type === 'customer') req.auth = result.claims
+  next()
+}

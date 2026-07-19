@@ -48,6 +48,7 @@ export const ROUTES = {
     get: `${base}/cart`,
     items: `${base}/cart/items`,
     item: (itemId: string) => `${base}/cart/items/${itemId}`,
+    merge: `${base}/cart/merge`,
   },
 
   checkout: {
