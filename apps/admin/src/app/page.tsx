@@ -38,8 +38,17 @@ export default function AdminHomePage() {
           <h1 className="text-2xl font-semibold tracking-tight">Autenticação pronta</h1>
           <p className="text-sm text-muted-foreground">
             Sessão ativa com refresh transparente. As próximas telas chegam com os módulos:
-            uploads, categorias, produtos, estoque e pedidos.
+            categorias, produtos, estoque e pedidos.
           </p>
+
+          <nav className="flex gap-2">
+            <a
+              href="/uploads"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              Biblioteca de mídia
+            </a>
+          </nav>
         </div>
       </main>
     </div>

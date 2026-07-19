@@ -5,9 +5,6 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
   },
-  resolve: {
-    // O `development` condition do package.json de @ecommerce/shared aponta para
-    // src/, então o teste roda sem precisar buildar o pacote antes.
-    conditions: ['development', 'import', 'node'],
-  },
+  // @ecommerce/shared resolve pelo dist/ (o `test` da raiz o builda antes).
+  // esbuild do vitest lida com o .ts do próprio app; o shared já vem compilado.
 })

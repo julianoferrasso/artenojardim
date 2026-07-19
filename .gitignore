@@ -10,7 +10,10 @@ out/
 !.env.example
 
 # Storage local (driver de desenvolvimento). Em produção é R2.
-uploads/
+# Ancorado no caminho EXATO: `uploads/` solto bate em qualquer diretório com
+# esse nome — inclusive src/modules/uploads, o código do módulo. Já engoliu o
+# módulo inteiro uma vez.
+/apps/api/uploads/
 
 # Logs
 *.log

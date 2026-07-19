@@ -1,4 +1,4 @@
-import type { ErrorResponse } from '@ecommerce/shared/contracts'
+import type { ErrorResponse, PaginationMeta } from '@ecommerce/shared/contracts'
 import { ROUTES } from '@ecommerce/shared/constants'
 
 /**
@@ -97,27 +97,41 @@ const refreshSession = async (): Promise<boolean> => {
   return refreshInFlight
 }
 
-export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+/** Faz o request, renovando o token uma vez em caso de expiração. Devolve o
+ *  corpo cru — os desembrulhadores abaixo escolhem o que extrair. */
+const request = async (path: string, init: RequestInit): Promise<Response> => {
   let res = await raw(path, init)
 
   // Só TOKEN_EXPIRED renova. Um 401 por TOKEN_INVALID ou REFRESH_REUSED
   // significa "alguém forjou" ou "a sessão foi derrubada por segurança" —
   // tentar renovar aí seria insistir num incidente.
   if (res.status === 401 && accessToken) {
-    const err = await res.clone().json().catch(() => null) as ErrorResponse | null
-
-    if (err?.error.code === 'TOKEN_EXPIRED') {
-      if (await refreshSession()) {
-        res = await raw(path, init)
-      }
+    const err = (await res.clone().json().catch(() => null)) as ErrorResponse | null
+    if (err?.error.code === 'TOKEN_EXPIRED' && (await refreshSession())) {
+      res = await raw(path, init)
     }
   }
+  return res
+}
 
+export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  const res = await request(path, init)
   if (!res.ok) throw await parseError(res)
   if (res.status === 204) return undefined as T
 
   const json = (await res.json()) as { data: T }
   return json.data
+}
+
+/** Para as rotas paginadas: preserva o `meta` que o apiFetch normal descarta.
+ *  Passa pela MESMA renovação de token — não reimplemente fetch na página. */
+export const apiFetchPaginated = async <T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<{ data: T[]; meta: PaginationMeta }> => {
+  const res = await request(path, init)
+  if (!res.ok) throw await parseError(res)
+  return (await res.json()) as { data: T[]; meta: PaginationMeta }
 }
 
 export const bootstrapSession = refreshSession

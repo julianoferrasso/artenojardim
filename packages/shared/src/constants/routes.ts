@@ -77,8 +77,10 @@ export const ROUTES = {
   },
 
   uploads: {
+    list: `${base}/uploads`,
     presign: `${base}/uploads/presign`,
     confirm: `${base}/uploads/confirm`,
+    detail: (id: string) => `${base}/uploads/${id}`,
     /** Só existe com STORAGE_DRIVER=local. Em produção o PUT vai direto ao R2. */
     direct: `${base}/uploads/direct`,
   },

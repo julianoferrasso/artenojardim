@@ -8,14 +8,17 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev:api": "pnpm --filter @ecommerce/api dev",
-    "dev:store": "pnpm --filter @ecommerce/store dev",
-    "dev:admin": "pnpm --filter @ecommerce/admin dev",
+    "//dev": "Os apps resolvem @ecommerce/shared pelo dist/, então ele precisa existir e estar fresco. `dev:shared` roda o tsc em watch; deixe-o rodando junto do app, ou rode `build:shared` uma vez se não for editar contratos.",
+    "dev:shared": "pnpm --filter @ecommerce/shared dev",
+    "dev:api": "pnpm build:shared && pnpm --filter @ecommerce/api dev",
+    "dev:store": "pnpm build:shared && pnpm --filter @ecommerce/store dev",
+    "dev:admin": "pnpm build:shared && pnpm --filter @ecommerce/admin dev",
+    "build:shared": "pnpm --filter @ecommerce/shared build",
     "build": "pnpm -r build",
     "//typecheck": "shared antes do resto: os consumidores resolvem os TIPOS pelo dist/, não pelo src/. Sem este build, editar um contrato dá erro fantasma de tipo desatualizado.",
-    "typecheck": "pnpm --filter @ecommerce/shared build && pnpm -r typecheck",
+    "typecheck": "pnpm build:shared && pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
+    "test": "pnpm build:shared && pnpm -r test",
     "db:migrate": "pnpm --filter @ecommerce/api db:migrate",
     "db:seed": "pnpm --filter @ecommerce/api db:seed",
     "db:studio": "pnpm --filter @ecommerce/api db:studio"

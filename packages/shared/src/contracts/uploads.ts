@@ -42,6 +42,8 @@ export const confirmUploadSchema = z.object({
   height: z.number().int().positive().optional(),
 })
 
+export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>
+
 export const uploadSchema = z.object({
   id: z.string(),
   key: z.string(),

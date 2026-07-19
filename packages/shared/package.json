@@ -3,15 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "//exports": "Sempre dist/, nunca src/. O condition development->src apontava para .ts com imports .js (padrão NodeNext), que o Turbopack do Next não remapeia — quebrava o dev dos fronts. Resolver o dist compilado é o padrão de monorepo. Por isso `dev` builda em watch e o typecheck/test buildam shared antes.",
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",
-      "development": "./src/contracts/index.ts",
       "default": "./dist/contracts/index.js"
     },
     "./constants": {
       "types": "./dist/constants/index.d.ts",
-      "development": "./src/constants/index.ts",
       "default": "./dist/constants/index.js"
     }
   },

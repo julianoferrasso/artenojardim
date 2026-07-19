@@ -1,43 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\2cta\\\\Documents\\\\artenojardim\\\\docs\")",
-      "PowerShell(Copy-Item \"C:\\\\Users\\\\2cta\\\\.claude\\\\plans\\\\arquitetura-inicial-da-starry-taco.md\" \"c:\\\\Users\\\\2cta\\\\Documents\\\\artenojardim\\\\docs\\\\arquitetura.md\")",
-      "PowerShell($tools = @\\('nvm','fnm','volta','winget','choco','scoop'\\); foreach \\($t in $tools\\) { $c = Get-Command $t -ErrorAction SilentlyContinue; if \\($c\\) { \"$t -> $\\($c.Source\\)\" } else { \"$t -> ausente\" } })",
-      "PowerShell(nvm install 24)",
-      "PowerShell(nvm use 24)",
-      "PowerShell(node --version)",
-      "PowerShell(\"NVM_HOME=$env:NVM_HOME\"; \"NVM_SYMLINK=$env:NVM_SYMLINK\"; nvm list; \"--- PATH entries com node/nvm ---\"; \\($env:PATH -split ';'\\) | Where-Object { $_ -match 'node|nvm' })",
-      "PowerShell(npm --version)",
-      "PowerShell(corepack enable)",
-      "PowerShell(corepack prepare pnpm@latest --activate)",
-      "PowerShell(pnpm --version)",
-      "Bash(pnpm --filter @ecommerce/shared build)",
-      "Bash(pnpm --filter @ecommerce/api typecheck)",
-      "PowerShell(winget search PostgreSQL --source winget --accept-source-agreements)",
-      "Bash(pnpm --filter @ecommerce/api db:generate)",
-      "Bash(pnpm --filter @ecommerce/api test)",
-      "Bash(cp packages/shared/src/constants/enums.ts /tmp/enums.bak)",
-      "Bash(sed -i \"s/export const USER_ROLES = \\\\['OWNER', 'ADMIN', 'STAFF'\\\\] as const/export const USER_ROLES = ['OWNER', 'ADMIN', 'STAFF', 'GHOST'] as const/\" packages/shared/src/constants/enums.ts)",
-      "Bash(cp /tmp/enums.bak packages/shared/src/constants/enums.ts)",
-      "Bash(rm /tmp/enums.bak)",
-      "Bash(npm view *)",
-      "Bash(echo \"next: $\\(npm view next version\\)\")",
-      "Bash(echo \"react: $\\(npm view react version\\)\")",
-      "Bash(echo \"tailwindcss: $\\(npm view tailwindcss version\\)\")",
-      "Bash(echo \"tanstack-query: $\\(npm view @tanstack/react-query version\\)\")",
-      "Bash(pnpm install *)",
-      "Bash(echo \"=== EXIT: $? ===\")",
-      "PowerShell(corepack prepare pnpm@10 --activate 2>&1)",
-      "Bash(pnpm --version)",
-      "Bash(timeout 600 pnpm install)",
-      "Bash(CI=true timeout 700 pnpm install)",
-      "Bash(CI=true timeout 700 pnpm install --no-frozen-lockfile)",
-      "Bash(pnpm -r typecheck)",
-      "Bash(grep -vE \"^$\")",
-      "Bash(pnpm --filter @ecommerce/store build)",
-      "Bash(timeout 180 pnpm exec prisma migrate dev --name init)",
-      "Bash(timeout 240 pnpm exec prisma migrate dev --name init)"
+      "Bash"
     ]
   }
 }

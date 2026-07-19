@@ -128,8 +128,14 @@ levaria junto os dois projetos e o banco.
 ### O que foi feito
 
 1. **fail2ban** instalado (`jail.local`, jail `sshd`, `backend=systemd`, `maxretry=3`,
-   ban progressivo até 1 semana). `ignoreip` inclui `191.57.28.6` — sem isso, um erro de
-   digitação bane você do próprio servidor.
+   ban progressivo até 1 semana). `ignoreip` cobre `191.57.0.0/16` e `179.35.0.0/16` —
+   as faixas do ISP residencial (Vivo). **A faixa, não o IP:** um IP residencial é dinâmico,
+   e quando ele mudou no meio de uma sessão instável, o novo IP acumulou falhas de auth e a
+   jail baniu com `iptables` em **todas** as portas — o que parece um outage total da VPS
+   (ICMP, 80, 443, tudo em timeout) e não um ban. O reboot limpa os bans (não persistem),
+   mas isentar a faixa evita a reincidência sem abrir o SSH, já que a chave segue sendo a
+   única entrada. Se perder acesso e a VPS responder para nós externos mas não para você,
+   suspeite disto antes de suspeitar de outage.
 2. **SSH**: `PasswordAuthentication no`, `PermitRootLogin prohibit-password`,
    `MaxAuthTries 3`. Verificado de fora: senha recebe `Permission denied (publickey)`.
 3. **UFW**: regra da 5432 removida. Sobraram OpenSSH, 80, 443 — como a arquitetura pede.
