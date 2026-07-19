@@ -1,4 +1,30 @@
 import type { NextConfig } from 'next'
+import type { RemotePattern } from 'next/dist/shared/lib/image-config'
+
+/**
+ * Autoriza o next/image a otimizar imagens do host da API.
+ *
+ * Com o driver de storage LOCAL (o caso hoje, sem credenciais R2), as imagens
+ * são servidas por `${NEXT_PUBLIC_API_URL}/uploads/...` — em produção,
+ * `https://api.artenojardim.com.br`. Sem este host em remotePatterns, o
+ * next/image responde 400 e a foto não carrega. Derivar do próprio
+ * NEXT_PUBLIC_API_URL cobre dev (localhost:4000) e prod sem hardcode.
+ */
+const apiImagePattern = (): RemotePattern | null => {
+  const url = process.env.NEXT_PUBLIC_API_URL
+  if (!url) return null
+  try {
+    const { protocol, hostname, port } = new URL(url)
+    return {
+      protocol: protocol.replace(':', '') as 'http' | 'https',
+      hostname,
+      ...(port ? { port } : {}),
+      pathname: '/uploads/**',
+    }
+  } catch {
+    return null
+  }
+}
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -13,13 +39,11 @@ const nextConfig: NextConfig = {
     // tamanhos por imagem seria ~150 linhas, uma fila e uma tabela de variantes —
     // para resolver o que o framework já resolve.
     remotePatterns: [
-      // R2 em produção. Preenchido a partir de R2_PUBLIC_URL.
+      // Host da API (onde o /uploads é servido com o driver local). Cobre dev e prod.
+      ...(apiImagePattern() ? [apiImagePattern()!] : []),
+      // R2, quando houver credenciais (host de CDN dedicado).
       ...(process.env.NEXT_PUBLIC_CDN_HOST
         ? [{ protocol: 'https' as const, hostname: process.env.NEXT_PUBLIC_CDN_HOST }]
-        : []),
-      // Driver local em desenvolvimento: a API serve /uploads.
-      ...(process.env.NODE_ENV !== 'production'
-        ? [{ protocol: 'http' as const, hostname: 'localhost', port: '4000' }]
         : []),
     ],
   },
