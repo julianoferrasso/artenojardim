@@ -234,9 +234,13 @@ ataque de dicionário. Enquanto a 5432 estava aberta isso era urgente; com ela f
 risco caiu muito. Ainda assim, vale trocar por uma senha aleatória antes de a loja entrar
 no ar (`openssl rand -base64 32`), atualizando o `.env`.
 
-**Backup não existe.** Nenhum `pg_dump` agendado. A arquitetura trata isso como obrigatório
-(§7): numa VPS única, é a diferença entre um susto e o fim do negócio. Entra na Fase 1,
-item 18 — junto com o teste de restore, porque backup nunca testado é backup inexistente.
+**Cópia off-site do backup.** Os dumps vivem na mesma VPS que o banco (ver seção Backup):
+cobre DROP/migration ruim, mas não a perda da VPS inteira. Depende das credenciais de storage
+(R2), a mesma pendência do driver de upload em produção.
+
+**Job de liberação de reserva de estoque.** O checkout (Fase 1.11) reserva estoque ao criar o
+pedido PENDING, mas nada varre e libera as reservas vencidas (TTL em `Setting.reservation_ttl_minutes`).
+Checkout abandonado prende `reserved` até o job existir (`jobs/release-reservations`, Fase 1.18).
 
 ## Backups da configuração
 
