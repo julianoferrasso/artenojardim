@@ -64,6 +64,7 @@ model Store {
   updatedAt DateTime @updatedAt
 
   users      User[]
+  customers  Customer[]
   settings   Setting[]
   auditLogs  AuditLog[]
   uploads    Upload[]
@@ -104,11 +105,12 @@ model User {
 model RefreshToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique
-  userId    String?
-  /// customerId entra na Fase 1. A constraint "exatamente um preenchido" é CHECK
-  /// na migration — o Prisma não modela isso.
-  expiresAt DateTime
-  revokedAt DateTime?
+  /// Exatamente um de userId/customerId preenchido (CHECK na migration). Staff e
+  /// cliente compartilham a tabela mas nunca a mesma sessão.
+  userId     String?
+  customerId String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
 
   /// Aponta para o token que substituiu este. Presença + revokedAt = rotacionado.
   replacedById String?       @unique
@@ -119,10 +121,40 @@ model RefreshToken {
   ip        String?
   createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([customerId])
   @@index([expiresAt])
+}
+
+/// Cliente da loja. Tabela SEPARADA de User (staff): ciclos de vida distintos —
+/// o cliente se auto-cadastra, tem CPF, endereços e histórico de compra; o staff
+/// é criado por convite e auditado. `passwordHash` é opcional: guest checkout
+/// cria o cliente sem senha, e ele pode definir uma depois e assumir o histórico.
+model Customer {
+  id              String    @id @default(cuid())
+  storeId         String
+  name            String
+  email           String
+  passwordHash    String?
+  phone           String?
+  document        String? // CPF/CNPJ
+  documentType    String?
+  birthDate       DateTime?
+  emailVerifiedAt DateTime?
+  acceptsMarketing Boolean  @default(false)
+  deletedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@unique([storeId, email])
+  @@index([storeId])
 }
 
 /// Chave-valor tipado com Zod por chave (shared/settings). Alternativa rejeitada:

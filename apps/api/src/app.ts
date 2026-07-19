@@ -2,7 +2,7 @@ import express, { type Express } from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import { env, isProduction } from './config/env.js'
+import { env } from './config/env.js'
 import { requestContext } from './middlewares/request-context.js'
 import { errorHandler, notFoundHandler } from './middlewares/error-handler.js'
 import { globalLimiter } from './middlewares/rate-limit.js'
@@ -40,10 +40,24 @@ export const createApp = (): Express => {
   app.use(express.urlencoded({ extended: true, limit: '1mb' }))
   app.use(cookieParser())
 
-  // Serve ./uploads apenas com o driver local. Em produção quem serve é o R2 via
-  // CDN, e esta rota não existe.
-  if (env.STORAGE_DRIVER === 'local' && !isProduction) {
-    app.use('/uploads', express.static(env.LOCAL_UPLOAD_DIR, { maxAge: '1h' }))
+  // Serve ./uploads SEMPRE que o driver for local — inclusive em produção, onde
+  // rodamos o driver local por ora (sem credenciais R2 ainda). O `!isProduction`
+  // que estava aqui assumia que produção usaria R2; enquanto não usa, a imagem
+  // gravada no disco precisa ser servida, senão dá 404.
+  //
+  // CORP `cross-origin`: o admin e a loja vivem em subdomínios diferentes da API,
+  // e o helmet põe `Cross-Origin-Resource-Policy: same-origin` por padrão, que
+  // bloquearia o <img> carregando a foto de api.artenojardim.com.br. A imagem é
+  // pública; liberar o CORP dela não expõe nada.
+  if (env.STORAGE_DRIVER === 'local') {
+    app.use(
+      '/uploads',
+      (_req, res, next) => {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+        next()
+      },
+      express.static(env.LOCAL_UPLOAD_DIR, { maxAge: '1h', index: false }),
+    )
   }
 
   // Depois do body parser (o limitador de login precisa ler req.body.email) e
