@@ -117,3 +117,6 @@ export const forgotPasswordLimiter = build({
  * API deles contra abuso.
  */
 export const shippingQuoteLimiter = build({ name: 'shipping-quote', windowMs: 60 * 60_000, max: 60 })
+
+/** Confirmar pedido cria Order + reserva estoque: limita abuso por IP. */
+export const checkoutConfirmLimiter = build({ name: 'checkout-confirm', windowMs: 60 * 60_000, max: 20 })

@@ -124,13 +124,16 @@ export default function CartPage() {
         Frete confirmado no checkout.
       </p>
 
-      <button
-        disabled={(cart?.itemCount ?? 0) === 0}
-        className="mt-6 h-12 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+      <Link
+        href="/checkout"
+        aria-disabled={(cart?.itemCount ?? 0) === 0}
+        className={cn(
+          'mt-6 flex h-12 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90',
+          (cart?.itemCount ?? 0) === 0 && 'pointer-events-none opacity-50',
+        )}
       >
-        {/* O checkout entra na Fase 1.11. */}
         Finalizar compra
-      </button>
+      </Link>
     </main>
   )
 }

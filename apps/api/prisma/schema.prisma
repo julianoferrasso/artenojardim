@@ -41,6 +41,27 @@ enum MovementType {
   COUNT // ± inventário físico, grava a diferença (admin)
 }
 
+/// Dois eixos ortogonais em vez de um enum cartesiano (PAID_SHIPPED, ...):
+/// pagamento e logística evoluem independentemente. Só o webhook do Stripe muda
+/// o pagamento (Fase 1.13).
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  PICKING
+  READY_TO_SHIP
+  SHIPPED
+  DELIVERED
+  RETURNED
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -73,24 +94,25 @@ model Store {
   variants   ProductVariant[]
   movements  InventoryMovement[]
   carts      Cart[]
+  orders     Order[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
 /// ciclos de vida distintos, e na Fase 4 divergem ainda mais.
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   storeId      String
   name         String
   email        String
   passwordHash String
-  role         UserRole @default(STAFF)
-  isActive     Boolean  @default(true)
+  role         UserRole  @default(STAFF)
+  isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store         Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  store         Store               @relation(fields: [storeId], references: [id], onDelete: Restrict)
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   uploads       Upload[]
@@ -104,8 +126,8 @@ model User {
 /// Guardamos o HASH, não o token: um dump do banco não dá sessões ao atacante.
 /// replacedById forma a cadeia de rotação — ver detecção de reúso em auth/service.ts.
 model RefreshToken {
-  id        String    @id @default(cuid())
-  tokenHash String    @unique
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
   /// Exatamente um de userId/customerId preenchido (CHECK na migration). Staff e
   /// cliente compartilham a tabela mas nunca a mesma sessão.
   userId     String?
@@ -135,18 +157,18 @@ model RefreshToken {
 /// é criado por convite e auditado. `passwordHash` é opcional: guest checkout
 /// cria o cliente sem senha, e ele pode definir uma depois e assumir o histórico.
 model Customer {
-  id              String    @id @default(cuid())
-  storeId         String
-  name            String
-  email           String
-  passwordHash    String?
-  phone           String?
-  document        String? // CPF/CNPJ
-  documentType    String?
-  birthDate       DateTime?
-  emailVerifiedAt DateTime?
-  acceptsMarketing Boolean  @default(false)
-  deletedAt       DateTime?
+  id               String    @id @default(cuid())
+  storeId          String
+  name             String
+  email            String
+  passwordHash     String?
+  phone            String?
+  document         String? // CPF/CNPJ
+  documentType     String?
+  birthDate        DateTime?
+  emailVerifiedAt  DateTime?
+  acceptsMarketing Boolean   @default(false)
+  deletedAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -155,6 +177,7 @@ model Customer {
   refreshTokens RefreshToken[]
   carts         Cart[]
   addresses     Address[]
+  orders        Order[]
 
   @@unique([storeId, email])
   @@index([storeId])
@@ -256,18 +279,18 @@ model Setting {
 /// Nasce junto com o primeiro CRUD, não no endurecimento: auditoria adicionada
 /// depois não é retroativa — os meses sem ela são um buraco permanente.
 model AuditLog {
-  id         String  @id @default(cuid())
-  storeId    String
-  userId     String?
+  id          String   @id @default(cuid())
+  storeId     String
+  userId      String?
   /// Vocabulário de EVENTS em shared/constants: "product.updated".
-  action     String
-  entityType String
-  entityId   String
+  action      String
+  entityType  String
+  entityId    String
   /// Diff { campo: { from, to } }. Sem valores sensíveis — o redator é no service.
   changesJson Json?
-  ip         String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
 
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
   user  User? @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -392,14 +415,15 @@ model ProductVariant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store         Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  optionValues  VariantOptionValue[]
-  images        ProductImage[]
-  level         InventoryLevel?
-  movements     InventoryMovement[]
-  reservations  InventoryReservation[]
-  cartItems     CartItem[]
+  store        Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product      Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  optionValues VariantOptionValue[]
+  images       ProductImage[]
+  level        InventoryLevel?
+  movements    InventoryMovement[]
+  reservations InventoryReservation[]
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
 
   @@unique([storeId, sku])
   @@index([productId])
@@ -555,4 +579,89 @@ model Upload {
   productImages ProductImage[]
 
   @@index([storeId, createdAt])
+}
+
+/// Pedido. Nasce do checkout com paymentStatus PENDING; o pagamento (Fase 1.12) e
+/// a expedição evoluem em eixos separados. Endereço e método de frete são SNAPSHOT
+/// (Json): um pedido é documento histórico, não uma view do catálogo/cadastro atual.
+model Order {
+  id         String  @id @default(cuid())
+  storeId    String
+  /// Sequencial por loja, legível ("#1042"). Único via @@unique.
+  number     Int
+  customerId String
+  email      String
+  phone      String?
+
+  paymentStatus     PaymentStatus     @default(PENDING)
+  fulfillmentStatus FulfillmentStatus @default(UNFULFILLED)
+  canceledAt        DateTime?
+  cancelReason      String?
+
+  /// Tudo em centavos. Recalculado no backend, do banco — o front nunca decide.
+  subtotal      Int
+  discountTotal Int @default(0)
+  shippingTotal Int
+  total         Int
+
+  couponId           String?
+  couponCodeSnapshot String?
+
+  shippingAddressJson Json
+  billingAddressJson  Json?
+  /// { carrier, service, serviceId, price, deliveryDays } da opção escolhida.
+  shippingMethodJson  Json
+
+  customerNote String?
+  internalNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store    Store        @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  events   OrderEvent[]
+
+  @@unique([storeId, number])
+  @@index([storeId, paymentStatus])
+  @@index([storeId, createdAt])
+  @@index([customerId])
+}
+
+/// Item do pedido: TUDO é snapshot. Apagar a variante em 2027 não muda o pedido de
+/// 2026. variantId com SetNull mantém a linha viva mesmo sem a variante atual.
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  variantId   String?
+  productName String
+  variantName String
+  sku         String
+  unitPrice   Int
+  quantity    Int
+  totalPrice  Int
+  weight      Int
+  imageUrl    String?
+
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+/// Timeline do pedido (o admin exibe, o suporte usa). `type` usa o vocabulário de
+/// eventos (order.paid, order.shipped...), o mesmo do AuditLog e da fila.
+model OrderEvent {
+  id           String   @id @default(cuid())
+  orderId      String
+  type         String
+  description  String
+  metadataJson Json?
+  userId       String?
+  createdAt    DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }

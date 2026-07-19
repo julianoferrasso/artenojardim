@@ -66,6 +66,13 @@ export const listAddresses = async (customerId: string): Promise<Address[]> => {
   return rows.map(toDTO)
 }
 
+/** Um endereço do cliente, com posse pelo customerId (o checkout usa no snapshot). */
+export const getAddress = async (customerId: string, id: string): Promise<Address> => {
+  const row = await prisma.address.findFirst({ where: { id, customerId }, select: SELECT })
+  if (!row) throw notFound('Endereço')
+  return toDTO(row)
+}
+
 export const createAddress = async (
   customerId: string,
   input: CreateAddressInput,
