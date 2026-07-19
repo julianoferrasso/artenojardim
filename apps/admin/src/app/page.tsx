@@ -43,8 +43,14 @@ export default function AdminHomePage() {
 
           <nav className="flex flex-wrap gap-2">
             <a
-              href="/categorias"
+              href="/produtos"
               className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              Produtos
+            </a>
+            <a
+              href="/categorias"
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
             >
               Categorias
             </a>

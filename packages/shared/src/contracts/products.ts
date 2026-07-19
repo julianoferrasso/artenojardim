@@ -15,6 +15,33 @@ export const variantOptionSchema = z.object({
   value: z.string().min(1).max(60),
 })
 
+export type VariantOption = z.infer<typeof variantOptionSchema>
+export type OptionSpec = { name: string; values: string[] }
+
+/**
+ * Produto cartesiano das opções → combinações. PURO, no shared porque os DOIS
+ * lados usam: a API para materializar as variantes, o admin para pré-visualizar
+ * o grid de variações. Fonte única evita que a prévia divirja do que é gravado.
+ *
+ * Sem opções → uma combinação vazia (a variante "Default"). Loop explícito, não
+ * `reduce<Array<Array<...>>>`: o `>>>` de fechamento é lido como operador de
+ * shift pelo esbuild e a expressão vira `false`.
+ */
+export const cartesian = (options: OptionSpec[]): VariantOption[][] => {
+  let acc: VariantOption[][] = [[]]
+  for (const opt of options) {
+    acc = acc.flatMap((combo) => opt.values.map((value) => [...combo, { option: opt.name, value }]))
+  }
+  return acc
+}
+
+/** Chave canônica de uma combinação, independente da ordem das opções. */
+export const optionKey = (options: VariantOption[]): string =>
+  options
+    .map((o) => `${o.option.toLowerCase().trim()}=${o.value.toLowerCase().trim()}`)
+    .sort()
+    .join('|')
+
 export const createVariantSchema = z.object({
   sku: z.string().min(1, 'SKU obrigatório').max(80).trim(),
   barcode: z.string().max(80).optional(),

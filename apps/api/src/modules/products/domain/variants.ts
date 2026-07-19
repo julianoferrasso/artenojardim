@@ -1,48 +1,16 @@
-import type { CreateVariantInput } from '@ecommerce/shared/contracts'
+import type { CreateVariantInput, OptionSpec } from '@ecommerce/shared/contracts'
+import { optionKey } from '@ecommerce/shared/contracts'
 
 /**
- * Funções PURAS do catálogo: geram e validam variantes sem tocar no banco.
- * É a parte com regra de verdade — e o que a UI de variações do admin vai reusar
- * para pré-visualizar o cartesiano antes de salvar.
- */
-
-export type OptionSpec = { name: string; values: string[] }
-
-type Combo = Array<{ option: string; value: string }>
-
-/**
- * Produto cartesiano das opções → combinações.
+ * Validações PURAS do catálogo, específicas do backend.
  *
- * ["Cor": Verde,Terracota] × ["Tam": P,G] → 4 combinações. O admin propõe todas,
- * o usuário desmarca as que não existem. Sem opções → uma combinação vazia, que
- * o service materializa como a variante "Default".
- *
- * Ordem estável: segue a ordem das opções e dos valores como vieram, para o
- * preview do admin não embaralhar a cada render.
+ * `cartesian` e `optionKey` moram em @ecommerce/shared/contracts — os dois lados
+ * usam (a API materializa as variantes, o admin pré-visualiza o grid). Fonte
+ * única evita a prévia divergir do que é gravado. Reexportados para quem já
+ * importava daqui.
  */
-export const cartesian = (options: OptionSpec[]): Combo[] => {
-  if (options.length === 0) return [[]]
-
-  // Loop explícito, sem o generic inline `reduce<Array<Array<...>>>`: o `>>>` de
-  // fechamento é tokenizado pelo esbuild como o operador de shift e a expressão
-  // vira uma cadeia de comparações que retorna `false`. O alias Combo evita isso.
-  let acc: Combo[] = [[]]
-  for (const opt of options) {
-    acc = acc.flatMap((combo) => opt.values.map((value) => [...combo, { option: opt.name, value }]))
-  }
-  return acc
-}
-
-/**
- * Chave canônica de uma combinação de opções, para detectar duplicatas
- * independentemente da ordem em que as opções foram informadas.
- * {Cor:Verde, Tam:G} e {Tam:G, Cor:Verde} têm a mesma chave.
- */
-export const optionKey = (options: Array<{ option: string; value: string }>): string =>
-  options
-    .map((o) => `${o.option.toLowerCase().trim()}=${o.value.toLowerCase().trim()}`)
-    .sort()
-    .join('|')
+export { cartesian, optionKey } from '@ecommerce/shared/contracts'
+export type { OptionSpec } from '@ecommerce/shared/contracts'
 
 export type VariantValidationError =
   | { code: 'DUPLICATE_SKU'; sku: string }
