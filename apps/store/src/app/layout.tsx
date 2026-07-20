@@ -1,8 +1,22 @@
 import type { Metadata } from 'next'
+import { Cormorant_Garamond, Figtree } from 'next/font/google'
 import { getStore, getCategoryTree } from '@/lib/catalog'
 import { SiteHeader } from '@/components/site-header'
 import { Providers } from '@/components/providers'
 import './globals.css'
+
+// Par tipográfico da marca: serifada elegante (a wordmark do logo é serifada)
+// para títulos, humanista legível para o corpo. O CSS lê via --font-display/--font-sans.
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-cormorant',
+})
+
+const figtree = Figtree({
+  subsets: ['latin'],
+  variable: '--font-figtree',
+})
 
 export async function generateMetadata(): Promise<Metadata> {
   // O nome/descrição da loja vêm da API — na Fase 4 (multi-tenant) cada loja
@@ -26,7 +40,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className="flex min-h-svh flex-col">
+      <body className={`${cormorant.variable} ${figtree.variable} flex min-h-svh flex-col font-sans`}>
         <Providers>
           <SiteHeader storeName={store?.name ?? 'Arte no Jardim'} categories={categories} />
           <div className="flex-1">{children}</div>

@@ -19,86 +19,86 @@
 */
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0.75rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.985 0.008 75);
+  --foreground: oklch(0.3 0.035 40);
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card: oklch(0.997 0.004 85);
+  --card-foreground: oklch(0.3 0.035 40);
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover: oklch(0.997 0.004 85);
+  --popover-foreground: oklch(0.3 0.035 40);
 
-  /* Verde da marca — "Arte no Jardim". O valor muda; o nome não. */
-  --primary: oklch(0.48 0.09 145);
-  --primary-foreground: oklch(0.985 0 0);
+  /* Salmão/terracota da marca — "Arte no Jardim". O valor muda; o nome não. */
+  --primary: oklch(0.56 0.11 30);
+  --primary-foreground: oklch(0.99 0.008 75);
 
-  --secondary: oklch(0.97 0.01 145);
-  --secondary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.945 0.025 35);
+  --secondary-foreground: oklch(0.35 0.055 30);
 
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted: oklch(0.955 0.012 70);
+  --muted-foreground: oklch(0.49 0.035 40);
 
-  --accent: oklch(0.97 0.01 145);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.93 0.032 55);
+  --accent-foreground: oklch(0.33 0.05 35);
 
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.55 0.19 27);
+  --destructive-foreground: oklch(0.985 0.008 75);
 
   /* Preço "de" riscado, selo de promoção. */
-  --sale: oklch(0.55 0.2 25);
-  --sale-foreground: oklch(0.985 0 0);
+  --sale: oklch(0.55 0.17 27);
+  --sale-foreground: oklch(0.985 0.008 75);
 
   /* Estoque baixo: "últimas 2 unidades". */
-  --warning: oklch(0.75 0.15 75);
-  --warning-foreground: oklch(0.205 0 0);
+  --warning: oklch(0.78 0.13 80);
+  --warning-foreground: oklch(0.3 0.05 60);
 
-  --success: oklch(0.6 0.13 150);
-  --success-foreground: oklch(0.985 0 0);
+  --success: oklch(0.55 0.1 150);
+  --success-foreground: oklch(0.985 0.008 75);
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.48 0.09 145);
+  --border: oklch(0.905 0.018 55);
+  --input: oklch(0.905 0.018 55);
+  --ring: oklch(0.56 0.11 30);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --background: oklch(0.215 0.018 40);
+  --foreground: oklch(0.955 0.012 75);
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card: oklch(0.26 0.02 40);
+  --card-foreground: oklch(0.955 0.012 75);
 
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.26 0.02 40);
+  --popover-foreground: oklch(0.955 0.012 75);
 
-  --primary: oklch(0.65 0.11 145);
-  --primary-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.74 0.085 30);
+  --primary-foreground: oklch(0.24 0.03 35);
 
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.3 0.025 35);
+  --secondary-foreground: oklch(0.94 0.02 60);
 
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --muted: oklch(0.29 0.02 40);
+  --muted-foreground: oklch(0.72 0.025 55);
 
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.32 0.03 40);
+  --accent-foreground: oklch(0.94 0.02 60);
 
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.66 0.17 25);
+  --destructive-foreground: oklch(0.215 0.018 40);
 
-  --sale: oklch(0.65 0.18 25);
-  --sale-foreground: oklch(0.145 0 0);
+  --sale: oklch(0.68 0.16 25);
+  --sale-foreground: oklch(0.215 0.018 40);
 
-  --warning: oklch(0.8 0.14 75);
-  --warning-foreground: oklch(0.145 0 0);
+  --warning: oklch(0.82 0.13 80);
+  --warning-foreground: oklch(0.215 0.018 40);
 
-  --success: oklch(0.7 0.12 150);
-  --success-foreground: oklch(0.145 0 0);
+  --success: oklch(0.7 0.1 150);
+  --success-foreground: oklch(0.215 0.018 40);
 
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.65 0.11 145);
+  --ring: oklch(0.74 0.085 30);
 }
 
 /* Mapeia os tokens para as classes do Tailwind: bg-primary, text-muted-foreground. */
@@ -133,6 +133,16 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-figtree), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-cormorant), ui-serif, Georgia, serif;
+
+  /*
+   * Sombras quentes (marrom translúcido, nunca preto puro). Ficam FORA do
+   * themeJson da Fase 4 — são identidade fixa da loja, não cor de marca.
+   */
+  --shadow-soft: 0 1px 3px oklch(0.3 0.03 40 / 6%), 0 4px 14px oklch(0.3 0.03 40 / 7%);
+  --shadow-card: 0 2px 8px oklch(0.3 0.03 40 / 8%), 0 8px 28px oklch(0.3 0.03 40 / 10%);
 }
 
 @layer base {
