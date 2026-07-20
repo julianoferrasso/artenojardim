@@ -15,7 +15,7 @@ export const SectionHeading = ({
   align?: 'center' | 'left'
   className?: string
 }) => (
-  <div className={cn('mb-8', align === 'center' ? 'text-center' : 'text-left', className)}>
+  <div className={cn('mb-6', align === 'center' ? 'text-center' : 'text-left', className)}>
     <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h2>
     <span
       aria-hidden

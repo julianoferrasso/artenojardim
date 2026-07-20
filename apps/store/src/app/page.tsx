@@ -41,7 +41,7 @@ export default async function HomePage() {
           <span className="absolute bottom-[-6rem] left-1/3 size-64 rounded-full bg-primary/5" />
         </div>
 
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:py-20 md:grid-cols-[3fr_2fr] lg:py-24">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-10 sm:pb-14 sm:pt-12 md:grid-cols-[3fr_2fr] lg:pb-16 lg:pt-16">
           <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700 md:text-left">
             <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">
               Feito à mão · com carinho
@@ -52,7 +52,7 @@ export default async function HomePage() {
             <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground md:mx-0">
               Rituais de autocuidado e bem estar. Produtos feitos com alma.
             </p>
-            <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-start">
+            <div className="mt-6 flex flex-wrap justify-center gap-3 md:justify-start">
               <Link href="#novidades" className={buttonVariants({ size: 'lg' })}>
                 Ver novidades
               </Link>
@@ -80,7 +80,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section id="novidades" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-14">
+      <section id="novidades" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-10">
         <SectionHeading
           title="Novidades"
           subtitle="As últimas peças que saíram do ateliê."
@@ -98,7 +98,7 @@ export default async function HomePage() {
         )}
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-14">
+      <section className="mx-auto max-w-6xl px-4 py-10">
         <div className="grid gap-8 rounded-2xl bg-muted px-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
           {BENEFITS.map(({ icon: Icon, title, text }) => (
             <div key={title} className="flex flex-col items-center gap-3 text-center">
