@@ -513,7 +513,7 @@ const ResetPasswordDialog = ({
               {error}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">Mínimo de 12 caracteres.</p>
+            <p className="text-xs text-muted-foreground">Mínimo de 6 caracteres.</p>
           )}
         </div>
 

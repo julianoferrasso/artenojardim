@@ -21,7 +21,7 @@ const FacebookIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 // Fase 4 (temas/settings): estes links passam a vir da API junto com o themeJson.
 const SOCIAL_LINKS = [
-  { label: 'Instagram', href: 'https://instagram.com/artenojardim', icon: InstagramIcon },
+  { label: 'Instagram', href: 'https://instagram.com/arte_no_jardim', icon: InstagramIcon },
   { label: 'Facebook', href: 'https://facebook.com/artenojardim', icon: FacebookIcon },
 ]
 

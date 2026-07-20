@@ -1,3 +1,5 @@
+import { spWeekday } from '../utils/date-br.js'
+
 /**
  * Rastreio, nota fiscal e previsão de entrega — sem coluna no banco.
  *
@@ -86,8 +88,11 @@ export const addBusinessDays = (from: Date, days: number): Date => {
   let remaining = Math.max(0, days)
 
   while (remaining > 0) {
-    result.setDate(result.getDate() + 1)
-    const weekday = result.getDay()
+    // Avanço em UTC: são 24h absolutas, sem depender do fuso do processo.
+    result.setUTCDate(result.getUTCDate() + 1)
+    // Mas "é fim de semana?" é pergunta LOCAL: um pedido pago às 23h de sexta em
+    // Brasília já é sábado em UTC, e contar por UTC pularia um dia útil à toa.
+    const weekday = spWeekday(result)
     if (weekday !== 0 && weekday !== 6) remaining -= 1
   }
 

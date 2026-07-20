@@ -128,7 +128,7 @@ function RegisterForm() {
         <label htmlFor="r-pass" className="text-sm font-medium">Senha</label>
         <input id="r-pass" type="password" autoComplete="new-password" {...register('password')} className={field} />
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-        <span className="text-xs text-muted-foreground">Mínimo 12 caracteres.</span>
+        <span className="text-xs text-muted-foreground">Mínimo 6 caracteres.</span>
       </div>
       {error && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
       <button type="submit" disabled={isSubmitting} className="h-11 rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50">

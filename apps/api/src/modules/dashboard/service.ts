@@ -5,13 +5,11 @@ import type {
   TopProduct,
   TopViewed,
 } from '@ecommerce/shared/contracts'
+import { spDayKey, spDayStart, spDayAsDateColumn, addSpDays } from '@ecommerce/shared/utils'
 import { prisma } from '../../config/prisma.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 
 const DAYS_BY_RANGE: Record<DashboardQuery['range'], number> = { '7d': 7, '30d': 30, '90d': 90 }
-
-/** YYYY-MM-DD em UTC — a chave de bucket da série diária. */
-const dayKey = (d: Date): string => d.toISOString().slice(0, 10)
 
 /**
  * Overview do painel: KPIs de venda, série diária, top vendidos e top visitados.
@@ -23,15 +21,20 @@ export const getOverview = async (query: DashboardQuery): Promise<DashboardOverv
   const storeId = getActiveStoreId()
   const days = DAYS_BY_RANGE[query.range]
 
-  // Início do intervalo: começo (UTC) do dia N-1 atrás, para incluir hoje.
-  const from = new Date()
-  from.setUTCHours(0, 0, 0, 0)
-  from.setUTCDate(from.getUTCDate() - (days - 1))
+  // Início do intervalo: o dia N-1 atrás no calendário brasileiro, para incluir hoje.
+  const fromKey = addSpDays(spDayKey(new Date()), -(days - 1))
+
+  // DOIS valores, não um: as duas colunas têm tipos diferentes. `Order.createdAt`
+  // é timestamp, e o dia brasileiro começa às 03:00Z. `ProductView.date` é
+  // @db.Date, que o Prisma serializa como meia-noite UTC. Usar o de cima no de
+  // baixo perderia o dia mais antigo da janela.
+  const fromInstant = spDayStart(fromKey)
+  const fromDateColumn = spDayAsDateColumn(fromKey)
 
   const paidWhere = {
     storeId,
     paymentStatus: 'PAID' as const,
-    createdAt: { gte: from },
+    createdAt: { gte: fromInstant },
   }
 
   const [agg, pendingOrders, paidOrders, groupedItems, groupedViews] = await Promise.all([
@@ -45,7 +48,7 @@ export const getOverview = async (query: DashboardQuery): Promise<DashboardOverv
     }),
     prisma.productView.groupBy({
       by: ['productId'],
-      where: { storeId, date: { gte: from } },
+      where: { storeId, date: { gte: fromDateColumn } },
       _sum: { count: true },
     }),
   ])
@@ -58,12 +61,11 @@ export const getOverview = async (query: DashboardQuery): Promise<DashboardOverv
   // gráfico não some com dias sem venda — mostra o vale, que é informação.
   const series = new Map<string, SalesPoint>()
   for (let i = 0; i < days; i++) {
-    const d = new Date(from)
-    d.setUTCDate(from.getUTCDate() + i)
-    series.set(dayKey(d), { date: dayKey(d), revenue: 0, orders: 0 })
+    const key = addSpDays(fromKey, i)
+    series.set(key, { date: key, revenue: 0, orders: 0 })
   }
   for (const o of paidOrders) {
-    const point = series.get(dayKey(o.createdAt))
+    const point = series.get(spDayKey(o.createdAt))
     if (point) {
       point.revenue += o.total
       point.orders += 1

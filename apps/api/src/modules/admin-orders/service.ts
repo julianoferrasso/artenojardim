@@ -14,6 +14,7 @@ import {
   type PaginationMeta,
 } from '@ecommerce/shared/contracts'
 import { EVENTS } from '@ecommerce/shared/constants'
+import { spDayStart, spDayEnd } from '@ecommerce/shared/utils'
 import { Prisma, type $Enums } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
@@ -109,11 +110,15 @@ const parseSort = (sort?: string): Prisma.OrderOrderByWithRelationInput => {
 /**
  * `to` é INCLUSIVO para o operador: "até 19/07" tem que trazer o pedido das
  * 18h de 19/07. Sem o fim do dia, `lte: 2026-07-19T00:00` esconderia o dia todo.
+ *
+ * O dia é o BRASILEIRO. O `<input type="date">` entrega a data que o operador
+ * escolheu no calendário dele; tratá-la como dia UTC (o `Z` que estava aqui)
+ * fazia o filtro perder os pedidos feitos das 21h à meia-noite.
  */
 const dayRange = (from?: string, to?: string): Prisma.DateTimeFilter | undefined => {
   const filter: Prisma.DateTimeFilter = {}
-  if (from) filter.gte = new Date(`${from}T00:00:00.000Z`)
-  if (to) filter.lte = new Date(`${to}T23:59:59.999Z`)
+  if (from) filter.gte = spDayStart(from)
+  if (to) filter.lte = spDayEnd(to)
   return from || to ? filter : undefined
 }
 

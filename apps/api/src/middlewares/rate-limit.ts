@@ -23,12 +23,28 @@ const createPostgresStore = (windowMs: number): Store => ({
     // cabem dez requisições do atacante. Aqui o Postgres arbitra, sob o lock da
     // linha. O CASE reinicia a janela quando ela já expirou, em vez de exigir
     // um job de limpeza no caminho crítico.
+    //
+    // Os `AT TIME ZONE 'UTC'` daqui não são enfeite: sem eles a janela erra por
+    // 3 horas nesta VPS.
+    //
+    // A coluna é `timestamp without time zone` guardando instante UTC (padrão do
+    // Prisma). No SQL CRU o Prisma vincula um `Date` como `timestamptz`, e o
+    // Postgres o converte para a coluna naive usando o fuso da SESSÃO — que aqui
+    // é America/Sao_Paulo. Resultado: o INSERT gravava 3h no passado, e a
+    // comparação com `now()` (também timestamptz) reinterpretava o armazenado 3h
+    // no futuro. Dois erros que se cancelavam em parte, e por isso passavam
+    // despercebidos. Pelo caminho TIPADO do Prisma nada disso acontece — é
+    // exclusivo do SQL cru.
+    //
+    // Com os casts, os dois lados são naive-UTC e batem com o que o resto do
+    // sistema grava. Não troque por um `Date` do JS vinculado sem cast: volta ao
+    // mesmo bug.
     const rows = await prisma.$queryRaw<Array<{ count: number; expiresAt: Date }>>`
       INSERT INTO "RateLimit" ("key", "count", "expiresAt")
-      VALUES (${key}, 1, ${expiresAt})
+      VALUES (${key}, 1, ${expiresAt}::timestamptz AT TIME ZONE 'UTC')
       ON CONFLICT ("key") DO UPDATE SET
-        "count"     = CASE WHEN "RateLimit"."expiresAt" < now() THEN 1 ELSE "RateLimit"."count" + 1 END,
-        "expiresAt" = CASE WHEN "RateLimit"."expiresAt" < now() THEN ${expiresAt} ELSE "RateLimit"."expiresAt" END
+        "count"     = CASE WHEN "RateLimit"."expiresAt" < (now() AT TIME ZONE 'UTC') THEN 1 ELSE "RateLimit"."count" + 1 END,
+        "expiresAt" = CASE WHEN "RateLimit"."expiresAt" < (now() AT TIME ZONE 'UTC') THEN ${expiresAt}::timestamptz AT TIME ZONE 'UTC' ELSE "RateLimit"."expiresAt" END
       RETURNING "count", "expiresAt"
     `
 

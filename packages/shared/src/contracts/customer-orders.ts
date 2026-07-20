@@ -26,6 +26,12 @@ export type OrderPeriod = z.infer<typeof orderPeriodSchema>
 /**
  * PURA: recebe `now` em vez de chamar `new Date()` dentro. Testar "últimos 90
  * dias" sem poder fixar o presente é testar o relógio, não a função.
+ *
+ * Usa aritmética de data LOCAL de propósito, e isso é seguro aqui: sem horário
+ * de verão no Brasil (extinto em 2019), recuar 30 dias de calendário e recuar
+ * 30×24h caem no mesmo instante. É uma janela rolante, sem fronteira de dia
+ * exposta ao usuário — por isso não precisa do helper de fuso. Se o horário de
+ * verão voltar, esta função passa a merecer uma segunda olhada.
  */
 export const periodStart = (period: OrderPeriod, now: Date): Date | null => {
   const start = new Date(now)

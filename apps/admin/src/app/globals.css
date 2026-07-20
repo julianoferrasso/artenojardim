@@ -129,6 +129,26 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  /*
+   * O preflight do Tailwind v3 trazia `button { cursor: pointer }`; o v4 removeu
+   * e deixou o default do navegador (`cursor: default`). Restauramos aqui, na
+   * mesma camada que regrediu — e não no cva do Button, porque a maioria dos
+   * cliques do app é <button> cru (steppers, thumbnails, fechar modal).
+   *
+   * Em `base` a especificidade é menor que a das utilities, então o
+   * `cursor-default` intencional dos primitivos Radix continua vencendo.
+   */
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role='button'][aria-disabled='true'] {
+    cursor: not-allowed;
+  }
 }
 
 /*

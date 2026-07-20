@@ -78,13 +78,20 @@ export const optionalSlugSchema = z
 export const emailSchema = z.string().email('E-mail inválido').toLowerCase().trim()
 
 /**
- * Senha: comprimento mínimo alto vence composição obrigatória.
- * `P@ss1` satisfaz "maiúscula+número+símbolo" e cai em qualquer wordlist;
- * uma frase de 12 caracteres, não.
+ * Senha: mínimo de 6, sem exigir composição.
+ *
+ * 6 caracteres é curto e cabe em wordlist — a escolha é deliberada, por
+ * usabilidade. Quem segura ataque de força bruta aqui é o `loginLimiter`
+ * (middlewares/rate-limit.ts), não o comprimento: sem rate limit, nem 12
+ * caracteres salvam; com ele, o atacante não chega a tentar.
+ *
+ * Não exigimos maiúscula+número+símbolo de propósito: `P@ss1` satisfaz a regra
+ * e é pior que uma frase curta. Composição obrigatória empurra o usuário para
+ * padrões previsíveis e para o post-it.
  */
 export const passwordSchema = z
   .string()
-  .min(12, 'A senha deve ter ao menos 12 caracteres')
+  .min(6, 'A senha deve ter ao menos 6 caracteres')
   .max(200)
 
 /** Dinheiro é sempre Int em centavos. Nunca float, nunca string. */

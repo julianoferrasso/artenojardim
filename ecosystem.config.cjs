@@ -19,6 +19,18 @@
  *
  * A API pode usar reload (o dist/server.js é relido no restart do processo, e
  * ela não tem o cache de build do Next). Os fronts precisam de restart.
+ *
+ * ── TZ=UTC é deliberado, NÃO esqueceram de trocar ───────────────────────────
+ * Fixado em UTC de propósito, e não em America/Sao_Paulo. O relógio do processo
+ * já era UTC (é a imagem da VPS); declará-lo transforma acidente em invariante,
+ * e mantém produção e teste (vitest.config.ts) idênticos.
+ *
+ * Pôr America/Sao_Paulo aqui seria pior que inútil: nenhuma fronteira de dia
+ * depende de `process.env.TZ` — todas nomeiam o fuso via
+ * packages/shared/src/utils/date-br.ts. A env só criaria divergência com o CI
+ * e convidaria alguém a escrever `new Date().getDate()` achando que está certo.
+ *
+ * Mudar TZ exige `pm2 restart --update-env`: `reload` não recarrega o ambiente.
  */
 module.exports = {
   apps: [
@@ -38,6 +50,8 @@ module.exports = {
       // --env-file-if-exists: o .env é a fonte em produção (chmod 600), mas se
       // um dia o ambiente vier do PM2, a ausência do arquivo não derruba o boot.
       node_args: '--env-file-if-exists=.env',
+
+      env: { TZ: 'UTC' },
 
       max_memory_restart: '400M',
       autorestart: true,
@@ -66,7 +80,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       // 3000 é do rag_sefaz/web. Colidir derrubaria o outro projeto.
-      env: { NODE_ENV: 'production', PORT: '3010' },
+      env: { NODE_ENV: 'production', PORT: '3010', TZ: 'UTC' },
 
       max_memory_restart: '500M',
       autorestart: true,
@@ -90,7 +104,7 @@ module.exports = {
 
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'production', PORT: '3011' },
+      env: { NODE_ENV: 'production', PORT: '3011', TZ: 'UTC' },
 
       max_memory_restart: '400M',
       autorestart: true,

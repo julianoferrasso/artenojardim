@@ -142,7 +142,7 @@ export const StaffUserForm = ({ initial, onDone, onCancel }: Props) => {
             <p className="text-xs text-destructive">{errors.password.message}</p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Mínimo de 12 caracteres. Combine com a pessoa por um canal seguro — ela poderá
+              Mínimo de 6 caracteres. Combine com a pessoa por um canal seguro — ela poderá
               trocar depois.
             </p>
           )}
