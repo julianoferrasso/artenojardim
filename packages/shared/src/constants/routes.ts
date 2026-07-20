@@ -146,6 +146,11 @@ export const ROUTES = {
     track: `${base}/product-views`,
   },
 
+  /** Inscrição na newsletter (pública, footer/home da loja). */
+  newsletter: {
+    subscribe: `${base}/newsletter/subscribe`,
+  },
+
   /** Métricas do painel (staff). */
   dashboard: {
     overview: `${base}/dashboard/overview`,
