@@ -53,9 +53,9 @@ export default function ContaLayout({ children }: { children: ReactNode }) {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  'shrink-0 rounded-md px-3 py-2 text-sm transition-colors md:shrink',
+                  'shrink-0 rounded-lg px-3 py-2 text-sm transition-colors md:shrink',
                   active
-                    ? 'bg-accent font-medium text-accent-foreground'
+                    ? 'bg-secondary font-medium text-secondary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                 )}
               >
@@ -66,7 +66,7 @@ export default function ContaLayout({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => void logout().then(() => router.replace('/'))}
-            className="shrink-0 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground md:mt-4 md:shrink md:border-t md:border-border md:pt-4"
+            className="shrink-0 rounded-lg px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground md:mt-4 md:shrink md:border-t md:border-border md:pt-4"
           >
             Sair
           </button>

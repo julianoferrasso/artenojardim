@@ -20,7 +20,7 @@ export const Pagination = ({
   if (meta.totalPages <= 1) return null
 
   const buttonCls =
-    'rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
+    'rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card'
 
   return (
     <nav className="mt-6 flex items-center justify-between gap-4" aria-label="Paginação">

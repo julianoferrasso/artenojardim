@@ -56,7 +56,7 @@ const OrdersList = () => {
 
   return (
     <>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Meus pedidos</h1>
+      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight">Meus pedidos</h1>
 
       <OrderFilters
         value={filters}
@@ -73,7 +73,7 @@ const OrdersList = () => {
       )}
 
       {isError && (
-        <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">
+        <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
           Não foi possível carregar seus pedidos.
           <button type="button" onClick={() => void refetch()} className="ml-2 underline">
             Tentar novamente
@@ -101,7 +101,7 @@ const OrdersList = () => {
               <p className="text-sm text-muted-foreground">Você ainda não fez nenhum pedido.</p>
               <Link
                 href="/"
-                className="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
               >
                 Ver produtos
               </Link>

@@ -109,11 +109,11 @@ export default function CheckoutPage() {
   if (!customer || items.length === 0) return null
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Finalizar compra</h1>
+    <main className="mx-auto max-w-2xl px-4 py-10">
+      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight">Finalizar compra</h1>
 
       {/* Endereço */}
-      <section className="mb-6 rounded-lg border border-border bg-card p-5">
+      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
         <h2 className="mb-3 font-medium">Endereço de entrega</h2>
         {addresses.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -126,7 +126,7 @@ export default function CheckoutPage() {
           <ul className="flex flex-col gap-2">
             {addresses.map((a) => (
               <li key={a.id}>
-                <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 text-sm has-[:checked]:border-primary">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-secondary/40">
                   <input
                     type="radio"
                     name="address"
@@ -149,7 +149,7 @@ export default function CheckoutPage() {
       </section>
 
       {/* Frete */}
-      <section className="mb-6 rounded-lg border border-border bg-card p-5">
+      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
         <h2 className="mb-3 font-medium">Frete</h2>
         {quoting ? (
           <p className="text-sm text-muted-foreground">Calculando frete…</p>
@@ -161,7 +161,7 @@ export default function CheckoutPage() {
           <ul className="flex flex-col gap-2">
             {options.map((o) => (
               <li key={o.id}>
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border p-3 text-sm has-[:checked]:border-primary">
+                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-secondary/40">
                   <span className="flex items-center gap-3">
                     <input
                       type="radio"
@@ -182,7 +182,7 @@ export default function CheckoutPage() {
       </section>
 
       {/* Resumo */}
-      <section className="mb-6 rounded-lg border border-border bg-card p-5">
+      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
         <h2 className="mb-3 font-medium">Resumo</h2>
         <ul className="mb-3 flex flex-col gap-3 text-sm">
           {items.map((i) => (
@@ -216,12 +216,12 @@ export default function CheckoutPage() {
           rows={2}
           maxLength={500}
           placeholder="Observação para a loja (opcional)"
-          className="mt-4 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="mt-4 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
         />
       </section>
 
       {error && (
-        <p role="alert" className="mb-4 rounded-md bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <p role="alert" className="mb-4 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
@@ -229,7 +229,7 @@ export default function CheckoutPage() {
       <button
         onClick={() => void place()}
         disabled={!addressId || !serviceId || placing}
-        className="h-12 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        className="h-12 w-full rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
       >
         {placing ? 'Finalizando…' : `Confirmar pedido · ${formatBRL(total)}`}
       </button>

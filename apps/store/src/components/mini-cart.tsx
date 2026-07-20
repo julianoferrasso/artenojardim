@@ -33,7 +33,7 @@ export const MiniCart = () => {
   return createPortal(
     <div className="fixed inset-0 z-50">
       <div
-        className="absolute inset-0 bg-foreground/50"
+        className="absolute inset-0 bg-foreground/50 animate-in fade-in duration-200"
         onClick={closeCart}
         aria-hidden
       />
@@ -44,17 +44,17 @@ export const MiniCart = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="mini-cart-title"
-        className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col bg-background shadow-lg outline-none"
+        className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col rounded-l-2xl bg-background shadow-card outline-none animate-in slide-in-from-right duration-300"
       >
         <header className="flex items-center justify-between border-b border-border p-4">
-          <h2 id="mini-cart-title" className="font-medium">
+          <h2 id="mini-cart-title" className="font-display text-lg font-semibold">
             Seu carrinho{items.length > 0 ? ` (${cart?.itemCount ?? 0})` : ''}
           </h2>
           <button
             type="button"
             onClick={closeCart}
             aria-label="Fechar carrinho"
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <X className="size-5" />
           </button>
@@ -67,7 +67,7 @@ export const MiniCart = () => {
             <Link
               href="/"
               onClick={closeCart}
-              className="mt-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="mt-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
             >
               Ver produtos
             </Link>
@@ -82,7 +82,7 @@ export const MiniCart = () => {
                 <Link
                   href={`/produtos/${item.productSlug}`}
                   onClick={closeCart}
-                  className="relative size-16 shrink-0 overflow-hidden rounded-md bg-muted"
+                  className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted"
                 >
                   <ProductImage
                     src={item.imageUrl}
@@ -142,7 +142,7 @@ export const MiniCart = () => {
             <Link
               href="/checkout"
               onClick={closeCart}
-              className="mt-3 flex h-11 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="mt-3 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
             >
               Finalizar compra
             </Link>

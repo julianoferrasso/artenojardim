@@ -8,6 +8,8 @@ import { useCart } from '@/lib/cart'
 import { ApiError } from '@/lib/api'
 import { VariantSelector } from './variant-selector'
 import { ShippingCalculator } from './shipping-calculator'
+import { FavoriteButton } from './favorite-button'
+import { Button } from './ui/button'
 
 /**
  * Preço, opções, comprar e frete. Adicionar ao carrinho abre o minicarrinho em
@@ -49,7 +51,7 @@ export const ProductPurchasePanel = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">{product.name}</h1>
+      <h1 className="font-display text-3xl font-semibold tracking-tight">{product.name}</h1>
 
       {current ? (
         <p className="text-2xl font-semibold">
@@ -68,13 +70,21 @@ export const ProductPurchasePanel = ({
         <VariantSelector options={options} value={selected} onChange={onSelect} />
       )}
 
-      <button
-        onClick={onAdd}
-        disabled={!current || !current.isActive || adding}
-        className="mt-2 h-12 rounded-md bg-primary text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-      >
-        {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
-      </button>
+      <div className="mt-2 flex items-center gap-2">
+        <Button
+          onClick={() => void onAdd()}
+          disabled={!current || !current.isActive || adding}
+          size="lg"
+          className="flex-1"
+        >
+          {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
+        </Button>
+        <FavoriteButton
+          product={{ id: product.id, slug: product.slug }}
+          className="size-12 shrink-0 rounded-lg border border-input bg-card hover:bg-accent"
+          iconClassName="size-5"
+        />
+      </div>
       {feedback && (
         <p role="alert" className="text-sm text-destructive">
           {feedback}

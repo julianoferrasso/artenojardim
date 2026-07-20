@@ -122,7 +122,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   if (phase === 'notfound') {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Pedido não encontrado</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight">Pedido não encontrado</h1>
         <Link href="/" className="mt-6 inline-block text-sm text-primary hover:underline">
           Voltar à loja
         </Link>
@@ -137,10 +137,10 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     typeof window !== 'undefined' ? `${window.location.origin}/checkout/pedido/${id}` : ''
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <div className="mb-6 rounded-lg border border-border bg-card p-6 text-center">
+    <main className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mb-6 rounded-xl border border-border bg-card p-6 text-center shadow-soft">
         <p className="text-3xl">{paid ? '✓' : '🛒'}</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
+        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
           {paid ? `Pedido #${order.number} confirmado` : `Pedido #${order.number}`}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -150,7 +150,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
       {/* Bloco de pagamento — o miolo do funil. */}
       {phase === 'pay' && payment && payment.clientSecret && (
-        <section className="mb-4 rounded-lg border border-border bg-card p-5">
+        <section className="mb-4 rounded-xl border border-border bg-card p-5 shadow-soft">
           <h2 className="mb-4 font-medium">Pagamento</h2>
           <Elements
             stripe={getStripePromise(payment.publishableKey)}
@@ -162,14 +162,14 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {phase === 'confirming' && (
-        <section className="mb-4 rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+        <section className="mb-4 rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
           <p className="animate-pulse">Confirmando seu pagamento…</p>
           <p className="mt-1">Se você pagou via Pix, a confirmação chega em instantes.</p>
         </section>
       )}
 
       {phase === 'failed' && (
-        <section className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-5 text-sm">
+        <section className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 p-5 text-sm">
           <p className="text-destructive">Seu pagamento não foi aprovado.</p>
           <button
             onClick={() => {
@@ -179,7 +179,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               // Recarrega para reabrir o Payment Element com um novo intento.
               setTimeout(() => window.location.reload(), 0)
             }}
-            className="mt-3 rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+            className="mt-3 rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
           >
             Tentar novamente
           </button>
@@ -187,14 +187,14 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {phase === 'timeout' && (
-        <section className="mb-4 rounded-md bg-muted p-4 text-center text-sm text-muted-foreground">
+        <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
           Ainda não recebemos a confirmação do pagamento. Assim que ele for aprovado, seu pedido
           será atualizado — você pode recarregar esta página para verificar.
         </section>
       )}
 
       {paid && (
-        <section className="mb-4 rounded-md bg-primary/5 p-4 text-center text-sm text-muted-foreground">
+        <section className="mb-4 rounded-lg bg-success/10 p-4 text-center text-sm text-success">
           Pagamento confirmado e estoque garantido. Em breve preparamos seu envio.
         </section>
       )}
@@ -213,13 +213,13 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Link
           href={`/conta/pedidos/${order.id}`}
-          className="flex-1 rounded-md bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground hover:opacity-90"
+          className="flex-1 rounded-lg bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
         >
           Acompanhar pedido
         </Link>
         <Link
           href="/"
-          className="flex-1 rounded-md border border-border px-4 py-3 text-center text-sm hover:bg-accent"
+          className="flex-1 rounded-lg border border-border px-4 py-3 text-center text-sm transition-colors hover:bg-accent"
         >
           Continuar comprando
         </Link>

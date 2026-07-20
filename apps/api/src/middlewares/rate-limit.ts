@@ -121,6 +121,9 @@ export const shippingQuoteLimiter = build({ name: 'shipping-quote', windowMs: 60
 /** Confirmar pedido cria Order + reserva estoque: limita abuso por IP. */
 export const checkoutConfirmLimiter = build({ name: 'checkout-confirm', windowMs: 60 * 60_000, max: 20 })
 
+/** Inscrição na newsletter é pública e grava no banco: 5/h por IP segura flood de bots. */
+export const newsletterLimiter = build({ name: 'newsletter', windowMs: 60 * 60_000, max: 5 })
+
 /**
  * Ações do cliente sobre o próprio pedido.
  *

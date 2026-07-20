@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { SearchX } from 'lucide-react'
 import { listProducts } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
 
@@ -21,8 +22,8 @@ export default async function SearchPage({
   const { data: products } = term ? await listProducts({ q: term }) : { data: [] }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-1 text-xl font-semibold tracking-tight">
+    <main className="mx-auto max-w-6xl px-4 py-10">
+      <h1 className="mb-1 font-display text-3xl font-semibold tracking-tight">
         {term ? `Resultados para “${term}”` : 'Buscar'}
       </h1>
 
@@ -31,9 +32,17 @@ export default async function SearchPage({
       )}
 
       {term && products.length === 0 && (
-        <p className="mt-6 rounded-lg border border-dashed border-border p-10 text-center text-muted-foreground">
-          Nenhum produto encontrado para “{term}”.
-        </p>
+        <div className="mt-8 flex flex-col items-center gap-4 rounded-xl border border-dashed border-border bg-card/50 px-6 py-16 text-center">
+          <span className="flex size-14 items-center justify-center rounded-full bg-secondary">
+            <SearchX className="size-6 text-secondary-foreground" />
+          </span>
+          <div>
+            <p className="font-display text-xl font-semibold">Nada por aqui</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Nenhum produto encontrado para “{term}”. Tente outra palavra.
+            </p>
+          </div>
+        </div>
       )}
 
       {products.length > 0 && (

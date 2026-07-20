@@ -5,6 +5,8 @@ import type { ShippingOption } from '@ecommerce/shared/contracts'
 import { quoteShipping } from '@/lib/shipping'
 import { formatBRL } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
 
 /**
  * Calculadora de frete por CEP. Reutilizável: recebe os itens (variante +
@@ -55,25 +57,21 @@ export const ShippingCalculator = ({ items, disabled = false }: Props) => {
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border p-4">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-soft">
       <span className="text-sm font-medium">Calcular frete e prazo</span>
 
-      <form onSubmit={onSubmit} className="flex gap-2">
-        <input
+      <form onSubmit={(e) => void onSubmit(e)} className="flex gap-2">
+        <Input
           value={cep}
           onChange={(e) => setCep(maskCep(e.target.value))}
           inputMode="numeric"
           placeholder="00000-000"
           disabled={disabled || loading}
-          className="h-10 w-40 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+          className="w-40"
         />
-        <button
-          type="submit"
-          disabled={disabled || loading}
-          className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-accent disabled:opacity-50"
-        >
+        <Button type="submit" variant="outline" disabled={disabled || loading}>
           {loading ? 'Calculando…' : 'Calcular'}
-        </button>
+        </Button>
       </form>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

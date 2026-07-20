@@ -65,12 +65,12 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
+    <main className="mx-auto max-w-5xl px-4 py-10">
       {/* eslint-disable-next-line react/no-danger */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <nav className="mb-6 text-sm text-muted-foreground">
-        <a href="/" className="hover:text-foreground">
+        <a href="/" className="transition-colors hover:text-foreground">
           Início
         </a>
         <span className="mx-2">/</span>

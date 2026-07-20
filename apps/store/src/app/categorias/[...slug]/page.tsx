@@ -42,29 +42,32 @@ export default async function CategoryPage({ params }: { params: Promise<Params>
   const { data: products } = await listProducts({ category: category.id })
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-10">
       <nav className="mb-4 text-sm text-muted-foreground">
-        <a href="/" className="hover:text-foreground">
+        <a href="/" className="transition-colors hover:text-foreground">
           Início
         </a>
         <span className="mx-2">/</span>
         <span className="text-foreground">{category.name}</span>
       </nav>
 
-      <h1 className="mb-1 text-2xl font-semibold tracking-tight">{category.name}</h1>
+      <h1 className="mb-1 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+        {category.name}
+      </h1>
+      <span aria-hidden className="mt-2 mb-3 block h-0.5 w-12 rounded-full bg-primary/60" />
       {category.description && (
         <p className="mb-6 max-w-2xl text-muted-foreground">{category.description}</p>
       )}
 
       {category.children.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-8 flex flex-wrap gap-2">
           {category.children
             .filter((c) => c.isActive)
             .map((c) => (
               <a
                 key={c.id}
                 href={`/categorias/${c.slug}`}
-                className="rounded-full border border-border px-3 py-1 text-sm hover:bg-accent"
+                className="rounded-full border border-border bg-card px-4 py-1.5 text-sm shadow-soft transition-colors hover:border-primary/40 hover:bg-accent"
               >
                 {c.name}
               </a>
@@ -73,7 +76,7 @@ export default async function CategoryPage({ params }: { params: Promise<Params>
       )}
 
       {products.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border p-10 text-center text-muted-foreground">
+        <p className="rounded-xl border border-dashed border-border bg-card/50 p-10 text-center text-muted-foreground">
           Nenhum produto nesta categoria ainda.
         </p>
       ) : (

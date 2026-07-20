@@ -27,12 +27,12 @@ export const OrderItemList = ({
   /** Botão por item — "comprar de novo" na área do cliente. */
   action?: (item: ItemLike) => React.ReactNode
 }) => (
-  <section className="rounded-lg border border-border bg-card p-5">
+  <section className="rounded-xl border border-border bg-card p-5 shadow-soft">
     <h2 className="mb-3 font-medium">{title}</h2>
     <ul className="flex flex-col gap-4 text-sm">
       {items.map((i) => (
         <li key={i.id} className="flex items-start gap-3">
-          <div className="relative size-14 shrink-0 overflow-hidden rounded-md bg-muted">
+          <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-muted">
             <ProductImage src={i.imageUrl} alt={i.productName} fit="cover" sizes="56px" />
           </div>
 
@@ -72,7 +72,7 @@ export const OrderDeliveryCard = ({
   method: OrderShippingMethod
   children?: React.ReactNode
 }) => (
-  <section className="rounded-lg border border-border bg-card p-5 text-sm">
+  <section className="rounded-xl border border-border bg-card p-5 shadow-soft text-sm">
     <h2 className="mb-2 font-medium">Entrega</h2>
     <address className="not-italic text-muted-foreground">
       <span className="block font-medium text-foreground">{address.recipient}</span>
@@ -104,7 +104,7 @@ export const OrderTotals = ({
   total: number
   couponCode?: string | null
 }) => (
-  <section className="rounded-lg border border-border bg-card p-5 text-sm">
+  <section className="rounded-xl border border-border bg-card p-5 shadow-soft text-sm">
     <h2 className="mb-3 font-medium">Resumo</h2>
     <div className="flex justify-between">
       <span className="text-muted-foreground">Subtotal</span>

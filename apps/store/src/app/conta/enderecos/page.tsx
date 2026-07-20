@@ -46,7 +46,7 @@ const EMPTY: FormState = {
 }
 
 const inputCls =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  'h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40'
 
 const maskCep = (v: string): string => {
   const d = v.replace(/\D/g, '').slice(0, 8)
@@ -195,12 +195,12 @@ export default function EnderecosPage() {
     <div className="max-w-2xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Endereços</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">Endereços</h1>
         </div>
         {!showForm && (
           <button
             onClick={openNew}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
           >
             Novo endereço
           </button>
@@ -208,11 +208,11 @@ export default function EnderecosPage() {
       </div>
 
       {error && !showForm && (
-        <p className="mb-4 rounded-md bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</p>
+        <p className="mb-4 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</p>
       )}
 
       {showForm ? (
-        <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
+        <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-soft">
           <Field label="Identificação (opcional)" hint="Ex.: Casa, Trabalho">
             <input
               value={form.label}
@@ -303,14 +303,14 @@ export default function EnderecosPage() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
             >
               {saving ? 'Salvando…' : 'Salvar'}
             </button>
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+              className="rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
             >
               Cancelar
             </button>
@@ -323,7 +323,7 @@ export default function EnderecosPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {addresses.map((a) => (
-            <li key={a.id} className="rounded-lg border border-border bg-card p-4">
+            <li key={a.id} className="rounded-xl border border-border bg-card p-4 shadow-soft">
               <div className="flex items-start justify-between gap-4">
                 <div className="text-sm">
                   <div className="flex items-center gap-2">

@@ -61,7 +61,7 @@ export const CancelOrderDialog = ({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-md border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
         {copy.trigger}
       </button>
@@ -69,7 +69,7 @@ export const CancelOrderDialog = ({
   }
 
   return (
-    <form onSubmit={submit} className="rounded-md border border-border p-4">
+    <form onSubmit={(e) => void submit(e)} className="rounded-xl border border-border bg-card p-4 shadow-soft">
       <h3 className="text-sm font-medium">{copy.title}</h3>
       <p className="mt-1 text-xs text-muted-foreground">{copy.body}</p>
 
@@ -85,7 +85,7 @@ export const CancelOrderDialog = ({
         maxLength={500}
         required
         placeholder="Ex.: comprei o tamanho errado"
-        className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 w-full rounded-lg border border-input bg-card p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
 
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
@@ -94,7 +94,7 @@ export const CancelOrderDialog = ({
         <button
           type="submit"
           disabled={reason.trim().length < 5 || cancel.isPending}
-          className="flex-1 rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex-1 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow-soft transition-all duration-200 hover:bg-destructive/90 disabled:opacity-50"
         >
           {cancel.isPending ? 'Enviando…' : copy.submit}
         </button>
@@ -104,7 +104,7 @@ export const CancelOrderDialog = ({
             setOpen(false)
             setError(null)
           }}
-          className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+          className="rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
         >
           Voltar
         </button>

@@ -15,6 +15,8 @@ import { orderRoutes } from './modules/orders/routes.js'
 import { adminOrderRoutes } from './modules/admin-orders/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
+import { storeRoutes } from './modules/store/routes.js'
+import { newsletterRoutes } from './modules/newsletter/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -45,5 +47,7 @@ apiRoutes.use('/orders', orderRoutes)
 apiRoutes.use('/admin/orders', adminOrderRoutes)
 apiRoutes.use('/product-views', productViewRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
+apiRoutes.use('/store', storeRoutes)
+apiRoutes.use('/newsletter', newsletterRoutes)
 
 export const API_PREFIX = `/api/${API_VERSION}`

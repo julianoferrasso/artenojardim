@@ -18,10 +18,10 @@ export const OrderCard = ({ order }: { order: CustomerOrderListItem }) => {
   return (
     <Link
       href={`/conta/pedidos/${order.id}`}
-      className="flex gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:bg-accent/40 md:items-center md:gap-5"
+      className="flex gap-4 rounded-xl border border-border bg-card p-4 shadow-soft transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card md:items-center md:gap-5"
     >
       {/* ProductImage exige pai posicionado com tamanho. */}
-      <div className="relative size-16 shrink-0 overflow-hidden rounded-md bg-muted md:size-20">
+      <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted md:size-20">
         <ProductImage src={order.highlightImageUrl} alt={order.highlightName} sizes="80px" />
       </div>
 

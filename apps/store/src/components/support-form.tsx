@@ -39,7 +39,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
 
   if (sent) {
     return (
-      <div className="rounded-md bg-success/10 p-3 text-sm text-success">
+      <div className="rounded-lg bg-success/10 p-3 text-sm text-success">
         Recebemos sua mensagem. Respondemos em até 1 dia útil.
         <button
           type="button"
@@ -60,7 +60,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-md border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
+        className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-accent"
       >
         Falar com o suporte
       </button>
@@ -70,7 +70,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
   const tooShort = message.trim().length < 10
 
   return (
-    <form onSubmit={submit} className="rounded-md border border-border p-4">
+    <form onSubmit={(e) => void submit(e)} className="rounded-xl border border-border bg-card p-4 shadow-soft">
       <h3 className="text-sm font-medium">Falar sobre este pedido</h3>
 
       <label htmlFor="support-topic" className="mt-3 block text-xs font-medium">
@@ -80,7 +80,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
         id="support-topic"
         value={topic}
         onChange={(e) => setTopic(e.target.value as SupportTopic)}
-        className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 h-10 w-full rounded-lg border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {SUPPORT_TOPICS.map((t) => (
           <option key={t} value={t}>
@@ -100,7 +100,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
         maxLength={1000}
         required
         placeholder="Conte o que aconteceu"
-        className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mt-1 w-full rounded-lg border border-input bg-card p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
       <p className="mt-1 text-right text-xs text-muted-foreground">{message.length}/1000</p>
 
@@ -110,7 +110,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
         <button
           type="submit"
           disabled={tooShort || send.isPending}
-          className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
         >
           {send.isPending ? 'Enviando…' : 'Enviar mensagem'}
         </button>
@@ -120,7 +120,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
             setOpen(false)
             setError(null)
           }}
-          className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+          className="rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
         >
           Cancelar
         </button>

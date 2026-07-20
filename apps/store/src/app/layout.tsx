@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Cormorant_Garamond, Figtree } from 'next/font/google'
 import { getStore, getCategoryTree } from '@/lib/catalog'
 import { SiteHeader } from '@/components/site-header'
+import { SiteFooter } from '@/components/site-footer'
 import { Providers } from '@/components/providers'
 import './globals.css'
 
@@ -27,7 +28,10 @@ export async function generateMetadata(): Promise<Metadata> {
       default: store?.name ?? 'Arte no Jardim',
       template: `%s | ${store?.name ?? 'Arte no Jardim'}`,
     },
-    description: 'Vasos e peças artesanais para o seu jardim.',
+    description: 'Velas e peças artesanais para deixar a sua casa mais acolhedora.',
+    openGraph: {
+      images: ['/18521.jpg'],
+    },
   }
 }
 
@@ -44,9 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Providers>
           <SiteHeader storeName={store?.name ?? 'Arte no Jardim'} categories={categories} />
           <div className="flex-1">{children}</div>
-          <footer className="border-t border-border py-8 text-center text-sm text-muted-foreground">
-            <p>{store?.name ?? 'Arte no Jardim'} · feito à mão</p>
-          </footer>
+          <SiteFooter store={store} />
         </Providers>
       </body>
     </html>

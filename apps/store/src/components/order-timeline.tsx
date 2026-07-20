@@ -23,7 +23,7 @@ export const OrderTimeline = ({
   const lastReached = steps.reduce((acc, s, i) => (s.reachedAt ? i : acc), -1)
 
   return (
-    <section className="rounded-lg border border-border bg-card p-5">
+    <section className="rounded-xl border border-border bg-card p-5 shadow-soft">
       <h2 className="mb-4 font-medium">Acompanhamento</h2>
 
       {steps.length > 0 && (

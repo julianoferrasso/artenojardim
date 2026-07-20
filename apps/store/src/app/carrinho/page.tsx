@@ -21,11 +21,11 @@ export default function CartPage() {
     // Estado vazio = oportunidade de venda, não tela morta.
     return (
       <main className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Seu carrinho está vazio</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight">Seu carrinho está vazio</h1>
         <p className="mt-2 text-muted-foreground">Que tal dar uma olhada nas novidades?</p>
         <Link
           href="/"
-          className="mt-6 inline-block rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:opacity-90"
+          className="mt-6 inline-block rounded-lg bg-primary px-7 py-3 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
         >
           Ver produtos
         </Link>
@@ -36,19 +36,19 @@ export default function CartPage() {
   const hasUnpurchasable = items.some((i) => !i.purchasable)
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Seu carrinho</h1>
+    <main className="mx-auto max-w-3xl px-4 py-10">
+      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight">Seu carrinho</h1>
 
       <ul className="flex flex-col gap-3">
         {items.map((item) => (
           <li
             key={item.id}
             className={cn(
-              'flex gap-4 rounded-lg border border-border bg-card p-3',
+              'flex gap-4 rounded-xl border border-border bg-card p-3.5 shadow-soft',
               !item.purchasable && 'opacity-60',
             )}
           >
-            <Link href={`/produtos/${item.productSlug}`} className="relative size-20 shrink-0 overflow-hidden rounded-md bg-muted">
+            <Link href={`/produtos/${item.productSlug}`} className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-muted">
               <ProductImage
                 src={item.imageUrl}
                 alt={item.productName}
@@ -93,7 +93,7 @@ export default function CartPage() {
       </ul>
 
       {hasUnpurchasable && (
-        <p className="mt-4 rounded-md bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+        <p className="mt-4 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
           Alguns itens ficaram indisponíveis e não entram no total.
         </p>
       )}
@@ -119,7 +119,7 @@ export default function CartPage() {
         href="/checkout"
         aria-disabled={(cart?.itemCount ?? 0) === 0}
         className={cn(
-          'mt-6 flex h-12 w-full items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90',
+          'mt-6 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90',
           (cart?.itemCount ?? 0) === 0 && 'pointer-events-none opacity-50',
         )}
       >

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,28 +16,37 @@ export default function EntrarPage() {
 
   return (
     <main className="mx-auto max-w-sm px-4 py-12">
-      <div className="mb-6 flex rounded-lg border border-border p-1">
-        {(['login', 'register'] as Mode[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={cn(
-              'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
-              mode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground',
-            )}
-          >
-            {m === 'login' ? 'Entrar' : 'Criar conta'}
-          </button>
-        ))}
+      <div className="mb-6 flex flex-col items-center gap-2 text-center">
+        <Image src="/logo-bird.png" alt="" width={64} height={64} className="size-16" />
+        <h1 className="font-display text-2xl font-semibold tracking-tight">
+          {mode === 'login' ? 'Que bom te ver de novo' : 'Crie a sua conta'}
+        </h1>
       </div>
 
-      {mode === 'login' ? <LoginForm /> : <RegisterForm />}
+      <div className="rounded-xl border border-border bg-card p-6 shadow-soft">
+        <div className="mb-6 flex rounded-lg border border-border bg-muted/50 p-1">
+          {(['login', 'register'] as Mode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={cn(
+                'flex-1 rounded-md py-2 text-sm font-medium transition-colors',
+                mode === m ? 'bg-primary text-primary-foreground shadow-soft' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {m === 'login' ? 'Entrar' : 'Criar conta'}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'login' ? <LoginForm /> : <RegisterForm />}
+      </div>
     </main>
   )
 }
 
 const field =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  'h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40'
 
 function LoginForm() {
   const { login } = useAuth()
@@ -72,8 +82,8 @@ function LoginForm() {
         <input id="l-pass" type="password" autoComplete="current-password" {...register('password')} className={field} />
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
       </div>
-      {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      <button type="submit" disabled={isSubmitting} className="h-10 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+      {error && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <button type="submit" disabled={isSubmitting} className="h-11 rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50">
         {isSubmitting ? 'Entrando…' : 'Entrar'}
       </button>
     </form>
@@ -120,8 +130,8 @@ function RegisterForm() {
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         <span className="text-xs text-muted-foreground">Mínimo 12 caracteres.</span>
       </div>
-      {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-      <button type="submit" disabled={isSubmitting} className="h-10 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+      {error && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <button type="submit" disabled={isSubmitting} className="h-11 rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50">
         {isSubmitting ? 'Criando…' : 'Criar conta'}
       </button>
     </form>

@@ -71,7 +71,7 @@ export const ProductGallery = ({
 
   if (images.length === 0) {
     return (
-      <div className="relative aspect-square w-full overflow-hidden rounded-lg">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl">
         <ImagePlaceholder />
       </div>
     )
@@ -83,7 +83,7 @@ export const ProductGallery = ({
       <div
         ref={mainRef}
         onClick={() => setLightbox(true)}
-        className="relative hidden aspect-square w-full cursor-zoom-in overflow-hidden rounded-lg bg-muted md:block"
+        className="relative hidden aspect-square w-full cursor-zoom-in overflow-hidden rounded-xl bg-muted shadow-soft md:block"
       >
         {current && (
           <ProductImage
@@ -121,7 +121,7 @@ export const ProductGallery = ({
             Math.abs(e.currentTarget.scrollLeft - start.scroll) > TAP_SLOP_PX
           if (!moved) setLightbox(true)
         }}
-        className="scrollbar-none flex snap-x snap-mandatory overflow-x-auto rounded-lg bg-muted md:hidden"
+        className="scrollbar-none flex snap-x snap-mandatory overflow-x-auto rounded-xl bg-muted md:hidden"
       >
         {images.map((img, i) => (
           <div key={img.id} className="relative aspect-square w-full shrink-0 snap-center">
@@ -175,7 +175,7 @@ export const ProductGallery = ({
                 aria-label={`Ver imagem ${i + 1} de ${images.length}`}
                 aria-current={i === index}
                 className={cn(
-                  'relative size-20 shrink-0 overflow-hidden rounded-md border-2 bg-muted transition-colors',
+                  'relative size-20 shrink-0 overflow-hidden rounded-lg border-2 bg-muted transition-colors',
                   i === index ? 'border-primary' : 'border-transparent hover:border-border',
                 )}
               >

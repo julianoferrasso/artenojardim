@@ -30,10 +30,10 @@ export const VariantSelector = ({
                 onClick={() => onChange({ ...value, [opt.name]: optionValue })}
                 aria-pressed={active}
                 className={cn(
-                  'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                  'rounded-lg border px-3.5 py-1.5 text-sm transition-all duration-200',
                   active
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border hover:bg-accent',
+                    ? 'border-primary bg-primary text-primary-foreground shadow-soft'
+                    : 'border-border bg-card hover:border-primary/40 hover:bg-accent',
                 )}
               >
                 {optionValue}

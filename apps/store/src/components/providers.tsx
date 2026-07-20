@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/lib/auth'
 import { CartProvider } from '@/lib/cart'
+import { FavoritesProvider } from '@/lib/favorites'
 import { MiniCart } from '@/components/mini-cart'
 import { ApiError } from '@/lib/api'
 
@@ -45,9 +46,12 @@ export const Providers = ({ children }: { children: ReactNode }) => {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <CartProvider>
-          {children}
-          {/* Uma instância só, no topo: retorna null enquanto fechado. */}
-          <MiniCart />
+          {/* Favoritos: localStorage puro, sem dependência de auth nem carrinho. */}
+          <FavoritesProvider>
+            {children}
+            {/* Uma instância só, no topo: retorna null enquanto fechado. */}
+            <MiniCart />
+          </FavoritesProvider>
         </CartProvider>
       </AuthProvider>
     </QueryClientProvider>

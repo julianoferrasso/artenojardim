@@ -73,7 +73,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
       </Link>
 
       <div className="mb-6 mt-2 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">Pedido #{order.number}</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight">Pedido #{order.number}</h1>
         <OrderSituationBadge situation={order.situation} />
       </div>
 
@@ -82,14 +82,14 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
       </p>
 
       {order.cancelRequestedAt && !order.canceledAt && (
-        <div className="mb-6 rounded-md bg-warning/10 p-4 text-sm text-warning-foreground">
+        <div className="mb-6 rounded-lg bg-warning/10 p-4 text-sm text-warning-foreground">
           Você solicitou o cancelamento em {formatDateTime(order.cancelRequestedAt)}. Nossa equipe
           está analisando.
         </div>
       )}
 
       {reorderResult && (
-        <div className="mb-6 rounded-md bg-primary/5 p-4 text-sm">
+        <div className="mb-6 rounded-lg bg-primary/5 p-4 text-sm">
           {reorderResult.added.length > 0 && (
             <p>
               {reorderResult.added.length}{' '}
@@ -165,7 +165,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
             )}
           </OrderDeliveryCard>
 
-          <section className="rounded-lg border border-border bg-card p-5 text-sm">
+          <section className="rounded-xl border border-border bg-card p-5 text-sm shadow-soft">
             <h2 className="mb-2 font-medium">Pagamento</h2>
             {order.payment ? (
               <>
@@ -213,7 +213,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
                 type="button"
                 onClick={() => void buyAgain()}
                 disabled={reorder.isPending}
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
               >
                 <RotateCcw className="size-4" aria-hidden />
                 {reorder.isPending ? 'Adicionando…' : 'Comprar de novo'}

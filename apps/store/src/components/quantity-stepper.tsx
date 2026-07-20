@@ -14,21 +14,21 @@ export const QuantityStepper = ({
   available: number
   onChange: (quantity: number) => void
 }) => (
-  <div className="flex items-center rounded-md border border-border">
+  <div className="flex items-center overflow-hidden rounded-full border border-border bg-card">
     <button
       type="button"
       onClick={() => onChange(quantity - 1)}
-      className="px-2.5 py-1 text-sm hover:bg-accent"
+      className="px-3 py-1 text-sm transition-colors hover:bg-accent"
       aria-label="Diminuir"
     >
       −
     </button>
-    <span className="min-w-8 text-center text-sm">{quantity}</span>
+    <span className="min-w-8 text-center text-sm font-medium">{quantity}</span>
     <button
       type="button"
       onClick={() => onChange(quantity + 1)}
       disabled={quantity >= available}
-      className="px-2.5 py-1 text-sm hover:bg-accent disabled:opacity-40"
+      className="px-3 py-1 text-sm transition-colors hover:bg-accent disabled:opacity-40"
       aria-label="Aumentar"
     >
       +

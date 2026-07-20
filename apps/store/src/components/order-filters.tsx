@@ -15,7 +15,7 @@ import { SITUATION_ORDER, SITUATION_LABEL, PERIOD_LABEL } from '@ecommerce/share
  */
 
 const selectCls =
-  'h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  'h-10 rounded-lg border border-input bg-card px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40'
 
 export type OrderFiltersValue = {
   situation?: OrderSituation | undefined
@@ -63,7 +63,7 @@ export const OrderFilters = ({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nº do pedido ou produto"
           aria-label="Buscar pedidos"
-          className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-10 w-full rounded-lg border border-input bg-card pl-9 pr-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
         />
       </div>
 
@@ -100,7 +100,7 @@ export const OrderFilters = ({
         <button
           type="button"
           onClick={onClear}
-          className="inline-flex h-10 items-center gap-1 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          className="inline-flex h-10 items-center gap-1 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           <X className="size-4" aria-hidden />
           Limpar

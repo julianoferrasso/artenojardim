@@ -22,9 +22,9 @@ export default function ContaPage() {
 
   return (
     <>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Minha conta</h1>
+      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight">Minha conta</h1>
 
-      <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 sm:flex-row sm:gap-10">
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 shadow-soft sm:flex-row sm:gap-10">
         <div>
           <p className="text-sm text-muted-foreground">Nome</p>
           <p className="font-medium">{customer.name}</p>
@@ -58,7 +58,7 @@ export default function ContaPage() {
             <p className="text-sm text-muted-foreground">Você ainda não fez nenhum pedido.</p>
             <Link
               href="/"
-              className="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
             >
               Ver produtos
             </Link>

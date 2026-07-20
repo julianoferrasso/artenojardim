@@ -103,6 +103,7 @@ model Store {
   movements  InventoryMovement[]
   carts      Cart[]
   orders     Order[]
+  newsletterSubscribers NewsletterSubscriber[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -733,4 +734,20 @@ model StripeEvent {
   receivedAt  DateTime  @default(now())
   processedAt DateTime?
   payloadJson Json?
+}
+
+/// Inscrito na newsletter (formulário público da loja). Sem confirmação por
+/// e-mail por ora — não há envio de campanha ainda; quando houver, o double
+/// opt-in nasce junto. Re-inscrição zera `unsubscribedAt` (upsert idempotente).
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  storeId        String
+  email          String
+  createdAt      DateTime  @default(now())
+  unsubscribedAt DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, email])
+  @@index([storeId])
 }
