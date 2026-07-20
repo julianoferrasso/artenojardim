@@ -9,12 +9,15 @@ import {
   FolderTree,
   Boxes,
   Images,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
+import { MANAGE_USERS_MIN_ROLE } from '@ecommerce/shared/contracts'
+import { ROLE_RANK, type UserRole } from '@ecommerce/shared/constants'
 import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
-type NavItem = { href: string; label: string; icon: LucideIcon }
+type NavItem = { href: string; label: string; icon: LucideIcon; minRole?: UserRole }
 
 /**
  * Ordem = frequência de uso no dia a dia da loja. O Dashboard mora em `/` porque
@@ -27,7 +30,20 @@ const NAV: NavItem[] = [
   { href: '/categorias', label: 'Categorias', icon: FolderTree },
   { href: '/estoque', label: 'Estoque', icon: Boxes },
   { href: '/uploads', label: 'Biblioteca de mídia', icon: Images },
+  { href: '/usuarios', label: 'Usuários', icon: Users, minRole: MANAGE_USERS_MIN_ROLE },
 ]
+
+/**
+ * Esconder o item do menu é ERGONOMIA, não segurança: quem digitar /usuarios na
+ * barra de endereços vê a tela, e a tela leva 403 em cada chamada. Quem impede o
+ * acesso é o requireMinRole no router da API — este filtro só evita oferecer a
+ * alguém uma porta que não abre.
+ *
+ * O `role !== undefined` não é paranoia: durante o bootstrap `user` é null, e
+ * `ROLE_RANK[undefined] >= 2` seria false por acidente. Melhor não depender do acidente.
+ */
+const visibleNav = (role: UserRole | undefined): NavItem[] =>
+  NAV.filter((i) => !i.minRole || (role !== undefined && ROLE_RANK[role] >= ROLE_RANK[i.minRole]))
 
 /**
  * Rotas sem casca: a tela de login se desenha sozinha, e as telas de impressão
@@ -48,6 +64,7 @@ const isActive = (pathname: string, href: string): boolean =>
 export const AppShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
   const { user, logout } = useAuth()
+  const nav = visibleNav(user?.role)
 
   if (isBare(pathname)) return <>{children}</>
 
@@ -58,7 +75,7 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
           <span className="font-semibold tracking-tight">Arte no Jardim</span>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3 py-2">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = isActive(pathname, item.href)
             const Icon = item.icon
             return (
@@ -84,7 +101,7 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
         <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6">
           {/* Navegação enxuta no mobile, onde a sidebar some. */}
           <nav className="flex items-center gap-1 md:hidden">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon
               return (
                 <Link

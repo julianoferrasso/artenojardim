@@ -100,6 +100,18 @@ export const ROUTES = {
       note: (id: string) => `${base}/admin/orders/${id}/note`,
       events: (id: string) => `${base}/admin/orders/${id}/events`,
     },
+
+    /** Gestão de usuários de staff. Router inteiro atrás de requireMinRole. */
+    users: {
+      list: `${base}/admin/users`,
+      create: `${base}/admin/users`,
+      detail: (id: string) => `${base}/admin/users/${id}`,
+      update: (id: string) => `${base}/admin/users/${id}`,
+      /** Transições com verbo próprio: desativar derruba as sessões do alvo. */
+      deactivate: (id: string) => `${base}/admin/users/${id}/deactivate`,
+      reactivate: (id: string) => `${base}/admin/users/${id}/reactivate`,
+      password: (id: string) => `${base}/admin/users/${id}/password`,
+    },
   },
 
   customers: {

@@ -13,6 +13,7 @@ import { shippingRoutes } from './modules/shipping/routes.js'
 import { checkoutRoutes } from './modules/checkout/routes.js'
 import { orderRoutes } from './modules/orders/routes.js'
 import { adminOrderRoutes } from './modules/admin-orders/routes.js'
+import { adminUserRoutes } from './modules/admin-users/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
 import { storeRoutes } from './modules/store/routes.js'
@@ -45,6 +46,8 @@ apiRoutes.use('/orders', orderRoutes)
 // Staff. Caminho distinto de /orders (cliente) de propósito: os dois têm auth
 // diferente, e um Router só com `authenticateCustomer` não comporta os dois.
 apiRoutes.use('/admin/orders', adminOrderRoutes)
+// Gestão de staff. O router inteiro exige cargo mínimo ADMIN.
+apiRoutes.use('/admin/users', adminUserRoutes)
 apiRoutes.use('/product-views', productViewRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
 apiRoutes.use('/store', storeRoutes)

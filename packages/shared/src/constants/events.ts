@@ -52,6 +52,19 @@ export const EVENTS = {
     adjusted: 'inventory.adjusted',
     counted: 'inventory.counted',
   },
+  user: {
+    created: 'user.created',
+    updated: 'user.updated',
+    /**
+     * Separado de `updated` de propósito: é O evento de segurança da tela. Quem
+     * audita um incidente procura "quem virou ADMIN e quando", e essa pergunta
+     * não pode depender de abrir o changesJson de cada update.
+     */
+    roleChanged: 'user.role_changed',
+    deactivated: 'user.deactivated',
+    reactivated: 'user.reactivated',
+    passwordReset: 'user.password_reset',
+  },
   auth: {
     loginSucceeded: 'auth.login_succeeded',
     loginFailed: 'auth.login_failed',
