@@ -159,7 +159,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 pb-16 pt-2">
+      {/*<section className="mx-auto max-w-6xl px-4 pb-16 pt-2">
         <div className="flex flex-col items-center gap-6 rounded-2xl border border-border bg-secondary/60 px-6 py-12 text-center">
           <div>
             <h2 className="font-display text-3xl font-semibold tracking-tight">
@@ -171,7 +171,7 @@ export default async function HomePage() {
           </div>
           <NewsletterForm className="max-w-md" />
         </div>
-      </section>
+      </section>*/}
     </main>
   )
 }
