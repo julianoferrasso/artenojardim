@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import type { ProductListItem } from '@ecommerce/shared/contracts'
 import { formatBRL } from '@/lib/utils'
+import { ProductImage } from './product-image'
 
 /**
  * Card de produto da vitrine. Server Component (sem 'use client'): renderiza HTML
@@ -16,19 +16,13 @@ export const ProductCard = ({ product }: { product: ProductListItem }) => {
       className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-shadow hover:shadow-md"
     >
       <div className="relative aspect-square overflow-hidden bg-muted">
-        {product.thumbnailUrl ? (
-          <Image
-            src={product.thumbnailUrl}
-            alt={product.name}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            className="object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex size-full items-center justify-center text-sm text-muted-foreground">
-            sem imagem
-          </div>
-        )}
+        <ProductImage
+          src={product.thumbnailUrl}
+          alt={product.name}
+          fit="cover"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          className="transition-transform group-hover:scale-105"
+        />
       </div>
       <div className="flex flex-col gap-1 p-3">
         <h3 className="line-clamp-2 text-sm font-medium">{product.name}</h3>

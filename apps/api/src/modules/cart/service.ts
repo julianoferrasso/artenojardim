@@ -1,5 +1,6 @@
 import {
   ERROR_CODES,
+  pickVariantImage,
   type AddToCartInput,
   type Cart,
   type CartItem,
@@ -71,10 +72,23 @@ const ITEM_SELECT = {
       sku: true,
       price: true,
       isActive: true,
-      imageId: true,
-      product: { select: { id: true, name: true, slug: true, status: true, deletedAt: true } },
+      // As imagens vêm do PRODUTO, não da relação `variant.images`. Aquela só
+      // traz ProductImage com variantId = esta variante — quase sempre vazia,
+      // e era por isso que toda linha de carrinho vinha sem foto.
+      product: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          deletedAt: true,
+          images: {
+            orderBy: { position: 'asc' },
+            select: { variantId: true, position: true, upload: { select: { key: true } } },
+          },
+        },
+      },
       optionValues: { select: { optionValue: { select: { value: true } } } },
-      images: { orderBy: { position: 'asc' }, take: 1, select: { upload: { select: { key: true } } } },
       level: { select: { onHand: true, reserved: true } },
     },
   },
@@ -89,7 +103,10 @@ const toCartItem = (row: ItemRow): CartItem => {
   const purchasable =
     v.isActive && v.product.status === 'ACTIVE' && !v.product.deletedAt && available >= row.quantity
 
-  const key = v.images[0]?.upload.key
+  // Mesma ordem de resolução que a galeria da loja usa — foto da variação
+  // primeiro, foto do produto depois. Sem `take: 1` no select porque essa
+  // prioridade depende do id da própria variante, que o orderBy não alcança.
+  const key = pickVariantImage(v.product.images, v.id)?.upload.key
   return {
     id: row.id,
     variantId: v.id,

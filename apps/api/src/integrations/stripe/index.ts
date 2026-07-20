@@ -9,4 +9,5 @@ export {
   retrievePaymentIntent,
   type PaymentIntentResult,
 } from './payment-intents.js'
+export { createRefund, type RefundResult } from './refunds.js'
 export { constructWebhookEvent, type StripeWebhookEvent } from './webhook.js'

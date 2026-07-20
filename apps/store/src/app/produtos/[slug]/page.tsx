@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getProduct } from '@/lib/catalog'
 import { ApiError } from '@/lib/api'
-import { VariantSelector } from '@/components/variant-selector'
+import { ProductDetail } from '@/components/product-detail'
 import { ProductViewBeacon } from './product-view-beacon'
 import { formatBRL } from '@/lib/utils'
 
@@ -79,7 +79,18 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
 
       <ProductViewBeacon slug={product.slug} />
 
-      <VariantSelector product={product} />
+      <ProductDetail product={product} />
+
+      {/* Descrição fica no Server Component: é texto longo e estático, não
+          precisa viajar como JS dentro do payload do cliente. */}
+      {product.shortDescription && (
+        <p className="mt-8 text-sm text-muted-foreground">{product.shortDescription}</p>
+      )}
+      {product.description && (
+        <div className="prose prose-sm mt-2 max-w-none text-foreground">
+          <p className="whitespace-pre-wrap">{product.description}</p>
+        </div>
+      )}
 
       <noscript>
         {/* Sem JS o seletor não interage, mas o preço aparece para SEO/acessível. */}

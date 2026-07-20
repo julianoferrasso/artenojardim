@@ -132,7 +132,6 @@ const createProductGraph = async (
         height: v.height,
         position: v.position || index,
         isActive: v.isActive,
-        imageId: v.imageId ?? null,
         ...(optionValues ? { optionValues } : {}),
       },
     })
@@ -417,6 +416,18 @@ export const updateProductImages = async (
       throw appError(ERROR_CODES.VALIDATION_ERROR, 'Uma ou mais imagens não existem', 422)
     }
   }
+  // A variação tem que ser DESTE produto. Sem esta checagem, trocar o id no
+  // payload liga a foto à variante de outro produto (ou de outra loja) e o
+  // carrinho passa a mostrar a foto errada. Posse é no service, não na rota.
+  const variantIds = [...new Set(images.map((i) => i.variantId).filter((v) => v != null))]
+  if (variantIds.length > 0) {
+    const count = await prisma.productVariant.count({
+      where: { id: { in: variantIds }, productId: id, storeId },
+    })
+    if (count !== variantIds.length) {
+      throw appError(ERROR_CODES.VALIDATION_ERROR, 'Variação inválida para este produto', 422)
+    }
+  }
 
   const currentByUpload = new Map(product.images.map((img) => [img.uploadId, img.id]))
   const desiredUploads = new Set(uploadIds)
@@ -434,11 +445,18 @@ export const updateProductImages = async (
       if (existingId) {
         await tx.productImage.update({
           where: { id: existingId },
-          data: { alt: img.alt ?? null, position: index },
+          // `?? null` explícito: é o que permite DESvincular uma imagem da variação.
+          data: { alt: img.alt ?? null, position: index, variantId: img.variantId ?? null },
         })
       } else {
         await tx.productImage.create({
-          data: { productId: id, uploadId: img.uploadId, alt: img.alt ?? null, position: index },
+          data: {
+            productId: id,
+            uploadId: img.uploadId,
+            alt: img.alt ?? null,
+            position: index,
+            variantId: img.variantId ?? null,
+          },
         })
       }
     }
@@ -612,7 +630,6 @@ export const addVariant = async (
         height: input.height,
         position,
         isActive: input.isActive,
-        imageId: input.imageId ?? null,
         optionValues: { create: valueIds.map((id) => ({ optionValueId: id })) },
       },
     })

@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { AuthProvider } from '@/lib/auth'
 import { CartProvider } from '@/lib/cart'
+import { MiniCart } from '@/components/mini-cart'
 
 /**
  * Providers client no topo da loja. A maior parte da loja é Server Component;
@@ -15,7 +16,11 @@ import { CartProvider } from '@/lib/cart'
 export const Providers = ({ children }: { children: ReactNode }) => {
   return (
     <AuthProvider>
-      <CartProvider>{children}</CartProvider>
+      <CartProvider>
+        {children}
+        {/* Uma instância só, no topo: retorna null enquanto fechado. */}
+        <MiniCart />
+      </CartProvider>
     </AuthProvider>
   )
 }

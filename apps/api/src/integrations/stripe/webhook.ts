@@ -12,6 +12,16 @@ import { getStripe } from './client.js'
 export type StripeWebhookEvent =
   | { id: string; type: 'payment_intent.succeeded'; paymentIntentId: string; orderId: string | null }
   | { id: string; type: 'payment_intent.payment_failed'; paymentIntentId: string; orderId: string | null }
+  | {
+      id: string
+      type: 'charge.refunded'
+      chargeId: string
+      paymentIntentId: string | null
+      /** ACUMULADO do charge, não o valor deste reembolso — é assim que o Stripe manda. */
+      amountRefunded: number
+      amountTotal: number
+      fullyRefunded: boolean
+    }
   | { id: string; type: 'ignored'; rawType: string }
 
 const mapEvent = (event: Stripe.Event): StripeWebhookEvent => {
@@ -22,6 +32,21 @@ const mapEvent = (event: Stripe.Event): StripeWebhookEvent => {
       type: event.type,
       paymentIntentId: pi.id,
       orderId: pi.metadata?.['orderId'] ?? null,
+    }
+  }
+  if (event.type === 'charge.refunded') {
+    const charge = event.data.object as Stripe.Charge
+    return {
+      id: event.id,
+      type: 'charge.refunded',
+      chargeId: charge.id,
+      paymentIntentId:
+        typeof charge.payment_intent === 'string'
+          ? charge.payment_intent
+          : (charge.payment_intent?.id ?? null),
+      amountRefunded: charge.amount_refunded,
+      amountTotal: charge.amount,
+      fullyRefunded: charge.refunded,
     }
   }
   return { id: event.id, type: 'ignored', rawType: event.type }

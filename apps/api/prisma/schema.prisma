@@ -652,6 +652,7 @@ model Order {
 
   @@unique([storeId, number])
   @@index([storeId, paymentStatus])
+  @@index([storeId, fulfillmentStatus])
   @@index([storeId, createdAt])
   @@index([customerId])
 }
@@ -709,6 +710,11 @@ model Payment {
   amount                Int
   currency              String         @default("brl")
   paidAt                DateTime?
+  /// Soma dos reembolsos já confirmados pelo Stripe, em centavos. Responde
+  /// "total ou parcial?" sem tabela Refund; o histórico por reembolso vive no
+  /// OrderEvent. Escrito SÓ pelo webhook charge.refunded, como o status.
+  refundedAmount        Int            @default(0)
+  refundedAt            DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 

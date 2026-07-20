@@ -57,6 +57,7 @@ export const createVariantSchema = z.object({
   height: z.number().int().positive('Informe a altura em mm'),
   position: z.number().int().nonnegative().default(0),
   isActive: z.boolean().default(true),
+  /** @deprecated Use `ProductImage.variantId` — tem FK e aceita N imagens por variante. */
   imageId: z.string().nullable().optional(),
   /** Quais valores de opção esta variante representa. Vazio = produto sem opções. */
   options: z.array(variantOptionSchema).default([]),
@@ -99,6 +100,7 @@ export const variantSchema = z.object({
   height: z.number().int(),
   position: z.number().int(),
   isActive: z.boolean(),
+  /** @deprecated Use `ProductImage.variantId`. Mantido só para não quebrar clientes antigos. */
   imageId: z.string().nullable(),
   options: z.array(variantOptionSchema),
 })
@@ -119,6 +121,12 @@ export const productImageSchema = z.object({
   url: z.string(),
   alt: z.string().nullable(),
   position: z.number().int(),
+  /** null = imagem do produto, vale para qualquer variação. */
+  variantId: z.string().nullable(),
+  // Dimensões naturais: deixam o front reservar a caixa (sem layout shift) e
+  // limitar o zoom ao que o arquivo aguenta. null em uploads antigos.
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
 })
 
 export type ProductImage = z.infer<typeof productImageSchema>
@@ -127,12 +135,48 @@ export type ProductImage = z.infer<typeof productImageSchema>
  * Substitui a galeria inteira do produto. A API reconcilia por `uploadId`:
  * mantém as que continuam, cria as novas e apaga as ausentes. O `position` de
  * cada item define a ordem — a posição no array é o que vale.
+ *
+ * `variantId` só existe aqui, não no input de criação: na criação do produto as
+ * variantes ainda não têm id, então o campo só poderia ser mentira.
  */
 export const updateProductImagesSchema = z.object({
-  images: z.array(productImageInputSchema),
+  images: z.array(
+    productImageInputSchema.extend({ variantId: z.string().nullable().optional() }),
+  ),
 })
 
 export type UpdateProductImagesInput = z.infer<typeof updateProductImagesSchema>
+
+/**
+ * Quais imagens valem para uma variação — a ordem de resolução ÚNICA do projeto.
+ * Puro e no shared porque os dois lados dependem dela: a API congela a imagem do
+ * item de carrinho/pedido com isto, e a loja monta a galeria com isto. Divergir
+ * aqui é o que fazia o carrinho mostrar uma foto e a página do produto outra.
+ *
+ * 1. imagens da variação pedida
+ * 2. imagens sem variação (do produto, servem a todas)
+ * 3. imagens de OUTRAS variações ficam de fora — mostrar a foto da vela verde
+ *    quando o cliente escolheu a azul é pior do que não mostrar nada.
+ * 4. exceto se isso esvaziaria a galeria: produto com foto nunca renderiza vazio.
+ */
+type ImageLike = { variantId: string | null; position: number }
+
+export const imagesForVariant = <T extends ImageLike>(
+  images: T[],
+  variantId: string | null,
+): T[] => {
+  const byPosition = (a: T, b: T) => a.position - b.position
+  const own = variantId ? images.filter((i) => i.variantId === variantId) : []
+  const shared = images.filter((i) => i.variantId === null)
+  const picked = [...own.sort(byPosition), ...shared.sort(byPosition)]
+  return picked.length > 0 ? picked : [...images].sort(byPosition)
+}
+
+/** A imagem que representa a variação — capa da galeria, linha do carrinho, item do pedido. */
+export const pickVariantImage = <T extends ImageLike>(
+  images: T[],
+  variantId: string | null,
+): T | undefined => imagesForVariant(images, variantId)[0]
 
 // ── Produto ───────────────────────────────────────────────────────────────────
 

@@ -31,6 +31,8 @@ export const orderAddressSchema = z.object({
   state: z.string(),
 })
 
+export type OrderAddress = z.infer<typeof orderAddressSchema>
+
 /** Método de frete escolhido, congelado no pedido. */
 export const orderShippingMethodSchema = z.object({
   carrier: z.string(),

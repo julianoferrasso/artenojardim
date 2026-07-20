@@ -31,7 +31,16 @@ export const PRODUCT_SELECT = {
   categories: { select: { categoryId: true } },
   images: {
     orderBy: { position: 'asc' },
-    select: { id: true, uploadId: true, alt: true, position: true, upload: { select: { key: true } } },
+    select: {
+      id: true,
+      uploadId: true,
+      alt: true,
+      position: true,
+      variantId: true,
+      // width/height alimentam a galeria: reservam a caixa (sem layout shift) e
+      // limitam o zoom ao que o arquivo original aguenta.
+      upload: { select: { key: true, width: true, height: true } },
+    },
   },
   variants: {
     orderBy: { position: 'asc' },
@@ -68,6 +77,9 @@ const toImage = (img: ProductRow['images'][number]): ProductImage => ({
   url: storage().getPublicUrl(img.upload.key),
   alt: img.alt,
   position: img.position,
+  variantId: img.variantId,
+  width: img.upload.width,
+  height: img.upload.height,
 })
 
 const toVariant = (v: ProductRow['variants'][number]): Variant => ({
@@ -127,8 +139,11 @@ export const LIST_SELECT = {
   slug: true,
   status: true,
   updatedAt: true,
+  // Capa do catálogo: a foto do PRODUTO (variantId null) vem primeiro. Sem o
+  // desempate por variantId, a capa poderia virar a foto de uma variação
+  // específica só por ela estar na position 0.
   images: {
-    orderBy: { position: 'asc' },
+    orderBy: [{ variantId: { sort: 'asc', nulls: 'first' } }, { position: 'asc' }],
     take: 1,
     select: { upload: { select: { key: true } } },
   },

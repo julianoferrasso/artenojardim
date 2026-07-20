@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
+  ShoppingCart,
   Package,
   FolderTree,
   Boxes,
@@ -21,14 +22,20 @@ type NavItem = { href: string; label: string; icon: LucideIcon }
  */
 const NAV: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/pedidos', label: 'Pedidos', icon: ShoppingCart },
   { href: '/produtos', label: 'Produtos', icon: Package },
   { href: '/categorias', label: 'Categorias', icon: FolderTree },
   { href: '/estoque', label: 'Estoque', icon: Boxes },
   { href: '/uploads', label: 'Biblioteca de mídia', icon: Images },
 ]
 
-/** Rotas que não usam a casca (a tela de login se desenha sozinha). */
-const BARE_PATHS = ['/entrar']
+/**
+ * Rotas sem casca: a tela de login se desenha sozinha, e as telas de impressão
+ * viram papel — sidebar e header sairiam na folha. O AuthGuard envolve por fora,
+ * no layout, então elas continuam exigindo sessão.
+ */
+const isBare = (pathname: string): boolean =>
+  pathname === '/entrar' || /\/(imprimir|separacao)$/.test(pathname)
 
 const isActive = (pathname: string, href: string): boolean =>
   href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
@@ -42,8 +49,7 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
-  // A tela de login não tem casca: ela é para quem ainda não tem sessão.
-  if (BARE_PATHS.includes(pathname)) return <>{children}</>
+  if (isBare(pathname)) return <>{children}</>
 
   return (
     <div className="flex min-h-svh bg-muted">

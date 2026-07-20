@@ -144,3 +144,18 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@layer utilities {
+  /*
+   * Carrossel da galeria: o swipe é scroll nativo com scroll-snap, então a
+   * barra precisa sumir sem tirar a rolagem. Classe nomeada por função — o
+   * seletor de webkit não cabe numa utility do Tailwind.
+   */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

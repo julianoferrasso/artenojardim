@@ -287,13 +287,18 @@ function InfoEditor({ product }: { product: Product }) {
   )
 }
 
-type DraftImage = { uploadId: string; url: string; alt: string }
+type DraftImage = { uploadId: string; url: string; alt: string; variantId: string | null }
 
 const toDraft = (img: ProductImage): DraftImage => ({
   uploadId: img.uploadId,
   url: img.url,
   alt: img.alt ?? '',
+  variantId: img.variantId,
 })
+
+/** Rótulo da variação — mesmo formato da tabela de variações, para não divergir. */
+const variantLabel = (v: Variant): string =>
+  v.options.map((o) => o.value).join(' / ') || v.sku
 
 /**
  * Editor da galeria: adiciona (uploader), remove e reordena. A ordem visual é a
@@ -310,8 +315,16 @@ function ImagesEditor({ product }: { product: Product }) {
     images.length !== product.images.length ||
     images.some(
       (img, i) =>
-        img.uploadId !== product.images[i]?.uploadId || img.alt !== (product.images[i]?.alt ?? ''),
+        img.uploadId !== product.images[i]?.uploadId ||
+        img.alt !== (product.images[i]?.alt ?? '') ||
+        // Sem comparar o vínculo, trocar só a variação não habilitava o salvar.
+        img.variantId !== (product.images[i]?.variantId ?? null),
     )
+
+  // Produto sem opções reais: vincular imagem à única variação é ruído.
+  const linkableVariants = product.variants.filter(
+    (v) => !v.options.every((o) => o.value === 'Default Title'),
+  )
 
   const touch = () => setSaved(false)
 
@@ -328,7 +341,12 @@ function ImagesEditor({ product }: { product: Product }) {
     setError(null)
     setSaved(false)
     update.mutate(
-      images.map((img, i) => ({ uploadId: img.uploadId, alt: img.alt || undefined, position: i })),
+      images.map((img, i) => ({
+        uploadId: img.uploadId,
+        alt: img.alt || undefined,
+        position: i,
+        variantId: img.variantId,
+      })),
       {
         onSuccess: () => setSaved(true),
         onError: (e) => setError(e instanceof ApiError ? e.message : 'Falha ao salvar imagens.'),
@@ -357,6 +375,27 @@ function ImagesEditor({ product }: { product: Product }) {
                 placeholder="Texto alternativo"
                 className="h-8 w-full rounded border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
+
+              {linkableVariants.length > 0 && (
+                <select
+                  value={img.variantId ?? ''}
+                  onChange={(e) => {
+                    const variantId = e.target.value || null
+                    setImages(images.map((im, idx) => (idx === i ? { ...im, variantId } : im)))
+                    touch()
+                  }}
+                  aria-label="Variação desta imagem"
+                  className="h-8 w-full rounded border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Todas as variações</option>
+                  {linkableVariants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {variantLabel(v)}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               <div className="flex items-center justify-between">
                 <div className="flex gap-1">
                   <button
@@ -394,6 +433,13 @@ function ImagesEditor({ product }: { product: Product }) {
         </ul>
       )}
 
+      {linkableVariants.length > 0 && images.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Imagens em “Todas as variações” aparecem sempre. Ao vincular a uma variação, a imagem só
+          aparece quando o cliente seleciona aquela variação.
+        </p>
+      )}
+
       <div className="max-w-sm">
         <ImageUploader
           folder="products"
@@ -401,7 +447,7 @@ function ImagesEditor({ product }: { product: Product }) {
             setImages((prev) =>
               prev.some((im) => im.uploadId === upload.id)
                 ? prev
-                : [...prev, { uploadId: upload.id, url: upload.url, alt: '' }],
+                : [...prev, { uploadId: upload.id, url: upload.url, alt: '', variantId: null }],
             )
             touch()
           }}

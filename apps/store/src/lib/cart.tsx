@@ -46,6 +46,11 @@ type CartState = {
   setQuantity: (itemId: string, quantity: number) => Promise<void>
   remove: (itemId: string) => Promise<void>
   refresh: () => Promise<void>
+  /** Estado do minicarrinho. Abrir o carrinho É estado de carrinho — não vale
+   *  um provider de UI só para isto (arquitetura §mais simples que cresce). */
+  isOpen: boolean
+  openCart: () => void
+  closeCart: () => void
 }
 
 const CartContext = createContext<CartState | null>(null)
@@ -53,6 +58,7 @@ const CartContext = createContext<CartState | null>(null)
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [cart, setCart] = useState<Cart | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isOpen, setIsOpen] = useState(false)
   const { customer } = useAuth()
   const lastCustomerId = useRef<string | null>(null)
 
@@ -91,8 +97,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setCart(await call<Cart>(ROUTES.cart.item(itemId), { method: 'DELETE' }))
   }
 
+  const openCart = useCallback(() => setIsOpen(true), [])
+  const closeCart = useCallback(() => setIsOpen(false), [])
+
   return (
-    <CartContext.Provider value={{ cart, loading, add, setQuantity, remove, refresh }}>
+    <CartContext.Provider
+      value={{ cart, loading, add, setQuantity, remove, refresh, isOpen, openCart, closeCart }}
+    >
       {children}
     </CartContext.Provider>
   )

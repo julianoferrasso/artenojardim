@@ -38,6 +38,7 @@ export const processStripeEvent = async (event: StripeWebhookEvent): Promise<voi
 
   if (event.type === 'payment_intent.succeeded') await handleSucceeded(event)
   else if (event.type === 'payment_intent.payment_failed') await handleFailed(event)
+  else if (event.type === 'charge.refunded') await handleRefunded(event)
   else logger.info({ eventId: event.id, type: rawType }, 'webhook Stripe: evento sem handler')
 
   await prisma.stripeEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } })
@@ -92,6 +93,74 @@ const handleSucceeded = async (
   })
 
   logger.info({ pi: event.paymentIntentId, orderId: event.orderId }, 'webhook Stripe: pagamento confirmado')
+}
+
+/**
+ * Reembolso confirmado pelo Stripe. O admin PEDE o reembolso; quem o registra é
+ * este handler — mesma disciplina do pagamento, para que o status do pedido nunca
+ * afirme algo que o Stripe não confirmou.
+ *
+ * `amountRefunded` é o ACUMULADO do charge, então gravá-lo direto (não somar) é o
+ * que torna a reentrega idempotente de graça: dois reembolsos parciais chegam
+ * como 3000 e depois 5000, nunca como dois "+3000".
+ *
+ * Sem efeito de estoque: reembolsar não é receber a peça de volta. A devolução
+ * física é um RETURN na tela de Estoque, ou o CANCELLATION do cancelamento.
+ */
+const handleRefunded = async (
+  event: Extract<StripeWebhookEvent, { type: 'charge.refunded' }>,
+): Promise<void> => {
+  const status: $Enums.PaymentStatus = event.fullyRefunded ? 'REFUNDED' : 'PARTIALLY_REFUNDED'
+
+  await prisma.$transaction(async (tx) => {
+    // O PI é a chave natural; o charge é o fallback para eventos que cheguem sem
+    // payment_intent expandido.
+    const where = event.paymentIntentId
+      ? { stripePaymentIntentId: event.paymentIntentId }
+      : { stripeChargeId: event.chargeId }
+
+    await tx.payment.updateMany({
+      where,
+      data: { status, refundedAmount: event.amountRefunded, refundedAt: new Date() },
+    })
+
+    const payment = await tx.payment.findFirst({ where, select: { orderId: true } })
+    if (!payment) {
+      logger.warn({ charge: event.chargeId }, 'webhook Stripe: refunded sem pagamento casado')
+      return
+    }
+
+    const order = await tx.order.findUnique({
+      where: { id: payment.orderId },
+      select: { paymentStatus: true },
+    })
+    // Só sai de PAID/PARTIALLY_REFUNDED: um pedido que nunca chegou a PAID não
+    // pode retroceder para "reembolsado" por um evento fora de ordem.
+    if (!order || (order.paymentStatus !== 'PAID' && order.paymentStatus !== 'PARTIALLY_REFUNDED')) {
+      return
+    }
+
+    await tx.order.update({ where: { id: payment.orderId }, data: { paymentStatus: status } })
+    await tx.orderEvent.create({
+      data: {
+        orderId: payment.orderId,
+        type: EVENTS.order.refunded,
+        description: event.fullyRefunded
+          ? 'Reembolso total confirmado'
+          : 'Reembolso parcial confirmado',
+        metadataJson: {
+          chargeId: event.chargeId,
+          amountRefunded: event.amountRefunded,
+          amountTotal: event.amountTotal,
+        },
+      },
+    })
+  })
+
+  logger.info(
+    { charge: event.chargeId, amountRefunded: event.amountRefunded, status },
+    'webhook Stripe: reembolso registrado',
+  )
 }
 
 const handleFailed = async (

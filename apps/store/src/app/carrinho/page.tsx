@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import Image from 'next/image'
 import { useCart } from '@/lib/cart'
 import { formatBRL } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { ShippingCalculator } from '@/components/shipping-calculator'
+import { ProductImage } from '@/components/product-image'
+import { QuantityStepper } from '@/components/quantity-stepper'
 
 export default function CartPage() {
   const { cart, loading, setQuantity, remove } = useCart()
@@ -48,9 +49,12 @@ export default function CartPage() {
             )}
           >
             <Link href={`/produtos/${item.productSlug}`} className="relative size-20 shrink-0 overflow-hidden rounded-md bg-muted">
-              {item.imageUrl && (
-                <Image src={item.imageUrl} alt={item.productName} fill sizes="80px" className="object-cover" />
-              )}
+              <ProductImage
+                src={item.imageUrl}
+                alt={item.productName}
+                fit="cover"
+                sizes="80px"
+              />
             </Link>
 
             <div className="flex min-w-0 flex-1 flex-col">
@@ -69,24 +73,11 @@ export default function CartPage() {
               )}
 
               <div className="mt-2 flex items-center gap-3">
-                <div className="flex items-center rounded-md border border-border">
-                  <button
-                    onClick={() => void setQuantity(item.id, item.quantity - 1)}
-                    className="px-2.5 py-1 text-sm hover:bg-accent"
-                    aria-label="Diminuir"
-                  >
-                    −
-                  </button>
-                  <span className="min-w-8 text-center text-sm">{item.quantity}</span>
-                  <button
-                    onClick={() => void setQuantity(item.id, item.quantity + 1)}
-                    disabled={item.quantity >= item.available}
-                    className="px-2.5 py-1 text-sm hover:bg-accent disabled:opacity-40"
-                    aria-label="Aumentar"
-                  >
-                    +
-                  </button>
-                </div>
+                <QuantityStepper
+                  quantity={item.quantity}
+                  available={item.available}
+                  onChange={(quantity) => void setQuantity(item.id, quantity)}
+                />
                 <button
                   onClick={() => void remove(item.id)}
                   className="text-xs text-muted-foreground hover:text-destructive"

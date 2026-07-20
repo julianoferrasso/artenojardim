@@ -11,6 +11,7 @@ import { quoteShipping } from '@/lib/shipping'
 import { confirmCheckout } from '@/lib/checkout'
 import { formatBRL } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
+import { ProductImage } from '@/components/product-image'
 
 /**
  * Checkout em página única com seções (não wizard): cada navegação é um ponto de
@@ -183,10 +184,13 @@ export default function CheckoutPage() {
       {/* Resumo */}
       <section className="mb-6 rounded-lg border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">Resumo</h2>
-        <ul className="mb-3 flex flex-col gap-1 text-sm">
+        <ul className="mb-3 flex flex-col gap-3 text-sm">
           {items.map((i) => (
-            <li key={i.id} className="flex justify-between gap-4">
-              <span className="text-muted-foreground">
+            <li key={i.id} className="flex items-center gap-3">
+              <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                <ProductImage src={i.imageUrl} alt={i.productName} fit="cover" sizes="48px" />
+              </div>
+              <span className="min-w-0 flex-1 text-muted-foreground">
                 {i.quantity}× {i.productName}
               </span>
               <span>{formatBRL(i.lineTotal)}</span>

@@ -83,6 +83,23 @@ export const ROUTES = {
     fulfillment: (id: string) => `${base}/orders/${id}/fulfillment`,
   },
 
+  /**
+   * Superfície de STAFF. Separada de `orders` porque aquele router inteiro está
+   * atrás de `authenticateCustomer` — misturar os dois exigiria auth por rota,
+   * e uma rota esquecida vira vazamento de pedido alheio.
+   */
+  admin: {
+    orders: {
+      list: `${base}/admin/orders`,
+      detail: (id: string) => `${base}/admin/orders/${id}`,
+      fulfillment: (id: string) => `${base}/admin/orders/${id}/fulfillment`,
+      cancel: (id: string) => `${base}/admin/orders/${id}/cancel`,
+      refund: (id: string) => `${base}/admin/orders/${id}/refund`,
+      note: (id: string) => `${base}/admin/orders/${id}/note`,
+      events: (id: string) => `${base}/admin/orders/${id}/events`,
+    },
+  },
+
   customers: {
     me: `${base}/customers/me`,
     addresses: `${base}/customers/me/addresses`,

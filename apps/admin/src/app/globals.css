@@ -130,3 +130,23 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/*
+  Impressão (via do pedido e folha de separação). O admin é escuro/claro na tela,
+  mas no papel é sempre preto no branco: economiza toner e é o que o operador
+  cola na caixa. `.no-print` some — botões e navegação não existem em papel.
+*/
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}

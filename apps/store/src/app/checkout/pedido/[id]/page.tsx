@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth'
 import { getOrder, getOrderPayment, getOrderStatus } from '@/lib/checkout'
 import { getStripePromise } from '@/lib/stripe'
 import { formatBRL } from '@/lib/utils'
+import { ProductImage } from '@/components/product-image'
 import { PaymentForm } from './payment-form'
 
 /**
@@ -206,10 +207,13 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
       <section className="mb-4 rounded-lg border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">Itens</h2>
-        <ul className="flex flex-col gap-2 text-sm">
+        <ul className="flex flex-col gap-3 text-sm">
           {order.items.map((i) => (
-            <li key={i.id} className="flex justify-between gap-4">
-              <span className="text-muted-foreground">
+            <li key={i.id} className="flex items-center gap-3">
+              <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                <ProductImage src={i.imageUrl} alt={i.productName} fit="cover" sizes="48px" />
+              </div>
+              <span className="min-w-0 flex-1 text-muted-foreground">
                 {i.quantity}× {i.productName}
                 {i.variantName !== '—' ? ` (${i.variantName})` : ''}
               </span>

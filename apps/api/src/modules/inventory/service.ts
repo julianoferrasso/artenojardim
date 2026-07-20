@@ -224,6 +224,88 @@ export const settleOrderReservations = async (
   }
 }
 
+/**
+ * Cancelamento de pedido NÃO pago: as reservas morrem sem virar fato. Só
+ * `reserved` diminui — nenhum movimento, porque nada saiu da prateleira.
+ *
+ * Espelho de `settleOrderReservations` para o caminho triste, e idempotente pelo
+ * mesmo filtro `releasedAt: null`. Recebe `tx` para rodar na transação do
+ * cancelamento: liberar a reserva e marcar o pedido cancelado é um átomo.
+ */
+export const releaseOrderReservations = async (
+  tx: Prisma.TransactionClient,
+  orderId: string,
+): Promise<void> => {
+  const reservations = await tx.inventoryReservation.findMany({
+    where: { orderId, releasedAt: null },
+    select: { id: true, variantId: true, quantity: true },
+  })
+
+  for (const r of reservations) {
+    await tx.inventoryLevel.update({
+      where: { variantId: r.variantId },
+      data: { reserved: { decrement: r.quantity } },
+    })
+    await tx.inventoryReservation.update({
+      where: { id: r.id },
+      data: { releasedAt: new Date() },
+    })
+  }
+}
+
+/**
+ * Cancelamento de pedido JÁ PAGO: as reservas viraram SALE e o `onHand` já caiu.
+ * A peça volta à prateleira com um CANCELLATION (+qty) — o contrário exato do
+ * SALE. Nunca um UPDATE solto no onHand: o ledger é append-only, e uma correção
+ * invisível é uma divergência que a reconciliação vai acusar meses depois.
+ *
+ * Idempotente por verificação prévia: reexecutar não pode devolver a mesma peça
+ * duas vezes.
+ */
+export const restockCanceledOrder = async (
+  tx: Prisma.TransactionClient,
+  storeId: string,
+  orderId: string,
+  userId?: string,
+): Promise<void> => {
+  const reference = `order:${orderId}`
+
+  const already = await tx.inventoryMovement.findFirst({
+    where: { storeId, reference, type: 'CANCELLATION' },
+    select: { id: true },
+  })
+  if (already) return
+
+  // Base = o que realmente saiu por este pedido (os SALE), não os itens do
+  // pedido: se um item nunca chegou a ser liquidado, devolvê-lo criaria estoque
+  // do nada.
+  const sales = await tx.inventoryMovement.findMany({
+    where: { storeId, reference, type: 'SALE' },
+    select: { variantId: true, quantity: true },
+  })
+
+  for (const s of sales) {
+    const quantity = Math.abs(s.quantity)
+    if (quantity === 0) continue
+
+    await tx.inventoryMovement.create({
+      data: {
+        storeId,
+        variantId: s.variantId,
+        type: 'CANCELLATION',
+        quantity,
+        reference,
+        reason: 'Pedido cancelado',
+        userId: userId ?? null,
+      },
+    })
+    await tx.inventoryLevel.update({
+      where: { variantId: s.variantId },
+      data: { onHand: { increment: quantity } },
+    })
+  }
+}
+
 // ── Leitura ───────────────────────────────────────────────────────────────────
 
 export const getLevel = async (variantId: string): Promise<InventoryLevel> => {
