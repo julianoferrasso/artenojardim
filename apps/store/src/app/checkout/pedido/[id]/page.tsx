@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Elements } from '@stripe/react-stripe-js'
 import type { Order, OrderPayment } from '@ecommerce/shared/contracts'
+import { PAYMENT_STATUS_LABEL as PAYMENT_LABEL } from '@ecommerce/shared/constants'
 import { useAuth } from '@/lib/auth'
 import { getOrder, getOrderPayment, getOrderStatus } from '@/lib/checkout'
 import { getStripePromise } from '@/lib/stripe'
-import { formatBRL } from '@/lib/utils'
-import { ProductImage } from '@/components/product-image'
+import { OrderItemList, OrderDeliveryCard, OrderTotals } from '@/components/order-summary'
 import { PaymentForm } from './payment-form'
 
 /**
@@ -17,16 +17,10 @@ import { PaymentForm } from './payment-form'
  * (Fase 1.11) e é aqui que ele é pago: renderiza o Payment Element, e depois do
  * confirmPayment o Stripe redireciona de volta para cá. O polling do status
  * espera o webhook confirmar (PENDING→PAID); a tela nunca decide o pagamento.
+ *
+ * O histórico do pedido vive em /conta/pedidos/[id]. Esta tela morre quando o
+ * pagamento termina; aquela é para sempre.
  */
-
-const PAYMENT_LABEL: Record<string, string> = {
-  PENDING: 'Aguardando pagamento',
-  PROCESSING: 'Processando pagamento',
-  PAID: 'Pago',
-  FAILED: 'Pagamento não aprovado',
-  REFUNDED: 'Reembolsado',
-  PARTIALLY_REFUNDED: 'Parcialmente reembolsado',
-}
 
 type Phase = 'loading' | 'pay' | 'confirming' | 'paid' | 'failed' | 'timeout' | 'notfound'
 
@@ -205,56 +199,31 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         </section>
       )}
 
-      <section className="mb-4 rounded-lg border border-border bg-card p-5">
-        <h2 className="mb-3 font-medium">Itens</h2>
-        <ul className="flex flex-col gap-3 text-sm">
-          {order.items.map((i) => (
-            <li key={i.id} className="flex items-center gap-3">
-              <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-muted">
-                <ProductImage src={i.imageUrl} alt={i.productName} fit="cover" sizes="48px" />
-              </div>
-              <span className="min-w-0 flex-1 text-muted-foreground">
-                {i.quantity}× {i.productName}
-                {i.variantName !== '—' ? ` (${i.variantName})` : ''}
-              </span>
-              <span>{formatBRL(i.totalPrice)}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <div className="mb-6 flex flex-col gap-4">
+        <OrderItemList items={order.items} />
+        <OrderDeliveryCard address={a} method={order.shippingMethod} />
+        <OrderTotals
+          subtotal={order.subtotal}
+          shippingTotal={order.shippingTotal}
+          discountTotal={order.discountTotal}
+          total={order.total}
+        />
+      </div>
 
-      <section className="mb-4 rounded-lg border border-border bg-card p-5 text-sm">
-        <h2 className="mb-2 font-medium">Entrega</h2>
-        <p className="text-muted-foreground">
-          {a.recipient} · {a.street}, {a.number}
-          {a.complement ? ` — ${a.complement}` : ''} · {a.district} · {a.city}/{a.state} · {a.zipCode}
-        </p>
-        <p className="mt-1 text-muted-foreground">
-          {order.shippingMethod.carrier} · {order.shippingMethod.service} · {order.shippingMethod.deliveryDays} dias
-        </p>
-      </section>
-
-      <section className="mb-6 rounded-lg border border-border bg-card p-5 text-sm">
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Subtotal</span>
-          <span>{formatBRL(order.subtotal)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-muted-foreground">Frete</span>
-          <span>{formatBRL(order.shippingTotal)}</span>
-        </div>
-        <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-semibold">
-          <span>Total</span>
-          <span>{formatBRL(order.total)}</span>
-        </div>
-      </section>
-
-      <Link
-        href="/"
-        className="mt-6 block rounded-md border border-border px-4 py-3 text-center text-sm hover:bg-accent"
-      >
-        Continuar comprando
-      </Link>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <Link
+          href={`/conta/pedidos/${order.id}`}
+          className="flex-1 rounded-md bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground hover:opacity-90"
+        >
+          Acompanhar pedido
+        </Link>
+        <Link
+          href="/"
+          className="flex-1 rounded-md border border-border px-4 py-3 text-center text-sm hover:bg-accent"
+        >
+          Continuar comprando
+        </Link>
+      </div>
     </main>
   )
 }

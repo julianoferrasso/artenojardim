@@ -10,7 +10,7 @@ import {
   type CancelOrderInput,
   type RefundOrderInput,
   type InternalNoteInput,
-  type AddOrderEventInput,
+  type AddOrderEventData,
   type PaginationMeta,
 } from '@ecommerce/shared/contracts'
 import { EVENTS } from '@ecommerce/shared/constants'
@@ -208,7 +208,14 @@ export const updateFulfillment = async (
         orderId: id,
         type: FULFILLMENT_EVENT[to],
         description: input.note?.trim() || `Status alterado para ${FULFILLMENT_LABEL[to]}`,
-        metadataJson: { from, to },
+        // Rastreio não tem coluna: viaja no metadata do evento de envio, que a
+        // loja lê por convenção (ver contracts/order-attachments.ts).
+        metadataJson: {
+          from,
+          to,
+          ...(input.trackingCode?.trim() ? { trackingCode: input.trackingCode.trim() } : {}),
+          ...(input.trackingUrl?.trim() ? { trackingUrl: input.trackingUrl.trim() } : {}),
+        },
         userId: ctx.userId ?? null,
       },
     })
@@ -237,11 +244,21 @@ export const updateFulfillment = async (
  * NÃO devolve dinheiro. Reembolsar é ação separada e auditada à parte, porque
  * cancelar um pedido não pago (o caso comum) não tem nada a estornar.
  */
-export const cancelOrder = async (
+export type CancelActor = { kind: 'staff'; userId?: string | undefined } | { kind: 'customer' }
+
+/**
+ * A mecânica do cancelamento, sem auditoria e sem recarregar o DTO.
+ *
+ * Existe separada porque o cliente também cancela, pela área da conta, e
+ * reimplementar a devolução de estoque em dois lugares é como se perde a conta
+ * do que voltou para a prateleira. Quem chama decide o que auditar e o que
+ * devolver.
+ */
+export const cancelOrderInternal = async (
   id: string,
-  input: CancelOrderInput,
-  ctx: AuditContext,
-): Promise<AdminOrder> => {
+  reason: string,
+  actor: CancelActor,
+): Promise<void> => {
   const order = await findOrThrow(id)
 
   if (order.canceledAt) throw conflict('Pedido já cancelado.', ERROR_CODES.ORDER_NOT_CANCELABLE)
@@ -254,26 +271,47 @@ export const cancelOrder = async (
 
   const storeId = getActiveStoreId()
   const wasPaid = order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIALLY_REFUNDED'
+  const userId = actor.kind === 'staff' ? (actor.userId ?? null) : null
 
   await prisma.$transaction(async (tx) => {
-    if (wasPaid) await restockCanceledOrder(tx, storeId, id, ctx.userId)
+    // updateMany com `canceledAt: null` no where, e não update: entre o
+    // findOrThrow acima e esta linha cabe um segundo clique, e cancelar duas
+    // vezes reestocaria duas vezes o mesmo pedido.
+    const claimed = await tx.order.updateMany({
+      where: { id, canceledAt: null },
+      data: { canceledAt: new Date(), cancelReason: reason },
+    })
+    if (claimed.count === 0) {
+      throw conflict('Pedido já cancelado.', ERROR_CODES.ORDER_NOT_CANCELABLE)
+    }
+
+    if (wasPaid) await restockCanceledOrder(tx, storeId, id, userId ?? undefined)
     else await releaseOrderReservations(tx, id)
 
-    await tx.order.update({
-      where: { id },
-      data: { canceledAt: new Date(), cancelReason: input.reason },
-    })
     await tx.orderEvent.create({
       data: {
         orderId: id,
         type: EVENTS.order.canceled,
-        description: `Pedido cancelado: ${input.reason}`,
-        metadataJson: { restocked: wasPaid, paymentStatus: order.paymentStatus },
-        userId: ctx.userId ?? null,
+        description: `Pedido cancelado: ${reason}`,
+        metadataJson: {
+          restocked: wasPaid,
+          paymentStatus: order.paymentStatus,
+          by: actor.kind,
+        },
+        userId,
       },
     })
   })
+}
 
+export const cancelOrder = async (
+  id: string,
+  input: CancelOrderInput,
+  ctx: AuditContext,
+): Promise<AdminOrder> => {
+  await cancelOrderInternal(id, input.reason, { kind: 'staff', userId: ctx.userId })
+
+  // Fora da transação: auditoria que falha não pode desfazer a operação.
   await audit({
     action: EVENTS.order.canceled,
     entityType: 'Order',
@@ -376,19 +414,34 @@ export const setInternalNote = async (
   return reload(id)
 }
 
-/** Anotação avulsa na timeline — o que aconteceu e não cabe em nenhum status. */
+/**
+ * Anotação avulsa na timeline — o que aconteceu e não cabe em nenhum status.
+ *
+ * `type` vem de um enum fechado (STAFF_EVENT_TYPES): nota interna, que a loja
+ * esconde, ou "saiu para entrega", que ela mostra. O `metadata` é o único
+ * caminho para rastreio e nota fiscal existirem enquanto não há coluna.
+ */
 export const addOrderEvent = async (
   id: string,
-  input: AddOrderEventInput,
+  input: AddOrderEventData,
   ctx: AuditContext,
 ): Promise<AdminOrder> => {
   await findOrThrow(id)
 
+  const metadata: Record<string, string> = {}
+  for (const [key, value] of Object.entries(input.metadata ?? {})) {
+    const trimmed = value?.trim()
+    if (trimmed) metadata[key] = trimmed
+  }
+
   await prisma.orderEvent.create({
     data: {
       orderId: id,
-      type: EVENTS.order.noteAdded,
+      type: input.type,
       description: input.description.trim(),
+      // Só grava a chave se houver conteúdo: metadata vazio polui a timeline
+      // e faria readOrderAttachments varrer objetos sem nada dentro.
+      ...(Object.keys(metadata).length > 0 ? { metadataJson: metadata } : {}),
       userId: ctx.userId ?? null,
     },
   })

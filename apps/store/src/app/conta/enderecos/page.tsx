@@ -1,8 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { BR_STATES } from '@ecommerce/shared/constants'
 import type { Address, CreateAddressInput } from '@ecommerce/shared/contracts'
 import { useAuth } from '@/lib/auth'
@@ -83,8 +81,8 @@ const toPayload = (f: FormState): CreateAddressInput => ({
 })
 
 export default function EnderecosPage() {
-  const { customer, loading: authLoading } = useAuth()
-  const router = useRouter()
+  // Sem guard aqui: conta/layout.tsx já barra quem não tem sessão.
+  const { customer } = useAuth()
 
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loading, setLoading] = useState(true)
@@ -94,10 +92,6 @@ export default function EnderecosPage() {
   const [cepLoading, setCepLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (!authLoading && !customer) router.replace('/entrar')
-  }, [authLoading, customer, router])
 
   const refresh = useCallback(async () => {
     try {
@@ -191,19 +185,17 @@ export default function EnderecosPage() {
     }
   }
 
-  if (authLoading || (customer && loading)) {
-    return <main className="mx-auto max-w-2xl px-4 py-12 text-center text-muted-foreground">Carregando…</main>
+  // O guard de sessão e o "Carregando…" da conta vivem em conta/layout.tsx.
+  if (customer && loading) {
+    return <p className="py-12 text-center text-muted-foreground">Carregando…</p>
   }
   if (!customer) return null
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-12">
+    <div className="max-w-2xl">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <Link href="/conta" className="text-sm text-muted-foreground hover:underline">
-            ← Minha conta
-          </Link>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Endereços</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Endereços</h1>
         </div>
         {!showForm && (
           <button
@@ -368,7 +360,7 @@ export default function EnderecosPage() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   )
 }
 

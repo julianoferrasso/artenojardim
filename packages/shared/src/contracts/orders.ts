@@ -42,6 +42,8 @@ export const orderShippingMethodSchema = z.object({
   deliveryDays: z.number().int(),
 })
 
+export type OrderShippingMethod = z.infer<typeof orderShippingMethodSchema>
+
 export const orderSchema = z.object({
   id: z.string(),
   number: z.number().int(),

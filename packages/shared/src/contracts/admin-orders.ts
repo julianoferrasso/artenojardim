@@ -3,166 +3,19 @@ import {
   paymentStatusSchema,
   fulfillmentStatusSchema,
   paymentMethodSchema,
-  type PaymentStatus,
-  type FulfillmentStatus,
 } from '../constants/enums.js'
+import { EVENTS } from '../constants/events.js'
 import { moneySchema } from './common.js'
 import { orderAddressSchema, orderShippingMethodSchema } from './orders.js'
+import { orderSituationSchema } from './order-situation.js'
 
 /**
  * Contratos da tela de pedidos do admin.
  *
- * O banco guarda DOIS eixos independentes (paymentStatus e fulfillmentStatus)
- * porque um pedido pago pode estar em qualquer ponto da expedição. O operador,
- * porém, pensa em UM estado: "onde este pedido está agora?".
- *
- * A conciliação é `deriveSituation` — função PURA, usada pelo chip da lista E
- * pelo filtro do backend (via `situationFilter`). Ter os dois lados saindo da
- * mesma fonte é o que impede a lista filtrada por "Enviado" mostrar um pedido
- * que o detalhe chama de outra coisa.
+ * A lógica de situação (deriveSituation, situationFilter, transições) mora em
+ * `order-situation.ts`, porque a área do cliente usa as mesmas funções. Aqui
+ * ficam só os DTOs e inputs que são exclusivos do painel.
  */
-
-export const ORDER_SITUATIONS = [
-  'AWAITING_PAYMENT',
-  'PAYMENT_FAILED',
-  'PAID',
-  'PICKING',
-  'SHIPPED',
-  'DELIVERED',
-  'RETURNED',
-  'CANCELED',
-  'REFUNDED',
-] as const
-
-export const orderSituationSchema = z.enum(ORDER_SITUATIONS)
-export type OrderSituation = z.infer<typeof orderSituationSchema>
-
-type SituationInput = {
-  canceledAt: string | Date | null
-  paymentStatus: PaymentStatus
-  fulfillmentStatus: FulfillmentStatus
-}
-
-/**
- * Precedência: cancelado > reembolsado > logística > pagamento.
- *
- * Cancelado vence tudo porque é o fim da linha operacional — não importa que a
- * expedição diga PICKING, ninguém vai separar. Reembolsado vem antes da
- * logística pela mesma razão: dinheiro devolvido encerra o caso.
- */
-export const deriveSituation = (o: SituationInput): OrderSituation => {
-  if (o.canceledAt) return 'CANCELED'
-  if (o.paymentStatus === 'REFUNDED' || o.paymentStatus === 'PARTIALLY_REFUNDED') return 'REFUNDED'
-
-  switch (o.fulfillmentStatus) {
-    case 'RETURNED':
-      return 'RETURNED'
-    case 'DELIVERED':
-      return 'DELIVERED'
-    case 'SHIPPED':
-      return 'SHIPPED'
-    case 'PICKING':
-    case 'READY_TO_SHIP':
-      return 'PICKING'
-    case 'UNFULFILLED':
-      break
-  }
-
-  if (o.paymentStatus === 'PAID') return 'PAID'
-  if (o.paymentStatus === 'FAILED') return 'PAYMENT_FAILED'
-  return 'AWAITING_PAYMENT'
-}
-
-/**
- * Inverso de `deriveSituation`: descritor NEUTRO (sem Prisma) que o service
- * traduz em `where`. Fica aqui, e não no service, para nascer e morrer junto da
- * função que deriva — mudar uma sem a outra é o bug que este arquivo evita.
- */
-export type SituationFilter = {
-  canceled?: boolean
-  paymentStatus?: readonly PaymentStatus[]
-  fulfillmentStatus?: readonly FulfillmentStatus[]
-}
-
-const REFUNDED_PAYMENTS = ['REFUNDED', 'PARTIALLY_REFUNDED'] as const
-const LIVE_PAYMENTS = ['PENDING', 'PROCESSING', 'PAID', 'FAILED'] as const
-
-export const situationFilter = (s: OrderSituation): SituationFilter => {
-  switch (s) {
-    case 'CANCELED':
-      return { canceled: true }
-    case 'REFUNDED':
-      return { canceled: false, paymentStatus: REFUNDED_PAYMENTS }
-    case 'RETURNED':
-      return { canceled: false, paymentStatus: LIVE_PAYMENTS, fulfillmentStatus: ['RETURNED'] }
-    case 'DELIVERED':
-      return { canceled: false, paymentStatus: LIVE_PAYMENTS, fulfillmentStatus: ['DELIVERED'] }
-    case 'SHIPPED':
-      return { canceled: false, paymentStatus: LIVE_PAYMENTS, fulfillmentStatus: ['SHIPPED'] }
-    case 'PICKING':
-      return {
-        canceled: false,
-        paymentStatus: LIVE_PAYMENTS,
-        fulfillmentStatus: ['PICKING', 'READY_TO_SHIP'],
-      }
-    case 'PAID':
-      return { canceled: false, paymentStatus: ['PAID'], fulfillmentStatus: ['UNFULFILLED'] }
-    case 'PAYMENT_FAILED':
-      return { canceled: false, paymentStatus: ['FAILED'], fulfillmentStatus: ['UNFULFILLED'] }
-    case 'AWAITING_PAYMENT':
-      return {
-        canceled: false,
-        paymentStatus: ['PENDING', 'PROCESSING'],
-        fulfillmentStatus: ['UNFULFILLED'],
-      }
-  }
-}
-
-/**
- * Transições de expedição permitidas ao admin.
- *
- * Não há volta de SHIPPED: a etiqueta já foi comprada e o pacote saiu — o
- * caminho de volta do mundo real é RETURNED, não "desfazer". As voltas curtas
- * (PICKING → UNFULFILLED) existem porque clicar errado no menu é comum e nada
- * físico aconteceu ainda.
- */
-export const FULFILLMENT_TRANSITIONS: Record<FulfillmentStatus, readonly FulfillmentStatus[]> = {
-  UNFULFILLED: ['PICKING'],
-  PICKING: ['READY_TO_SHIP', 'UNFULFILLED'],
-  READY_TO_SHIP: ['SHIPPED', 'PICKING'],
-  SHIPPED: ['DELIVERED', 'RETURNED'],
-  DELIVERED: ['RETURNED'],
-  RETURNED: [],
-}
-
-export type TransitionContext = {
-  paymentStatus: PaymentStatus
-  canceled: boolean
-}
-
-/**
- * Separar o que não foi pago é o erro operacional caro: o produto sai da
- * prateleira, alguém embala, e o pagamento nunca vem. Por isso sair de
- * UNFULFILLED exige PAID.
- */
-export const canTransitionFulfillment = (
-  from: FulfillmentStatus,
-  to: FulfillmentStatus,
-  ctx: TransitionContext,
-): boolean => {
-  if (ctx.canceled) return false
-  if (!FULFILLMENT_TRANSITIONS[from].includes(to)) return false
-  if (from === 'UNFULFILLED' && to === 'PICKING') return ctx.paymentStatus === 'PAID'
-  return true
-}
-
-/** Cancelar depois que o pacote saiu não é cancelar — é devolução. */
-export const CANCELABLE_FULFILLMENTS: readonly FulfillmentStatus[] = ['UNFULFILLED', 'PICKING']
-
-export const canCancelOrder = (o: {
-  canceledAt: string | Date | null
-  fulfillmentStatus: FulfillmentStatus
-}): boolean => !o.canceledAt && CANCELABLE_FULFILLMENTS.includes(o.fulfillmentStatus)
 
 // ---------------------------------------------------------------------------
 // DTOs
@@ -310,6 +163,12 @@ export type AdminOrderListQuery = z.infer<typeof adminOrderListQuerySchema>
 export const updateFulfillmentSchema = z.object({
   fulfillmentStatus: fulfillmentStatusSchema,
   note: z.string().max(500).optional(),
+  /**
+   * Vai para o metadataJson do evento de envio — marcar SHIPPED é o momento
+   * natural de informá-lo. Não há coluna de rastreio; ver order-attachments.ts.
+   */
+  trackingCode: z.string().trim().max(60).optional(),
+  trackingUrl: z.string().url().max(300).optional(),
 })
 
 export type UpdateFulfillmentInput = z.infer<typeof updateFulfillmentSchema>
@@ -337,8 +196,36 @@ export const internalNoteSchema = z.object({
 
 export type InternalNoteInput = z.infer<typeof internalNoteSchema>
 
+/**
+ * O que o staff pode postar à mão. Enum fechado de propósito: `type` livre
+ * viraria uma timeline com vocabulário inventado, e a loja — que rotula pelo
+ * tipo — não saberia o que fazer com "saiu pra entrega!!" escrito à mão.
+ */
+export const STAFF_EVENT_TYPES = [EVENTS.order.noteAdded, EVENTS.order.outForDelivery] as const
+
 export const addOrderEventSchema = z.object({
   description: z.string().min(1).max(500),
+  type: z.enum(STAFF_EVENT_TYPES).default(EVENTS.order.noteAdded),
+  /**
+   * Não existe coluna de rastreio nem de nota fiscal. Estes campos vivem no
+   * metadataJson do evento e a loja os lê por convenção — ver
+   * `order-attachments.ts`, que documenta o acordo e o gatilho para virar coluna.
+   */
+  metadata: z
+    .object({
+      trackingCode: z.string().trim().max(60).optional(),
+      trackingUrl: z.string().url().max(300).optional(),
+      invoiceUrl: z.string().url().max(300).optional(),
+      invoiceNumber: z.string().trim().max(60).optional(),
+    })
+    .optional(),
 })
 
-export type AddOrderEventInput = z.infer<typeof addOrderEventSchema>
+/**
+ * Dois tipos porque há dois lados: quem CHAMA omite `type` (o default resolve),
+ * quem RECEBE já passou pelo `validate()` e sempre tem o campo preenchido. Um
+ * `z.infer` só serviria mal aos dois — o front seria obrigado a repetir o
+ * default e o service teria que checar `undefined` que nunca chega.
+ */
+export type AddOrderEventInput = z.input<typeof addOrderEventSchema>
+export type AddOrderEventData = z.output<typeof addOrderEventSchema>

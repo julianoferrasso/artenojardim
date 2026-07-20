@@ -17,3 +17,17 @@ export const formatBRL = (cents: number): string =>
 
 export const formatDate = (value: string | Date): string =>
   new Intl.DateTimeFormat(DEFAULT_LOCALE, { dateStyle: 'short' }).format(new Date(value))
+
+/** "19 de julho de 2026" — para datas que o cliente lê, não confere. */
+export const formatDateLong = (value: string | Date): string =>
+  new Intl.DateTimeFormat(DEFAULT_LOCALE, { dateStyle: 'long' }).format(new Date(value))
+
+/**
+ * Data e hora. A timeline de um pedido costuma ter vários eventos no MESMO dia
+ * ("pagamento aprovado" e "em separação"), e sem a hora eles parecem
+ * simultâneos.
+ */
+export const formatDateTime = (value: string | Date): string =>
+  new Intl.DateTimeFormat(DEFAULT_LOCALE, { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(value),
+  )

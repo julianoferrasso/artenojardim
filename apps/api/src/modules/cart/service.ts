@@ -144,8 +144,22 @@ export const getCart = async (cartId: string): Promise<Cart> => {
 const touch = (cartId: string): Promise<unknown> =>
   prisma.cart.update({ where: { id: cartId }, data: { expiresAt: cartExpiry() } })
 
-/** Valida que a variante existe, é da loja, e está comprável antes de adicionar. */
-const assertPurchasable = async (variantId: string, quantity: number): Promise<void> => {
+type PurchasableCheck =
+  | { ok: true; available: number }
+  | { ok: false; reason: 'MISSING' | 'UNAVAILABLE' | 'OUT_OF_STOCK'; available: number }
+
+/**
+ * Responde se dá para comprar, sem decidir o que fazer a respeito.
+ *
+ * Existe separada de `assertPurchasable` porque "comprar de novo" precisa
+ * SABER que um item ficou de fora para reportá-lo, e não abortar a operação
+ * inteira — lançar é a política do fluxo normal de carrinho, não uma verdade
+ * sobre o estoque.
+ */
+const checkPurchasable = async (
+  variantId: string,
+  quantity: number,
+): Promise<PurchasableCheck> => {
   const variant = await prisma.productVariant.findFirst({
     where: { id: variantId, storeId: getActiveStoreId() },
     select: {
@@ -154,19 +168,31 @@ const assertPurchasable = async (variantId: string, quantity: number): Promise<v
       level: { select: { onHand: true, reserved: true } },
     },
   })
-  if (!variant) throw notFound('Produto')
+  if (!variant) return { ok: false, reason: 'MISSING', available: 0 }
 
   const active = variant.isActive && variant.product.status === 'ACTIVE' && !variant.product.deletedAt
-  if (!active) throw businessError(ERROR_CODES.NOT_FOUND, 'Produto indisponível', 422)
+  if (!active) return { ok: false, reason: 'UNAVAILABLE', available: 0 }
 
   const available = Math.max(0, (variant.level?.onHand ?? 0) - (variant.level?.reserved ?? 0))
-  if (available < quantity) {
-    throw businessError(
-      ERROR_CODES.INSUFFICIENT_STOCK,
-      available === 0 ? 'Produto esgotado' : `Restam apenas ${available} em estoque`,
-      422,
-    )
+  if (available < quantity) return { ok: false, reason: 'OUT_OF_STOCK', available }
+
+  return { ok: true, available }
+}
+
+/** Valida que a variante existe, é da loja, e está comprável antes de adicionar. */
+const assertPurchasable = async (variantId: string, quantity: number): Promise<void> => {
+  const check = await checkPurchasable(variantId, quantity)
+  if (check.ok) return
+
+  if (check.reason === 'MISSING') throw notFound('Produto')
+  if (check.reason === 'UNAVAILABLE') {
+    throw businessError(ERROR_CODES.NOT_FOUND, 'Produto indisponível', 422)
   }
+  throw businessError(
+    ERROR_CODES.INSUFFICIENT_STOCK,
+    check.available === 0 ? 'Produto esgotado' : `Restam apenas ${check.available} em estoque`,
+    422,
+  )
 }
 
 export const addItem = async (cartId: string, input: AddToCartInput): Promise<Cart> => {
@@ -187,6 +213,86 @@ export const addItem = async (cartId: string, input: AddToCartInput): Promise<Ca
   })
   await touch(cartId)
   return getCart(cartId)
+}
+
+export type BulkAddInput = { variantId: string; productName: string; quantity: number }
+
+export type BulkAddResult = {
+  added: { variantId: string; productName: string; quantity: number }[]
+  skipped: {
+    productName: string
+    reason: 'UNAVAILABLE' | 'OUT_OF_STOCK' | 'PARTIAL'
+    requested: number
+    added: number
+  }[]
+}
+
+/**
+ * Adiciona vários itens tolerando falha parcial. Usado por "comprar de novo".
+ *
+ * Onde há estoque para parte do pedido, leva a parte e reporta PARTIAL: quem
+ * comprou 3 velas e só encontra 1 prefere levar a que existe. Um único
+ * `getCart` no fim, porque recalcular o carrinho inteiro a cada item era o
+ * custo que fazia a alternativa (N chamadas do cliente) ser ruim.
+ */
+export const addItems = async (cartId: string, inputs: BulkAddInput[]): Promise<BulkAddResult> => {
+  const result: BulkAddResult = { added: [], skipped: [] }
+
+  for (const input of inputs) {
+    const existing = await prisma.cartItem.findUnique({
+      where: { cartId_variantId: { cartId, variantId: input.variantId } },
+      select: { quantity: true },
+    })
+    const alreadyInCart = existing?.quantity ?? 0
+    const check = await checkPurchasable(input.variantId, alreadyInCart + input.quantity)
+
+    if (!check.ok && (check.reason === 'MISSING' || check.reason === 'UNAVAILABLE')) {
+      result.skipped.push({
+        productName: input.productName,
+        reason: 'UNAVAILABLE',
+        requested: input.quantity,
+        added: 0,
+      })
+      continue
+    }
+
+    // Clampa no que existe: o disponível já desconta o que está no carrinho.
+    const room = check.ok ? input.quantity : Math.max(0, check.available - alreadyInCart)
+
+    if (room === 0) {
+      result.skipped.push({
+        productName: input.productName,
+        reason: 'OUT_OF_STOCK',
+        requested: input.quantity,
+        added: 0,
+      })
+      continue
+    }
+
+    await prisma.cartItem.upsert({
+      where: { cartId_variantId: { cartId, variantId: input.variantId } },
+      create: { cartId, variantId: input.variantId, quantity: room },
+      update: { quantity: alreadyInCart + room },
+    })
+
+    result.added.push({
+      variantId: input.variantId,
+      productName: input.productName,
+      quantity: room,
+    })
+
+    if (room < input.quantity) {
+      result.skipped.push({
+        productName: input.productName,
+        reason: 'PARTIAL',
+        requested: input.quantity,
+        added: room,
+      })
+    }
+  }
+
+  if (result.added.length > 0) await touch(cartId)
+  return result
 }
 
 export const updateItem = async (

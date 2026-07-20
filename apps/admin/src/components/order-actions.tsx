@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Ban, RotateCcw } from 'lucide-react'
+import { ChevronDown, Ban, RotateCcw, Truck } from 'lucide-react'
 import {
   FULFILLMENT_TRANSITIONS,
   canTransitionFulfillment,
@@ -28,7 +28,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useUpdateFulfillment, useCancelOrder, useRefundOrder } from '@/lib/orders'
+import { EVENTS } from '@ecommerce/shared/constants'
+import { useUpdateFulfillment, useCancelOrder, useRefundOrder, useAddOrderEvent } from '@/lib/orders'
 import { FULFILLMENT_LABEL } from '@/lib/order-labels'
 import { formatBRL } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
@@ -44,13 +45,16 @@ import { ApiError } from '@/lib/api'
 export const OrderActions = ({ order }: { order: AdminOrder }) => {
   const [cancelOpen, setCancelOpen] = useState(false)
   const [refundOpen, setRefundOpen] = useState(false)
+  const [shipOpen, setShipOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [refundValue, setRefundValue] = useState('')
+  const [trackingCode, setTrackingCode] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const fulfill = useUpdateFulfillment(order.id)
   const cancel = useCancelOrder(order.id)
   const refund = useRefundOrder(order.id)
+  const addEvent = useAddOrderEvent(order.id)
 
   const ctx = { paymentStatus: order.paymentStatus, canceled: !!order.canceledAt }
   const allowed = FULFILLMENT_TRANSITIONS[order.fulfillmentStatus].filter((to) =>
@@ -67,7 +71,43 @@ export const OrderActions = ({ order }: { order: AdminOrder }) => {
     }
   }
 
-  const move = (to: FulfillmentStatus) => void run(() => fulfill.mutateAsync({ fulfillmentStatus: to }))
+  /**
+   * SHIPPED abre o diálogo de rastreio antes de gravar: é o único momento em
+   * que o operador tem o código na mão (acabou de despachar). Pedir depois
+   * significa não pedir — e o cliente fica sem rastreio na conta dele.
+   */
+  const move = (to: FulfillmentStatus) => {
+    if (to === 'SHIPPED') {
+      setTrackingCode('')
+      setError(null)
+      setShipOpen(true)
+      return
+    }
+    void run(() => fulfill.mutateAsync({ fulfillmentStatus: to }))
+  }
+
+  const submitShip = () => {
+    const code = trackingCode.trim()
+    void run(
+      () =>
+        fulfill.mutateAsync({
+          fulfillmentStatus: 'SHIPPED',
+          // Rastreio é opcional: nem toda entrega tem código, e travar a
+          // expedição por causa disso pararia o depósito.
+          ...(code ? { trackingCode: code } : {}),
+        }),
+      () => setShipOpen(false),
+    )
+  }
+
+  /** Não é um FulfillmentStatus — só um marco da timeline (ver EVENTS.order). */
+  const markOutForDelivery = () =>
+    void run(() =>
+      addEvent.mutateAsync({
+        type: EVENTS.order.outForDelivery,
+        description: 'Pedido saiu para entrega',
+      }),
+    )
 
   const openRefund = () => {
     setRefundValue((order.refundableAmount / 100).toFixed(2))
@@ -114,6 +154,19 @@ export const OrderActions = ({ order }: { order: AdminOrder }) => {
           </Button>
         )}
 
+        {/* Só faz sentido depois que o pacote saiu e antes de ser entregue. */}
+        {order.fulfillmentStatus === 'SHIPPED' && !order.canceledAt && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={addEvent.isPending}
+            onClick={markOutForDelivery}
+          >
+            <Truck className="size-4" />
+            Saiu para entrega
+          </Button>
+        )}
+
         {order.refundableAmount > 0 && (
           <Button size="sm" variant="outline" onClick={openRefund}>
             <RotateCcw className="size-4" />
@@ -129,7 +182,47 @@ export const OrderActions = ({ order }: { order: AdminOrder }) => {
         </p>
       )}
 
-      {error && !cancelOpen && !refundOpen && <p className="text-xs text-destructive">{error}</p>}
+      {error && !cancelOpen && !refundOpen && !shipOpen && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+
+      <AlertDialog open={shipOpen} onOpenChange={setShipOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Marcar o pedido #{order.number} como enviado</AlertDialogTitle>
+            <AlertDialogDescription>
+              O código de rastreio aparece na área do cliente assim que for informado. Pode ficar em
+              branco se esta entrega não tiver rastreio.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="tracking-code">Código de rastreio</Label>
+            <Input
+              id="tracking-code"
+              value={trackingCode}
+              onChange={(e) => setTrackingCode(e.target.value)}
+              placeholder="Ex.: BR123456789BR"
+              maxLength={60}
+              autoComplete="off"
+            />
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={fulfill.isPending}
+              onClick={(e: React.MouseEvent) => {
+                e.preventDefault()
+                submitShip()
+              }}
+            >
+              {fulfill.isPending ? 'Salvando…' : 'Marcar como enviado'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <AlertDialogContent>

@@ -120,3 +120,41 @@ export const shippingQuoteLimiter = build({ name: 'shipping-quote', windowMs: 60
 
 /** Confirmar pedido cria Order + reserva estoque: limita abuso por IP. */
 export const checkoutConfirmLimiter = build({ name: 'checkout-confirm', windowMs: 60 * 60_000, max: 20 })
+
+/**
+ * Ações do cliente sobre o próprio pedido.
+ *
+ * Escopo por CLIENTE e não por IP: estas rotas estão atrás de
+ * `authenticateCustomer`, e limitar por IP faria uma casa com três pessoas no
+ * mesmo NAT — ou um escritório inteiro — dividir a mesma cota.
+ */
+/**
+ * Sem fallback para req.ip de propósito: estas rotas ficam atrás do
+ * `authenticateCustomer` no router, então `req.auth.sub` sempre existe. Um
+ * fallback por IP aqui seria código morto — e faria o express-rate-limit
+ * reclamar de bypass por IPv6 sobre um caminho que não é alcançável.
+ */
+const byCustomer = (req: Request): string => req.auth?.sub ?? 'anonymous'
+
+/** Mensagem de suporte cria evento no pedido: o limite é contra flood na timeline. */
+export const orderSupportLimiter = build({
+  name: 'order-support',
+  windowMs: 60 * 60_000,
+  max: 5,
+  keyBy: byCustomer,
+})
+
+export const orderCancelLimiter = build({
+  name: 'order-cancel',
+  windowMs: 60 * 60_000,
+  max: 10,
+  keyBy: byCustomer,
+})
+
+/** Comprar de novo escreve no carrinho e lê estoque item a item. */
+export const orderReorderLimiter = build({
+  name: 'order-reorder',
+  windowMs: 60 * 60_000,
+  max: 30,
+  keyBy: byCustomer,
+})

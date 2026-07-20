@@ -10,6 +10,11 @@ export * from './cart.js'
 export * from './address.js'
 export * from './shipping.js'
 export * from './orders.js'
+// Antes de admin-orders: é de lá que a situação saiu, e o barrel não pode
+// exportar o mesmo nome duas vezes.
+export * from './order-situation.js'
+export * from './order-attachments.js'
+export * from './customer-orders.js'
 export * from './admin-orders.js'
 export * from './checkout.js'
 export * from './payment.js'

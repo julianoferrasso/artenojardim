@@ -5,7 +5,7 @@ import type {
   CancelOrderInput,
   RefundOrderInput,
   InternalNoteInput,
-  AddOrderEventInput,
+  AddOrderEventData,
 } from '@ecommerce/shared/contracts'
 import { ok, paginated } from '../../shared/http.js'
 import * as service from './service.js'
@@ -45,5 +45,5 @@ export const noteController = async (req: Request, res: Response): Promise<void>
 }
 
 export const addEventController = async (req: Request, res: Response): Promise<void> => {
-  ok(res, await service.addOrderEvent(id(req), req.body as AddOrderEventInput, auditContext(req)))
+  ok(res, await service.addOrderEvent(id(req), req.body as AddOrderEventData, auditContext(req)))
 }

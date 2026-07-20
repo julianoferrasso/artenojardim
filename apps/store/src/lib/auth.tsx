@@ -1,51 +1,30 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { ROUTES } from '@ecommerce/shared/constants'
 import type { AuthCustomer, LoginInput, RegisterInput } from '@ecommerce/shared/contracts'
 import { ApiError } from './api'
+import { clientFetch as call, setAccessToken } from './client'
 
 /**
  * Auth de cliente no browser. Como o admin: access token em MEMÓRIA (nunca
  * localStorage — XSS lê localStorage), refresh em cookie HttpOnly. Um F5 perde o
  * access token; o bootstrap chama /refresh no boot e reconstrói a sessão.
  *
- * NÃO usa o apiFetch de catalog (server-only). Aqui é tudo client-side, batendo
- * no domínio público da API com credentials para o cookie viajar.
+ * O token e o fetch autenticado moram em `./client`. Este arquivo cuida só da
+ * SESSÃO — quem está logado, como entra e como sai.
  */
 
-let accessToken: string | undefined
-
-/** O carrinho (outro contexto) precisa do token para anexar o Bearer. */
-export const getAccessToken = (): string | undefined => accessToken
-
-const apiBase = (): string => {
-  const url = process.env.NEXT_PUBLIC_API_URL
-  if (!url) throw new Error('NEXT_PUBLIC_API_URL não configurada')
-  return url
-}
-
-const call = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
-  const res = await fetch(`${apiBase()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...init.headers,
-    },
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    throw new ApiError(
-      body?.error?.code ?? 'INTERNAL_ERROR',
-      body?.error?.message ?? `Erro ${res.status}`,
-      res.status,
-    )
-  }
-  if (res.status === 204) return undefined as T
-  return ((await res.json()) as { data: T }).data
-}
+/**
+ * Re-export: `cart.tsx`, `addresses.ts` e `checkout.ts` ainda têm o próprio
+ * `call()` e importam o token daqui.
+ *
+ * PENDÊNCIA: enquanto não migrarem para `./client`, esses três NÃO ganham a
+ * renovação silenciosa — o carrinho volta a falhar com 401 numa aba aberta há
+ * mais de 15 minutos. É trocar três blocos de ~20 linhas por um import.
+ */
+export { getAccessToken } from './client'
 
 type SessionResp = { customer: AuthCustomer; tokens: { accessToken: string } }
 
@@ -62,6 +41,7 @@ const AuthContext = createContext<AuthState | null>(null)
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [customer, setCustomer] = useState<AuthCustomer | null>(null)
   const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     let cancelled = false
@@ -69,7 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
         const data = await call<SessionResp>(ROUTES.auth.refresh, { method: 'POST' })
         if (cancelled) return
-        accessToken = data.tokens.accessToken
+        setAccessToken(data.tokens.accessToken)
         const me = await call<{ customer: AuthCustomer }>(ROUTES.auth.me)
         if (!cancelled) setCustomer(me.customer)
       } catch {
@@ -84,7 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [])
 
   const apply = (data: SessionResp) => {
-    accessToken = data.tokens.accessToken
+    setAccessToken(data.tokens.accessToken)
     setCustomer(data.customer)
   }
 
@@ -104,8 +84,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       /* estado local limpa de qualquer forma */
     }
-    accessToken = undefined
+    setAccessToken(undefined)
     setCustomer(null)
+    // Sem isto, os pedidos do cliente anterior ficariam no cache e apareceriam
+    // por um instante para quem logasse em seguida no mesmo navegador.
+    queryClient.clear()
   }
 
   return (

@@ -1,25 +1,25 @@
 import type { OrderSituation, OrderAddress } from '@ecommerce/shared/contracts'
-import type { PaymentStatus, FulfillmentStatus, PaymentMethod } from '@ecommerce/shared/constants'
 
 /**
- * Rótulos e cores da tela de pedidos. Puro, sem hook — importável de página, de
- * componente e da folha de impressão.
+ * Cores e formatação da tela de pedidos. Puro, sem hook — importável de página,
+ * de componente e da folha de impressão.
+ *
+ * Os RÓTULOS (SITUATION_LABEL, PAYMENT_STATUS_LABEL, …) moram em
+ * `@ecommerce/shared/constants` desde que a área do cliente nasceu: o mesmo
+ * pedido precisa ter o mesmo nome nas duas telas. Aqui ficam só as classes, que
+ * são apresentação e podem divergir entre painel e loja.
  *
  * As classes usam token semântico (bg-success/15), nunca hex: é o que faz a cor
  * do chip "Entregue" acompanhar o tema em vez de virar um verde solto.
  */
 
-export const SITUATION_LABEL: Record<OrderSituation, string> = {
-  AWAITING_PAYMENT: 'Aguardando Pagamento',
-  PAYMENT_FAILED: 'Pagamento Recusado',
-  PAID: 'Pago',
-  PICKING: 'Em Separação',
-  SHIPPED: 'Enviado',
-  DELIVERED: 'Entregue',
-  RETURNED: 'Devolvido',
-  CANCELED: 'Cancelado',
-  REFUNDED: 'Reembolsado',
-}
+export {
+  SITUATION_LABEL,
+  SITUATION_ORDER,
+  PAYMENT_STATUS_LABEL,
+  FULFILLMENT_LABEL,
+  PAYMENT_METHOD_LABEL,
+} from '@ecommerce/shared/constants'
 
 export const SITUATION_CLASS: Record<OrderSituation, string> = {
   AWAITING_PAYMENT: 'bg-warning/15 text-warning-foreground border-warning/30',
@@ -31,43 +31,6 @@ export const SITUATION_CLASS: Record<OrderSituation, string> = {
   RETURNED: 'bg-muted text-muted-foreground border-border',
   CANCELED: 'bg-muted text-muted-foreground border-border',
   REFUNDED: 'bg-destructive/10 text-destructive border-destructive/30',
-}
-
-/** Ordem do filtro = fluxo operacional, não alfabética. */
-export const SITUATION_ORDER: OrderSituation[] = [
-  'AWAITING_PAYMENT',
-  'PAID',
-  'PICKING',
-  'SHIPPED',
-  'DELIVERED',
-  'PAYMENT_FAILED',
-  'RETURNED',
-  'CANCELED',
-  'REFUNDED',
-]
-
-export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
-  PENDING: 'Aguardando pagamento',
-  PROCESSING: 'Processando',
-  PAID: 'Pago',
-  FAILED: 'Recusado',
-  REFUNDED: 'Reembolsado',
-  PARTIALLY_REFUNDED: 'Parcialmente reembolsado',
-}
-
-export const FULFILLMENT_LABEL: Record<FulfillmentStatus, string> = {
-  UNFULFILLED: 'Aguardando separação',
-  PICKING: 'Em separação',
-  READY_TO_SHIP: 'Pronto para envio',
-  SHIPPED: 'Enviado',
-  DELIVERED: 'Entregue',
-  RETURNED: 'Devolvido',
-}
-
-export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
-  CARD: 'Cartão de crédito',
-  PIX: 'Pix',
-  BOLETO: 'Boleto',
 }
 
 export const SORT_OPTIONS = [

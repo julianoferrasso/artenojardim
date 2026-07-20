@@ -17,10 +17,20 @@ export const EVENTS = {
     picking: 'order.picking',
     readyToShip: 'order.ready_to_ship',
     shipped: 'order.shipped',
+    /**
+     * Não é um FulfillmentStatus: a transportadora sai para entregar e volta
+     * várias vezes, e criar um estado para isso poluiria a máquina de expedição.
+     * Existe só como marco da timeline, postado pelo staff.
+     */
+    outForDelivery: 'order.out_for_delivery',
     delivered: 'order.delivered',
     returned: 'order.returned',
     refunded: 'order.refunded',
     refundRequested: 'order.refund_requested',
+    /** Pedido de cancelamento feito PELO CLIENTE. Não muda estado — o staff decide. */
+    cancelRequested: 'order.cancel_requested',
+    /** Mensagem que o cliente escreveu na área da conta. */
+    supportMessage: 'order.support_message',
     noteAdded: 'order.note_added',
     paymentFailed: 'order.payment_failed',
   },

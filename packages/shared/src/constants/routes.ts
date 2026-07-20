@@ -79,8 +79,10 @@ export const ROUTES = {
     status: (id: string) => `${base}/orders/${id}/status`,
     /** Cria/reusa o PaymentIntent e devolve o clientSecret (Payment Element). */
     payment: (id: string) => `${base}/orders/${id}/payment`,
-    events: (id: string) => `${base}/orders/${id}/events`,
-    fulfillment: (id: string) => `${base}/orders/${id}/fulfillment`,
+    /** Cancela de verdade ou registra a solicitação — quem decide é o service. */
+    cancel: (id: string) => `${base}/orders/${id}/cancel`,
+    support: (id: string) => `${base}/orders/${id}/support`,
+    reorder: (id: string) => `${base}/orders/${id}/reorder`,
   },
 
   /**

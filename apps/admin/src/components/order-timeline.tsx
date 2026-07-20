@@ -5,7 +5,7 @@ import type { AdminOrder } from '@ecommerce/shared/contracts'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useAddOrderEvent } from '@/lib/orders'
-import { formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
 
 /**
@@ -34,21 +34,36 @@ export const OrderTimeline = ({ order }: { order: AdminOrder }) => {
       <h2 className="text-sm font-semibold">Histórico</h2>
 
       <ol className="mt-4 flex flex-col gap-4">
-        {order.events.map((event) => (
-          <li key={event.id} className="flex gap-3">
-            <div className="flex flex-col items-center pt-1">
-              <span className="size-2 shrink-0 rounded-full bg-primary" />
-              <span className="mt-1 w-px flex-1 bg-border" />
-            </div>
-            <div className="min-w-0 flex-1 pb-1">
-              <p className="text-sm">{event.description}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatDate(event.createdAt)}
-                {event.userName ? ` · ${event.userName}` : ' · sistema'}
-              </p>
-            </div>
-          </li>
-        ))}
+        {order.events.map((event) => {
+          // Mensagem de suporte e pedido de cancelamento são escritos PELO
+          // CLIENTE. Sem esta distinção apareceriam como "sistema", e a equipe
+          // leria um desabafo do comprador como se fosse log automático.
+          const byCustomer = event.metadata?.['by'] === 'customer'
+          return (
+            <li key={event.id} className="flex gap-3">
+              <div className="flex flex-col items-center pt-1">
+                <span
+                  className={cn(
+                    'size-2 shrink-0 rounded-full',
+                    byCustomer ? 'bg-warning' : 'bg-primary',
+                  )}
+                />
+                <span className="mt-1 w-px flex-1 bg-border" />
+              </div>
+              <div className="min-w-0 flex-1 pb-1">
+                <p className="text-sm">{event.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatDate(event.createdAt)}
+                  {byCustomer
+                    ? ' · cliente'
+                    : event.userName
+                      ? ` · ${event.userName}`
+                      : ' · sistema'}
+                </p>
+              </div>
+            </li>
+          )
+        })}
         {order.events.length === 0 && (
           <li className="text-sm text-muted-foreground">Nenhum evento registrado.</li>
         )}
