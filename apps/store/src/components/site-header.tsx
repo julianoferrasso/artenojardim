@@ -79,6 +79,16 @@ export const SiteHeader = ({
       {topLevel.length > 0 && (
         <nav aria-label="Categorias" className="hidden border-t border-border/60 md:block">
           <ul className="mx-auto flex max-w-6xl items-center justify-center gap-1 px-4">
+            {/* A home É a vitrine completa — não existe /produtos separado. */}
+            <li>
+              <Link
+                href="/"
+                className="flex items-center px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Todos os produtos
+              </Link>
+            </li>
+
             {topLevel.map((cat) => {
               const subcategories = cat.children.filter((c) => c.isActive)
 

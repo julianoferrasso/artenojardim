@@ -57,8 +57,15 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
 
   const onSubmit = (values: CreateCategoryInput) => {
     setFormError(null)
-    // parentId vazio do <select> é string ''; normaliza para null (raiz).
-    const input = { ...values, parentId: values.parentId || null }
+    // Campos opcionais que nascem como string '' no DOM viram null aqui: o
+    // <select> de pai devolve '' na opção "Raiz", e o input hidden de imagem
+    // devolve '' quando nada foi enviado. Sem isto o '' viaja até o Prisma e
+    // vira violação de FK (nenhum registro tem id '').
+    const input = {
+      ...values,
+      parentId: values.parentId || null,
+      imageId: values.imageId || null,
+    }
 
     const onError = (e: unknown) =>
       setFormError(e instanceof ApiError ? e.message : 'Não foi possível salvar.')

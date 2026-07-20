@@ -4,7 +4,6 @@ import { HeartHandshake, RefreshCw, ShieldCheck, Truck } from 'lucide-react'
 import { listProducts, getCategoryTree } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
 import { SectionHeading } from '@/components/section-heading'
-import { NewsletterForm } from '@/components/newsletter-form'
 import { buttonVariants } from '@/components/ui/button'
 
 const BENEFITS = [
@@ -15,9 +14,10 @@ const BENEFITS = [
 ]
 
 /**
- * Home. Server Component com ISR (o revalidate vem do catalog). Mostra as
- * novidades (últimos produtos ACTIVE) e as categorias. SEO renderizado no
- * servidor — o Google vê o HTML completo, não um shell vazio.
+ * Home. Server Component com ISR (o revalidate vem do catalog). É a vitrine: o
+ * hero e, logo abaixo, as novidades. A navegação por categoria NÃO se repete
+ * aqui — ela vive na barra do header, que está em todas as páginas. SEO
+ * renderizado no servidor — o Google vê o HTML completo, não um shell vazio.
  */
 export default async function HomePage() {
   const [{ data: products }, categories] = await Promise.all([
@@ -25,8 +25,8 @@ export default async function HomePage() {
     getCategoryTree(),
   ])
 
-  const topCategories = categories.filter((c) => c.isActive).slice(0, 6)
-  const firstCategory = topCategories[0]
+  // Única categoria que a home usa: o CTA secundário do hero.
+  const firstCategory = categories.find((c) => c.isActive)
 
   return (
     <main>
@@ -47,11 +47,10 @@ export default async function HomePage() {
               Feito à mão · com carinho
             </p>
             <h1 className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Peças artesanais para aquecer a sua casa
+              Velas artesanais e cosmética natural
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground md:mx-0">
-              Velas e objetos únicos, escolhidos e produzidos um a um para deixar cada canto mais
-              acolhedor.
+              Rituais de autocuidado e bem estar. Produtos feitos com alma.
             </p>
             <div className="mt-8 flex flex-wrap justify-center gap-3 md:justify-start">
               <Link href="#novidades" className={buttonVariants({ size: 'lg' })}>
@@ -80,50 +79,6 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-
-      {topCategories.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 py-14">
-          <SectionHeading
-            title="Navegue por categoria"
-            subtitle="Encontre a peça certa para cada canto da casa."
-          />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {topCategories.map((cat) => (
-              <Link
-                key={cat.id}
-                href={`/categorias/${cat.slug}`}
-                className="group relative flex aspect-square flex-col justify-end overflow-hidden rounded-xl border border-border bg-secondary shadow-soft transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card"
-              >
-                {cat.imageUrl ? (
-                  <>
-                    <Image
-                      src={cat.imageUrl}
-                      alt=""
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <span
-                      aria-hidden
-                      className="absolute inset-0 bg-gradient-to-t from-foreground/70 via-foreground/10 to-transparent"
-                    />
-                    <span className="relative p-3 font-display text-lg font-semibold text-background">
-                      {cat.name}
-                    </span>
-                  </>
-                ) : (
-                  <span className="flex flex-1 flex-col items-center justify-center gap-2 p-3">
-                    <Image src="/logo-bird.png" alt="" width={48} height={48} className="size-12 opacity-70" />
-                    <span className="text-center font-display text-lg font-semibold text-secondary-foreground">
-                      {cat.name}
-                    </span>
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section id="novidades" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-14">
         <SectionHeading
@@ -159,19 +114,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/*<section className="mx-auto max-w-6xl px-4 pb-16 pt-2">
-        <div className="flex flex-col items-center gap-6 rounded-2xl border border-border bg-secondary/60 px-6 py-12 text-center">
-          <div>
-            <h2 className="font-display text-3xl font-semibold tracking-tight">
-              Fique por dentro das novidades
-            </h2>
-            <p className="mx-auto mt-2 max-w-md text-muted-foreground">
-              Receba lançamentos e promoções no seu e-mail. Sem spam, prometido.
-            </p>
-          </div>
-          <NewsletterForm className="max-w-md" />
-        </div>
-      </section>*/}
+      {/* Sem bloco de newsletter aqui: o footer já tem um, em todas as páginas. */}
     </main>
   )
 }

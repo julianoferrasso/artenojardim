@@ -83,6 +83,17 @@ export const MobileMenu = ({
                   Categorias
                 </p>
                 <ul className="flex flex-col">
+                  {/* A home É a vitrine completa — não existe /produtos separado. */}
+                  <li>
+                    <Link
+                      href="/"
+                      onClick={close}
+                      className="block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent"
+                    >
+                      Todos os produtos
+                    </Link>
+                  </li>
+
                   {categories.map((cat) =>
                     cat.children.filter((c) => c.isActive).length > 0 ? (
                       <li key={cat.id}>

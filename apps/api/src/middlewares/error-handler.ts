@@ -13,7 +13,7 @@ import { logger } from '../config/logger.js'
  * Erro inesperado → log com stack + requestId, e 500 genérico para o cliente.
  */
 
-/** P2002 = unique violation; P2025 = registro não encontrado. */
+/** P2002 = unique violation; P2025 = registro não encontrado; P2003 = FK inválida. */
 const fromPrisma = (err: Prisma.PrismaClientKnownRequestError) => {
   if (err.code === 'P2002') {
     const target = (err.meta?.['target'] as string[] | undefined)?.join(', ') ?? 'campo'
@@ -21,6 +21,17 @@ const fromPrisma = (err: Prisma.PrismaClientKnownRequestError) => {
   }
   if (err.code === 'P2025') {
     return appError(ERROR_CODES.NOT_FOUND, 'Registro não encontrado', 404)
+  }
+  // Apontar para um id que não existe é o cliente errando, não falha nossa. Sem
+  // este mapeamento a violação de FK caía no fallback e virava um 500 mudo —
+  // foi assim que "criar categoria sem imagem" chegou ao usuário como
+  // "Erro interno. Tente novamente.".
+  if (err.code === 'P2003') {
+    return appError(
+      ERROR_CODES.VALIDATION_ERROR,
+      'Referência inválida: o registro relacionado não existe',
+      422,
+    )
   }
   return undefined
 }

@@ -127,7 +127,10 @@ export const createCategory = async (
       slug,
       description: input.description ?? null,
       parentId: input.parentId ?? null,
-      imageId: input.imageId ?? null,
+      // `||` e não `??`: string vazia também precisa virar null. Um cliente que
+      // manda imageId: '' (input vazio) apontaria para um Upload inexistente, e
+      // o banco recusaria a FK — imagem é opcional, ausência é null.
+      imageId: input.imageId || null,
       position: input.position ?? 0,
       isActive: input.isActive ?? true,
       seoTitle: input.seoTitle ?? null,
