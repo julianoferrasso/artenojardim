@@ -1,16 +1,18 @@
 import Link from 'next/link'
-import { HeartHandshake, RefreshCw, ShieldCheck, Truck } from 'lucide-react'
+import { HeartHandshake, ShieldCheck, Truck } from 'lucide-react'
 import { listProducts, getCategoryTree, getStore } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
 import { StoreLogo } from '@/components/store-logo'
 import { SectionHeading } from '@/components/section-heading'
 import { buttonVariants } from '@/components/ui/button'
 
+// Sem selo de prazo de troca: um prazo escrito na vitrine vira expectativa do
+// cliente e argumento numa reclamação. A página institucional de trocas continua
+// no rodapé — o que não anunciamos é a promessa, não a política.
 const BENEFITS = [
   { icon: Truck, title: 'Enviamos para todo o Brasil', text: 'Frete calculado direto no produto.' },
   { icon: HeartHandshake, title: 'Feito à mão, um a um', text: 'Cada peça é única, produzida com carinho.' },
   { icon: ShieldCheck, title: 'Pagamento seguro', text: 'Processado pela Stripe, com criptografia.' },
-  { icon: RefreshCw, title: 'Troca fácil', text: 'Até 7 dias para trocar sem complicação.' },
 ]
 
 /**
@@ -100,7 +102,7 @@ export default async function HomePage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-10">
-        <div className="grid gap-8 rounded-2xl bg-muted px-6 py-10 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-8 rounded-2xl bg-muted px-6 py-10 sm:grid-cols-2 lg:grid-cols-3">
           {BENEFITS.map(({ icon: Icon, title, text }) => (
             <div key={title} className="flex flex-col items-center gap-3 text-center">
               <span className="flex size-12 items-center justify-center rounded-full bg-card shadow-soft">
