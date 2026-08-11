@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, type CSSProperties } from 'react'
-import { useForm } from 'react-hook-form'
+import { useController, useForm, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   updateStoreThemeSchema,
@@ -43,6 +43,92 @@ const RADIUS_LABEL: Record<ThemeRadius, string> = {
   small: 'Suave',
   medium: 'Médio',
   large: 'Arredondado',
+}
+
+type ColorName = (typeof COLOR_FIELDS)[number]['name']
+
+const HEX = /^#[0-9a-fA-F]{6}$/
+
+const FIELD_CLASS =
+  'h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
+/**
+ * Uma cor: o seletor nativo e o campo hex, sempre mostrando a mesma coisa.
+ *
+ * ── Por que campo CONTROLADO e não dois register() ──────────────────────────
+ * Dois `register(name)` no mesmo campo NÃO funcionam: cada chamada devolve um
+ * `ref` próprio e o RHF guarda um só por campo (o array de refs existe apenas
+ * para radio/checkbox). O segundo input sobrescreve o primeiro, e como o RHF é
+ * não-controlado ele nunca reescreve o valor no DOM do outro — escolher a cor no
+ * seletor deixava o hex ao lado congelado. Foi exatamente esse o bug.
+ *
+ * O campo hex tem rascunho PRÓPRIO em vez de ler o valor do formulário: sem ele,
+ * apagar para reescrever seria impossível (o valor voltaria a cada tecla) e
+ * digitar "#2d6" — um meio-caminho legítimo — seria rejeitado. O formulário só
+ * recebe o valor quando ele fica válido; sair do campo com lixo restaura a
+ * última cor boa.
+ */
+const ColorField = ({
+  name,
+  label,
+  hint,
+  control,
+  error,
+}: {
+  name: ColorName
+  label: string
+  hint: string
+  control: Control<UpdateStoreThemeInput>
+  error?: string
+}) => {
+  const { field } = useController({ name, control })
+  const [draft, setDraft] = useState(field.value)
+
+  // Acompanha a cor escolhida no SELETOR (ou um reset do formulário). Depende do
+  // valor do formulário, nunca do rascunho: reagir ao rascunho corrigiria o texto
+  // no meio da digitação.
+  useEffect(() => setDraft(field.value), [field.value])
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {/* htmlFor aponta para o seletor: é o controle principal da cor. */}
+      <label htmlFor={name} className="text-sm font-medium">
+        {label}
+      </label>
+
+      <div className="flex items-center gap-2">
+        <input
+          id={name}
+          type="color"
+          value={field.value}
+          onChange={(e) => field.onChange(e.target.value)}
+          onBlur={field.onBlur}
+          className="size-10 shrink-0 cursor-pointer rounded-md border border-input bg-background p-1"
+        />
+
+        {/* O picker nativo não deixa COLAR um hex — daí o campo de texto. */}
+        <input
+          type="text"
+          aria-label={`${label} em hexadecimal`}
+          value={draft}
+          spellCheck={false}
+          onChange={(e) => {
+            const next = e.target.value
+            setDraft(next)
+            if (HEX.test(next)) field.onChange(next)
+          }}
+          onBlur={() => {
+            if (!HEX.test(draft)) setDraft(field.value)
+            field.onBlur()
+          }}
+          className={cn(FIELD_CLASS, 'w-full font-mono uppercase')}
+        />
+      </div>
+
+      <p className="text-xs text-muted-foreground">{hint}</p>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
 }
 
 /**
@@ -93,6 +179,7 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors },
   } = useForm<UpdateStoreThemeInput>({
     resolver: zodResolver(updateStoreThemeSchema),
@@ -125,9 +212,6 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
     })
   }
 
-  const field =
-    'h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
-
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="flex flex-col gap-8">
@@ -139,31 +223,14 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
 
           <div className="grid gap-4 sm:grid-cols-2">
             {COLOR_FIELDS.map(({ name, label, hint }) => (
-              <div key={name} className="flex flex-col gap-1.5">
-                <label htmlFor={name} className="text-sm font-medium">
-                  {label}
-                </label>
-                <div className="flex items-center gap-2">
-                  {/* O picker nativo não deixa COLAR um hex — daí o campo de texto ao lado. */}
-                  <input
-                    id={name}
-                    type="color"
-                    {...register(name)}
-                    className="size-10 shrink-0 cursor-pointer rounded-md border border-input bg-background p-1"
-                  />
-                  <input
-                    type="text"
-                    aria-label={`${label} em hexadecimal`}
-                    {...register(name)}
-                    spellCheck={false}
-                    className={cn(field, 'w-full font-mono uppercase')}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">{hint}</p>
-                {errors[name] && (
-                  <p className="text-xs text-destructive">{errors[name]?.message}</p>
-                )}
-              </div>
+              <ColorField
+                key={name}
+                name={name}
+                label={label}
+                hint={hint}
+                control={control}
+                error={errors[name]?.message}
+              />
             ))}
           </div>
 
