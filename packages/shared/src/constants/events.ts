@@ -82,6 +82,10 @@ export const EVENTS = {
     labelRequested: 'shipping.label.requested',
     trackingSync: 'shipping.tracking.sync',
   },
+  store: {
+    /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */
+    themeUpdated: 'store.theme_updated',
+  },
 } as const
 
 /**

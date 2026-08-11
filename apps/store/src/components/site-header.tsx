@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronDown, Search } from 'lucide-react'
 import type { CategoryTreeNode } from '@ecommerce/shared/contracts'
@@ -6,6 +5,7 @@ import { AccountNav } from './account-nav'
 import { CartBadge } from './cart-badge'
 import { FavoritesBadge } from './favorites-badge'
 import { MobileMenu } from './mobile-menu'
+import { StoreLogo } from './store-logo'
 
 /**
  * Cabeçalho da loja. Server Component: as categorias vêm da API no servidor e
@@ -15,9 +15,11 @@ import { MobileMenu } from './mobile-menu'
  */
 export const SiteHeader = ({
   storeName,
+  logoUrl,
   categories,
 }: {
   storeName: string
+  logoUrl: string | null
   categories: CategoryTreeNode[]
 }) => {
   const topLevel = categories.filter((c) => c.isActive)
@@ -26,14 +28,13 @@ export const SiteHeader = ({
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="mx-auto max-w-6xl px-4">
         <div className="flex items-center gap-2 py-3 md:gap-6">
-          <MobileMenu storeName={storeName} categories={topLevel} />
+          <MobileMenu storeName={storeName} logoUrl={logoUrl} categories={topLevel} />
 
           <Link href="/" className="flex shrink-0 items-center gap-2.5">
-            <Image
-              src="/logo-bird.png"
+            <StoreLogo
+              src={logoUrl}
               alt=""
-              width={40}
-              height={40}
+              size={40}
               priority
               className="size-9 md:size-10"
             />

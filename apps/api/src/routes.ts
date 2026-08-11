@@ -16,7 +16,7 @@ import { adminOrderRoutes } from './modules/admin-orders/routes.js'
 import { adminUserRoutes } from './modules/admin-users/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
-import { storeRoutes } from './modules/store/routes.js'
+import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
 import { newsletterRoutes } from './modules/newsletter/routes.js'
 
 /**
@@ -48,6 +48,8 @@ apiRoutes.use('/orders', orderRoutes)
 apiRoutes.use('/admin/orders', adminOrderRoutes)
 // Gestão de staff. O router inteiro exige cargo mínimo ADMIN.
 apiRoutes.use('/admin/users', adminUserRoutes)
+// Aparência da loja. Também exige ADMIN — ver o comentário no router.
+apiRoutes.use('/admin/store', adminStoreRoutes)
 apiRoutes.use('/product-views', productViewRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
 apiRoutes.use('/store', storeRoutes)

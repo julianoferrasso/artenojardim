@@ -1,23 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loginSchema, registerSchema, type LoginInput, type RegisterInput } from '@ecommerce/shared/contracts'
 import { useAuth, authErrorMessage } from '@/lib/auth'
+import { useBrandLogo } from '@/components/brand-logo-provider'
+import { StoreLogo } from '@/components/store-logo'
 import { cn } from '@/lib/utils'
 
 type Mode = 'login' | 'register'
 
 export default function EntrarPage() {
   const [mode, setMode] = useState<Mode>('login')
+  const logoUrl = useBrandLogo()
 
   return (
     <main className="mx-auto max-w-sm px-4 py-12">
       <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <Image src="/logo-bird.png" alt="" width={64} height={64} className="size-16" />
+        <StoreLogo src={logoUrl} alt="" size={64} className="size-16" />
         <h1 className="font-display text-2xl font-semibold tracking-tight">
           {mode === 'login' ? 'Que bom te ver de novo' : 'Crie a sua conta'}
         </h1>

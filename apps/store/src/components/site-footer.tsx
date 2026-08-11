@@ -1,8 +1,8 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { CreditCard, Mail, Phone, QrCode, ShieldCheck } from 'lucide-react'
 import type { PublicStore } from '@ecommerce/shared/contracts'
 import { NewsletterForm } from './newsletter-form'
+import { StoreLogo } from './store-logo'
 
 // Ícones de marca saíram do lucide (deprecados) — SVG inline com o mesmo traço.
 const InstagramIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -45,7 +45,13 @@ const HELP_LINKS = [
  * Rodapé da loja. Server Component: tudo aqui é estático por request — a única
  * ilha client é o formulário de newsletter.
  */
-export const SiteFooter = ({ store }: { store: PublicStore | null }) => {
+export const SiteFooter = ({
+  store,
+  logoUrl,
+}: {
+  store: PublicStore | null
+  logoUrl: string | null
+}) => {
   const storeName = store?.name ?? 'Arte no Jardim'
   const year = new Date().getFullYear()
 
@@ -70,11 +76,10 @@ export const SiteFooter = ({ store }: { store: PublicStore | null }) => {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-center gap-3">
-            <Image
-              src="/18521.jpg"
+            <StoreLogo
+              src={logoUrl}
               alt={`Logo ${storeName}`}
-              width={56}
-              height={56}
+              size={56}
               className="size-14 rounded-full"
             />
             <div>

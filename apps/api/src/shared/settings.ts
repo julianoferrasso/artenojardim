@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { publicFlagsSchema, type PublicFlags } from '@ecommerce/shared/contracts'
+import {
+  publicFlagsSchema,
+  storeThemeSchema,
+  DEFAULT_STORE_THEME,
+  type PublicFlags,
+} from '@ecommerce/shared/contracts'
 import { prisma } from '../config/prisma.js'
 import { getActiveStoreId } from './store-context.js'
 
@@ -16,6 +21,15 @@ export const SETTING_SCHEMAS = {
   feature_flags: {
     schema: publicFlagsSchema,
     default: { reviews: false, wishlist: false, giftCards: false } satisfies PublicFlags,
+  },
+  /**
+   * Aparência da loja: cores da marca, raio e logo. O default é exatamente o
+   * que está fixo no globals.css, então "nunca configurado" renderiza a loja
+   * idêntica ao que já está no ar.
+   */
+  theme: {
+    schema: storeThemeSchema,
+    default: DEFAULT_STORE_THEME,
   },
   /** TTL da reserva de estoque por método. Boleto compensa em até 3 dias úteis. */
   reservation_ttl_minutes: {

@@ -1,8 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
-
 /*
   Design tokens da loja.
 
@@ -10,10 +8,16 @@
   chamado "verde-musgo" é um valor fixo com passo extra, e mente para sempre no
   dia em que a marca virar azul. --primary sobrevive à mudança.
 
-  ── Fase 4 (temas) ─────────────────────────────────────────────────────────────
-  A loja lê Store.themeJson e injeta um <style> sobrescrevendo estas variáveis.
-  São ~10 linhas, porque TODO o CSS já lê daqui. É o retorno de ter usado tokens
-  desde o dia um, mesmo com um tema só.
+  ── Estes valores são o DEFAULT, não a palavra final ──────────────────────────
+  O painel (Aparência) grava o tema em Setting('theme'), e components/theme-style.tsx
+  injeta um <style> que sobrescreve as variáveis abaixo no servidor. Enquanto
+  ninguém configurar nada, vale exatamente o que está aqui.
+
+  Só primary, secondary, accent, background e --radius são configuráveis. Os
+  -foreground, card, muted, border e input são DERIVADOS por contraste em
+  theme-style.tsx: cor de texto escolhida à mão é botão ilegível esperando
+  acontecer. destructive/sale/warning/success ficam de fora porque são semântica
+  universal, não identidade de marca.
 
   Nunca escreva bg-[#3a5f2b] ou p-[17px]. Sempre bg-primary, p-4, rounded-lg.
 */
@@ -62,44 +66,16 @@
   --ring: oklch(0.56 0.11 30);
 }
 
-.dark {
-  --background: oklch(0.215 0.018 40);
-  --foreground: oklch(0.955 0.012 75);
+/*
+  Não existe bloco .dark aqui, e a ausência é intencional: a loja nunca teve
+  toggle de tema escuro, e nada no código jamais adicionou a classe. Eram 38
+  linhas que ninguém executava — pior que mortas, porque sugeriam que o tema do
+  painel precisaria manter duas paletas em dia.
 
-  --card: oklch(0.26 0.02 40);
-  --card-foreground: oklch(0.955 0.012 75);
-
-  --popover: oklch(0.26 0.02 40);
-  --popover-foreground: oklch(0.955 0.012 75);
-
-  --primary: oklch(0.74 0.085 30);
-  --primary-foreground: oklch(0.24 0.03 35);
-
-  --secondary: oklch(0.3 0.025 35);
-  --secondary-foreground: oklch(0.94 0.02 60);
-
-  --muted: oklch(0.29 0.02 40);
-  --muted-foreground: oklch(0.72 0.025 55);
-
-  --accent: oklch(0.32 0.03 40);
-  --accent-foreground: oklch(0.94 0.02 60);
-
-  --destructive: oklch(0.66 0.17 25);
-  --destructive-foreground: oklch(0.215 0.018 40);
-
-  --sale: oklch(0.68 0.16 25);
-  --sale-foreground: oklch(0.215 0.018 40);
-
-  --warning: oklch(0.82 0.13 80);
-  --warning-foreground: oklch(0.215 0.018 40);
-
-  --success: oklch(0.7 0.1 150);
-  --success-foreground: oklch(0.215 0.018 40);
-
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.74 0.085 30);
-}
+  Quando o dark mode nascer, ele deve DERIVAR do tema configurado (inverter o L,
+  preservar C e H) em theme-style.tsx, e não voltar como valores fixos — senão a
+  loja de marca verde ganha um modo escuro terracota.
+*/
 
 /* Mapeia os tokens para as classes do Tailwind: bg-primary, text-muted-foreground. */
 @theme inline {

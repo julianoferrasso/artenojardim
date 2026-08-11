@@ -1,8 +1,8 @@
-import Image from 'next/image'
 import Link from 'next/link'
 import { HeartHandshake, RefreshCw, ShieldCheck, Truck } from 'lucide-react'
-import { listProducts, getCategoryTree } from '@/lib/catalog'
+import { listProducts, getCategoryTree, getStore } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
+import { StoreLogo } from '@/components/store-logo'
 import { SectionHeading } from '@/components/section-heading'
 import { buttonVariants } from '@/components/ui/button'
 
@@ -20,9 +20,11 @@ const BENEFITS = [
  * renderizado no servidor — o Google vê o HTML completo, não um shell vazio.
  */
 export default async function HomePage() {
-  const [{ data: products }, categories] = await Promise.all([
+  // getStore() também roda no layout; o cache de request do Next deduplica.
+  const [{ data: products }, categories, store] = await Promise.all([
     listProducts({}),
     getCategoryTree(),
+    getStore().catch(() => null),
   ])
 
   // Única categoria que a home usa: o CTA secundário do hero.
@@ -68,11 +70,10 @@ export default async function HomePage() {
           </div>
 
           <div className="hidden justify-center md:flex animate-in fade-in zoom-in-95 duration-1000">
-            <Image
-              src="/logo-bird.png"
+            <StoreLogo
+              src={store?.theme?.logoUrl ?? null}
               alt=""
-              width={320}
-              height={320}
+              size={320}
               priority
               className="size-64 opacity-90 drop-shadow-sm lg:size-80"
             />

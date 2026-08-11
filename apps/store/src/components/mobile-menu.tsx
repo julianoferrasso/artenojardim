@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronDown, Heart, Menu, User, X } from 'lucide-react'
 import type { CategoryTreeNode } from '@ecommerce/shared/contracts'
 import { useBodyScrollLock, useEscapeKey, useFocusTrap } from '@/lib/overlay'
+import { StoreLogo } from './store-logo'
 
 /**
  * Menu mobile em drawer, mesmo padrão de overlay do minicarrinho (portal +
@@ -15,9 +15,12 @@ import { useBodyScrollLock, useEscapeKey, useFocusTrap } from '@/lib/overlay'
  */
 export const MobileMenu = ({
   storeName,
+  logoUrl,
   categories,
 }: {
   storeName: string
+  /** Vem do header (server) por prop: é string, serializa sem problema. */
+  logoUrl: string | null
   categories: CategoryTreeNode[]
 }) => {
   const [isOpen, setIsOpen] = useState(false)
@@ -63,7 +66,7 @@ export const MobileMenu = ({
             >
               <header className="flex items-center justify-between border-b border-border p-4">
                 <Link href="/" onClick={close} className="flex items-center gap-2">
-                  <Image src="/logo-bird.png" alt="" width={32} height={32} className="size-8" />
+                  <StoreLogo src={logoUrl} alt="" size={32} className="size-8" />
                   <span className="font-display text-lg font-semibold tracking-tight">
                     {storeName}
                   </span>

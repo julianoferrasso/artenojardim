@@ -91,6 +91,9 @@ export const ROUTES = {
    * e uma rota esquecida vira vazamento de pedido alheio.
    */
   admin: {
+    /** Aparência da loja (cores, raio, logo). Atrás de requireMinRole('ADMIN'). */
+    storeTheme: `${base}/admin/store/theme`,
+
     orders: {
       list: `${base}/admin/orders`,
       detail: (id: string) => `${base}/admin/orders/${id}`,
