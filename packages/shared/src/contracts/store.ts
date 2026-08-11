@@ -50,6 +50,7 @@ export const THEME_RADIUS = ['none', 'small', 'medium', 'large'] as const
 export const themeRadiusSchema = z.enum(THEME_RADIUS)
 export type ThemeRadius = z.infer<typeof themeRadiusSchema>
 
+/** `medium` é 0.75rem porque esse era o --radius fixo da loja: o default não muda nada. */
 export const THEME_RADIUS_REM: Record<ThemeRadius, string> = {
   none: '0rem',
   small: '0.375rem',
@@ -90,7 +91,9 @@ export const DEFAULT_STORE_THEME: StoreTheme = {
   secondary: { l: 0.945, c: 0.025, h: 35 },
   accent: { l: 0.93, c: 0.032, h: 55 },
   background: { l: 0.985, c: 0.008, h: 75 },
-  radius: 'large',
+  // 'medium' = 0.75rem = o valor que já estava no globals.css. NÃO troque para
+  // 'large' achando que é "o mais bonito": o default existe para não mudar nada.
+  radius: 'medium',
   logoId: null,
 }
 
