@@ -176,7 +176,9 @@ export const ProductGallery = ({
                 aria-current={i === index}
                 className={cn(
                   'relative size-20 shrink-0 overflow-hidden rounded-lg border-2 bg-muted transition-colors',
-                  i === index ? 'border-primary' : 'border-transparent hover:border-border',
+                  // A borda é o ÚNICO sinal de qual miniatura está aberta, então
+                  // usa a tinta derivada: `border-primary` some com marca clara.
+                  i === index ? 'border-primary-ink' : 'border-transparent hover:border-border',
                 )}
               >
                 <ProductImage

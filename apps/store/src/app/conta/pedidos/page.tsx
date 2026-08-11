@@ -91,7 +91,7 @@ const OrdersList = () => {
               <button
                 type="button"
                 onClick={() => router.replace('/conta/pedidos', { scroll: false })}
-                className="mt-3 text-sm text-primary hover:underline"
+                className="mt-3 text-sm text-primary-ink hover:underline"
               >
                 Limpar filtros
               </button>

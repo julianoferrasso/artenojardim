@@ -329,7 +329,7 @@ export default function EnderecosPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{a.label || a.recipient}</span>
                     {a.isDefault && (
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary-ink">
                         Padrão
                       </span>
                     )}
@@ -345,7 +345,7 @@ export default function EnderecosPage() {
               </div>
               <div className="mt-3 flex gap-4 text-sm">
                 {!a.isDefault && (
-                  <button onClick={() => void makeDefault(a)} className="text-primary hover:underline">
+                  <button onClick={() => void makeDefault(a)} className="text-primary-ink hover:underline">
                     Tornar padrão
                   </button>
                 )}

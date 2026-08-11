@@ -57,7 +57,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
             ? 'Pedido não encontrado.'
             : 'Não foi possível carregar este pedido. Tente novamente.'}
         </p>
-        <Link href="/conta/pedidos" className="mt-4 inline-block text-sm text-primary hover:underline">
+        <Link href="/conta/pedidos" className="mt-4 inline-block text-sm text-primary-ink hover:underline">
           ← Voltar para meus pedidos
         </Link>
       </div>
@@ -156,7 +156,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
                     href={order.trackingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-primary hover:underline"
+                    className="text-xs text-primary-ink hover:underline"
                   >
                     Rastrear encomenda →
                   </a>
@@ -198,7 +198,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
                 href={order.invoiceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 flex items-center gap-1.5 text-xs text-primary hover:underline"
+                className="mt-3 flex items-center gap-1.5 text-xs text-primary-ink hover:underline"
               >
                 <FileText className="size-3.5" aria-hidden />
                 Ver nota fiscal

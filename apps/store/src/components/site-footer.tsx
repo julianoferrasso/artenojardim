@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { CreditCard, Mail, Phone, QrCode, ShieldCheck } from 'lucide-react'
 import type { PublicStore } from '@ecommerce/shared/contracts'
 import { NewsletterForm } from './newsletter-form'
+import { IconBadge } from './icon-badge'
 import { StoreLogo } from './store-logo'
 
 // Ícones de marca saíram do lucide (deprecados) — SVG inline com o mesmo traço.
@@ -53,6 +54,7 @@ export const SiteFooter = ({
   logoUrl: string | null
 }) => {
   const storeName = store?.name ?? 'Arte no Jardim'
+  const badgeStyle = store?.theme?.badgeStyle ?? 'filled'
   const year = new Date().getFullYear()
 
   return (
@@ -92,15 +94,10 @@ export const SiteFooter = ({
           </p>
           <div className="mt-4 flex gap-2">
             {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
-              <a
-                key={label}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={label}
-                className="flex size-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-              >
-                <Icon className="size-4" />
+              <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}>
+                <IconBadge style={badgeStyle} interactive className="size-9">
+                  <Icon className="size-4" />
+                </IconBadge>
               </a>
             ))}
           </div>
@@ -115,7 +112,7 @@ export const SiteFooter = ({
               <li key={label}>
                 <Link
                   href={href}
-                  className="text-sm text-muted-foreground transition-colors hover:text-primary"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {label}
                 </Link>
@@ -131,7 +128,7 @@ export const SiteFooter = ({
               <li key={label}>
                 <Link
                   href={href}
-                  className="text-sm text-muted-foreground transition-colors hover:text-primary"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {label}
                 </Link>
@@ -149,7 +146,7 @@ export const SiteFooter = ({
               <li>
                 <a
                   href={`mailto:${store.email}`}
-                  className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary"
+                  className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <Mail className="size-4 shrink-0" />
                   {store.email}
@@ -160,7 +157,7 @@ export const SiteFooter = ({
               <li>
                 <a
                   href={`tel:${store.phone.replace(/\D/g, '')}`}
-                  className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary"
+                  className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <Phone className="size-4 shrink-0" />
                   {store.phone}

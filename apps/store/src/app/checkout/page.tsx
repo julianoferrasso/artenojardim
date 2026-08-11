@@ -118,7 +118,7 @@ export default function CheckoutPage() {
         {addresses.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Você ainda não tem endereços.{' '}
-            <Link href="/conta/enderecos" className="text-primary hover:underline">
+            <Link href="/conta/enderecos" className="text-primary-ink hover:underline">
               Cadastrar endereço
             </Link>
           </p>

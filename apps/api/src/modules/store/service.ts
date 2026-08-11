@@ -73,6 +73,7 @@ export const getAdminTheme = async (): Promise<AdminTheme> => {
     accent: oklchToHex(theme.accent),
     background: oklchToHex(theme.background),
     radius: theme.radius,
+    badgeStyle: theme.badgeStyle,
     logoId: theme.logoId,
     logoUrl: await resolveLogoUrl(theme.logoId),
   }
@@ -100,6 +101,7 @@ export const updateTheme = async (
     accent: hexToOklch(input.accent),
     background: hexToOklch(input.background),
     radius: input.radius,
+    badgeStyle: input.badgeStyle,
     logoId: input.logoId,
   }
 
@@ -133,5 +135,6 @@ const flatten = (theme: StoreTheme): Record<string, unknown> => ({
   accent: oklchToHex(theme.accent),
   background: oklchToHex(theme.background),
   radius: theme.radius,
+  badgeStyle: theme.badgeStyle,
   logoId: theme.logoId,
 })

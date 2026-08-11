@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { HeartHandshake, ShieldCheck, Truck } from 'lucide-react'
 import { listProducts, getCategoryTree, getStore } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
+import { IconBadge } from '@/components/icon-badge'
 import { StoreLogo } from '@/components/store-logo'
 import { SectionHeading } from '@/components/section-heading'
 import { buttonVariants } from '@/components/ui/button'
@@ -12,7 +13,14 @@ import { buttonVariants } from '@/components/ui/button'
 const BENEFITS = [
   { icon: Truck, title: 'Enviamos para todo o Brasil', text: 'Frete calculado direto no produto.' },
   { icon: HeartHandshake, title: 'Feito à mão, um a um', text: 'Cada peça é única, produzida com carinho.' },
-  { icon: ShieldCheck, title: 'Pagamento seguro', text: 'Processado pela Stripe, com criptografia.' },
+  // "Com criptografia" não diz nada a quem não é técnico. O medo real é "esta
+  // loja vai ficar com meu cartão?" — e a resposta é um fato: o cartão nunca
+  // passa pela nossa API, quem recebe é o Stripe.
+  {
+    icon: ShieldCheck,
+    title: 'Seus dados protegidos',
+    text: 'O pagamento acontece no ambiente do Stripe. Não guardamos seu cartão.',
+  },
 ]
 
 /**
@@ -31,6 +39,7 @@ export default async function HomePage() {
 
   // Única categoria que a home usa: o CTA secundário do hero.
   const firstCategory = categories.find((c) => c.isActive)
+  const badgeStyle = store?.theme?.badgeStyle ?? 'filled'
 
   return (
     <main>
@@ -47,7 +56,7 @@ export default async function HomePage() {
 
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-10 sm:pb-14 sm:pt-12 md:grid-cols-[3fr_2fr] lg:pb-16 lg:pt-16">
           <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700 md:text-left">
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary">
+            <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary-ink">
               Feito à mão · com carinho
             </p>
             <h1 className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
@@ -105,9 +114,11 @@ export default async function HomePage() {
         <div className="grid gap-8 rounded-2xl bg-muted px-6 py-10 sm:grid-cols-2 lg:grid-cols-3">
           {BENEFITS.map(({ icon: Icon, title, text }) => (
             <div key={title} className="flex flex-col items-center gap-3 text-center">
-              <span className="flex size-12 items-center justify-center rounded-full bg-card shadow-soft">
-                <Icon className="size-5 text-primary" strokeWidth={1.8} />
-              </span>
+              {/* Sem hover: o selo não é clicável, e reagir ao mouse prometeria
+                  uma ação que não existe. */}
+              <IconBadge style={badgeStyle} className="size-12 shadow-soft">
+                <Icon className="size-5" strokeWidth={1.8} />
+              </IconBadge>
               <div>
                 <h3 className="text-sm font-semibold">{title}</h3>
                 <p className="mt-1 text-sm text-muted-foreground">{text}</p>

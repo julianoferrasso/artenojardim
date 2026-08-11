@@ -3,19 +3,23 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useController, useForm, type Control } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Truck } from 'lucide-react'
 import {
   updateStoreThemeSchema,
+  BADGE_STYLE_CLASSES,
+  THEME_BADGE_STYLE,
   THEME_RADIUS,
   THEME_RADIUS_REM,
   type AdminTheme,
+  type ThemeBadgeStyle,
   type ThemeRadius,
   type UpdateStoreThemeInput,
 } from '@ecommerce/shared/contracts'
 import {
-  contrastForeground,
+  contrastRatio,
+  deriveThemeVars,
   hexToOklch,
-  oklchToCss,
-  shiftLightness,
+  isDeadZone,
 } from '@ecommerce/shared/utils'
 import { useUpdateStoreTheme } from '@/lib/store-theme'
 import { ImageUploader } from '@/components/image-uploader'
@@ -43,6 +47,11 @@ const RADIUS_LABEL: Record<ThemeRadius, string> = {
   small: 'Suave',
   medium: 'Médio',
   large: 'Arredondado',
+}
+
+const BADGE_STYLE_LABEL: Record<ThemeBadgeStyle, string> = {
+  filled: 'Preenchida',
+  outlined: 'Contornada',
 }
 
 type ColorName = (typeof COLOR_FIELDS)[number]['name']
@@ -132,41 +141,50 @@ const ColorField = ({
 }
 
 /**
- * As MESMAS derivações de apps/store/src/components/theme-style.tsx. Estão
- * duplicadas de propósito: o preview precisa das variáveis num objeto de estilo
- * React, e a loja num texto CSS. Se as regras divergirem, o preview mente —
- * então qualquer mudança lá precisa vir para cá.
+ * A prévia usa EXATAMENTE a mesma derivação da loja (`deriveThemeVars`, no
+ * pacote compartilhado). Antes as fórmulas eram duplicadas, com um comentário
+ * pedindo para manter as duas em dia — acordo que ninguém cumpre. Prévia que
+ * mente é pior que prévia nenhuma: o lojista configura no escuro.
  */
-const previewVars = (values: UpdateStoreThemeInput): CSSProperties => {
-  const primary = hexToOklch(values.primary)
-  const secondary = hexToOklch(values.secondary)
-  const accent = hexToOklch(values.accent)
-  const background = hexToOklch(values.background)
-  const bodyText = contrastForeground(background)
-
-  return {
+const previewVars = (values: UpdateStoreThemeInput): CSSProperties =>
+  ({
     '--radius': THEME_RADIUS_REM[values.radius],
-    '--background': oklchToCss(background),
-    '--foreground': oklchToCss(bodyText),
-    '--card': oklchToCss(shiftLightness(background, 0.012, 0.5)),
-    '--card-foreground': oklchToCss(bodyText),
-    '--primary': oklchToCss(primary),
-    '--primary-foreground': oklchToCss(contrastForeground(primary)),
-    '--secondary': oklchToCss(secondary),
-    '--secondary-foreground': oklchToCss(contrastForeground(secondary)),
-    '--accent': oklchToCss(accent),
-    '--accent-foreground': oklchToCss(contrastForeground(accent)),
-    '--muted': oklchToCss(shiftLightness(background, -0.03, 1.5)),
-    '--muted-foreground': oklchToCss(
-      shiftLightness(bodyText, bodyText.l > 0.5 ? -0.26 : 0.27, 2),
-    ),
-    '--border': oklchToCss(shiftLightness(background, -0.08, 2.25)),
-  } as CSSProperties
-}
+    ...deriveThemeVars({
+      primary: hexToOklch(values.primary),
+      secondary: hexToOklch(values.secondary),
+      accent: hexToOklch(values.accent),
+      background: hexToOklch(values.background),
+    }),
+  }) as CSSProperties
 
-/** Contraste fraco entre marca e fundo — avisa, não bloqueia. É gosto do dono. */
-const lowContrast = (values: UpdateStoreThemeInput): boolean =>
-  Math.abs(hexToOklch(values.primary).l - hexToOklch(values.background).l) < 0.25
+/**
+ * Avisos de legibilidade — medidos, nunca estimados por diferença de
+ * luminosidade: com o mesmo ΔL um rosa passa de 4.5:1 e um amarelo saturado
+ * fica em 3.3:1, porque o croma pesa na luminância.
+ *
+ * Avisa, nunca bloqueia: a escolha é do dono da loja.
+ */
+const warnings = (values: UpdateStoreThemeInput): string[] => {
+  const primary = hexToOklch(values.primary)
+  const background = hexToOklch(values.background)
+  const list: string[] = []
+
+  // Fundo a meio caminho do preto e do branco: nem preto puro atinge 4.5:1
+  // sobre as superfícies derivadas. É limite físico, não da fórmula.
+  if (isDeadZone(background.l)) {
+    list.push(
+      'Este tom de fundo é intermediário demais: textos secundários podem ficar difíceis de ler. Um fundo mais claro ou mais escuro melhora a leitura.',
+    )
+  }
+
+  if (contrastRatio(primary, background) < 3) {
+    list.push(
+      'A cor principal está muito parecida com o fundo. Os botões podem ficar difíceis de enxergar.',
+    )
+  }
+
+  return list
+}
 
 export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
   const update = useUpdateStoreTheme()
@@ -189,6 +207,7 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
       accent: initial.accent,
       background: initial.background,
       radius: initial.radius,
+      badgeStyle: initial.badgeStyle,
       logoId: initial.logoId,
     },
   })
@@ -234,12 +253,11 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
             ))}
           </div>
 
-          {lowContrast(values) && (
-            <p className="mt-4 rounded-md bg-warning/15 px-3 py-2 text-sm">
-              A cor principal está muito parecida com o fundo. Os botões podem ficar difíceis de
-              enxergar.
+          {warnings(values).map((warning) => (
+            <p key={warning} className="mt-4 rounded-md bg-warning/15 px-3 py-2 text-sm">
+              {warning}
             </p>
-          )}
+          ))}
         </section>
 
         <section>
@@ -270,6 +288,40 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
                     style={{ borderRadius: THEME_RADIUS_REM[radius] }}
                   />
                   {RADIUS_LABEL[radius]}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-1 text-sm font-medium">Ícones em destaque</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            As bolinhas dos selos da página inicial e dos links de redes sociais.
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            {THEME_BADGE_STYLE.map((style) => {
+              const active = values.badgeStyle === style
+              return (
+                <button
+                  key={style}
+                  type="button"
+                  onClick={() => setValue('badgeStyle', style, { shouldDirty: true })}
+                  aria-pressed={active}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors',
+                    active ? 'border-primary bg-accent' : 'border-border hover:border-primary/50',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'flex size-5 items-center justify-center rounded-full',
+                      style === 'outlined' ? 'border-2 border-current' : 'bg-current',
+                    )}
+                  />
+                  {BADGE_STYLE_LABEL[style]}
                 </button>
               )
             })}
@@ -356,6 +408,24 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
           </div>
 
           <div className="flex flex-col gap-3 p-4">
+            {/* Selo e link: os dois elementos que dependem da cor da marca como
+                TINTA. Sem eles na prévia, o lojista não enxergava o efeito das
+                cores justamente onde o contraste costuma falhar. */}
+            <div className="flex items-center gap-3">
+              <span
+                className={cn(
+                  'flex size-10 shrink-0 items-center justify-center rounded-full',
+                  BADGE_STYLE_CLASSES[values.badgeStyle],
+                )}
+              >
+                <Truck className="size-5" strokeWidth={1.8} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold">Enviamos para todo o Brasil</p>
+                <p className="text-sm text-muted-foreground">Frete calculado no produto.</p>
+              </div>
+            </div>
+
             <div className="rounded-lg border border-border bg-card p-3">
               <p className="text-sm font-medium">Vela de soja</p>
               <p className="text-sm text-muted-foreground">R$ 89,00</p>
@@ -374,6 +444,10 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
             >
               Ver detalhes
             </button>
+
+            <a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-primary-ink underline-offset-4 hover:underline">
+              Acompanhar meu pedido
+            </a>
 
             <span className="self-start rounded-md bg-accent px-2 py-1 text-xs text-accent-foreground">
               Frete grátis

@@ -39,7 +39,7 @@ export default function ContaPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold tracking-tight">Últimos pedidos</h2>
           {orders.length > 0 && (
-            <Link href="/conta/pedidos" className="text-sm text-primary hover:underline">
+            <Link href="/conta/pedidos" className="text-sm text-primary-ink hover:underline">
               Ver todos
             </Link>
           )}

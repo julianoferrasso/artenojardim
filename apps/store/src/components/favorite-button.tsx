@@ -39,7 +39,7 @@ export const FavoriteButton = ({
         strokeWidth={1.8}
         className={cn(
           'transition-colors',
-          active ? 'fill-primary text-primary' : 'text-muted-foreground hover:text-primary',
+          active ? 'fill-primary-ink text-primary-ink' : 'text-muted-foreground hover:text-primary-ink',
           iconClassName,
         )}
       />

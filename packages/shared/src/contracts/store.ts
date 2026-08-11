@@ -59,6 +59,28 @@ export const THEME_RADIUS_REM: Record<ThemeRadius, string> = {
 }
 
 /**
+ * Estilo das bolinhas de ícone (selos da home, redes sociais do rodapé).
+ *
+ * É escolha de APARÊNCIA, nunca de legibilidade: as duas opções têm contraste
+ * garantido por construção — `filled` usa o par --primary/--primary-foreground,
+ * `outlined` usa --primary-ink, ambos derivados por contraste medido. O lojista
+ * não consegue escolher uma combinação ilegível, que é o ponto.
+ */
+export const THEME_BADGE_STYLE = ['filled', 'outlined'] as const
+export const themeBadgeStyleSchema = z.enum(THEME_BADGE_STYLE)
+export type ThemeBadgeStyle = z.infer<typeof themeBadgeStyleSchema>
+
+/**
+ * As classes de cada estilo. Vive no contrato — e não em cada app — porque a
+ * loja PINTA a bolinha e o admin a mostra na prévia: se as duas listas
+ * divergirem, o lojista escolhe uma coisa e recebe outra.
+ */
+export const BADGE_STYLE_CLASSES: Record<ThemeBadgeStyle, string> = {
+  filled: 'bg-primary text-primary-foreground',
+  outlined: 'border-2 border-primary-ink bg-card text-primary-ink',
+}
+
+/**
  * O tema como fica no banco.
  *
  * Só QUATRO cores são editáveis. Todos os `-foreground`, além de card, muted,
@@ -76,6 +98,12 @@ export const storeThemeSchema = z.object({
   accent: oklchSchema,
   background: oklchSchema,
   radius: themeRadiusSchema,
+  /*
+   * `.default()` é obrigatório em campo novo: o tema vive como JSON em Setting e
+   * os já gravados não têm esta chave. Sem o default, o safeParse da leitura
+   * rejeitaria o tema inteiro e a loja voltaria à paleta de fábrica.
+   */
+  badgeStyle: themeBadgeStyleSchema.default('filled'),
   logoId: z.string().nullable(),
 })
 
@@ -94,6 +122,7 @@ export const DEFAULT_STORE_THEME: StoreTheme = {
   // 'medium' = 0.75rem = o valor que já estava no globals.css. NÃO troque para
   // 'large' achando que é "o mais bonito": o default existe para não mudar nada.
   radius: 'medium',
+  badgeStyle: 'filled',
   logoId: null,
 }
 
@@ -118,6 +147,12 @@ export const updateStoreThemeSchema = z.object({
   accent: hexColorSchema,
   background: hexColorSchema,
   radius: themeRadiusSchema,
+  /*
+   * Sem `.default()` aqui, ao contrário do storeThemeSchema: o formulário SEMPRE
+   * manda o campo, e um default no schema de ENTRADA faria o Zod separar tipo de
+   * entrada e de saída — o que deixa o useForm ambíguo sem ganho nenhum.
+   */
+  badgeStyle: themeBadgeStyleSchema,
   logoId: z.string().nullable(),
 })
 

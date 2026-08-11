@@ -29,6 +29,9 @@
 
   --primary: oklch(0.48 0.13 255);
   --primary-foreground: oklch(0.985 0 0);
+  /* A marca como TINTA. Aqui só serve à prévia da tela de Aparência, que
+     reescreve o valor por cor — o admin em si não muda de tema. */
+  --primary-ink: oklch(0.48 0.13 255);
 
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -99,6 +102,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-ink: var(--primary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

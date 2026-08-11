@@ -88,7 +88,8 @@ export const hexToOklch = (hex: string): Oklch => {
  * que duas cores OKLCH distintas podem voltar como o mesmo hex — por isso o
  * banco guarda OKLCH (a verdade) e o hex é só a interface.
  */
-export const oklchToHex = ({ l, c, h }: Oklch): string => {
+/** OKLCH → RGB LINEAR (ainda sem gamma, podendo sair de [0,1] fora do gamut). */
+const oklchToLinearRgb = ({ l, c, h }: Oklch): [number, number, number] => {
   const hRad = (h * Math.PI) / 180
   const a = c * Math.cos(hRad)
   const b = c * Math.sin(hRad)
@@ -97,26 +98,100 @@ export const oklchToHex = ({ l, c, h }: Oklch): string => {
   const lms2 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3
   const lms3 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3
 
-  const r = 4.0767416621 * lms1 - 3.3077115913 * lms2 + 0.2309699292 * lms3
-  const g = -1.2684380046 * lms1 + 2.6097574011 * lms2 - 0.3413193965 * lms3
-  const bl = -0.0041960863 * lms1 - 0.7034186147 * lms2 + 1.707614701 * lms3
+  return [
+    4.0767416621 * lms1 - 3.3077115913 * lms2 + 0.2309699292 * lms3,
+    -1.2684380046 * lms1 + 2.6097574011 * lms2 - 0.3413193965 * lms3,
+    -0.0041960863 * lms1 - 0.7034186147 * lms2 + 1.707614701 * lms3,
+  ]
+}
 
+export const oklchToHex = (color: Oklch): string => {
   const channel = (value: number): string =>
     Math.round(clamp(toGamma(value), 0, 1) * 255)
       .toString(16)
       .padStart(2, '0')
 
-  return `#${channel(r)}${channel(g)}${channel(bl)}`
+  return `#${oklchToLinearRgb(color).map(channel).join('')}`
+}
+
+/**
+ * Razão de contraste WCAG entre duas cores (1 = idênticas, 21 = preto/branco).
+ *
+ * Existe porque "afastar a luminosidade num valor fixo" MENTE: com o mesmo ΔL um
+ * rosa passa de 4.5:1 e um amarelo saturado fica em 3.3:1 — o croma pesa na
+ * luminância percebida. Só medindo dá para garantir legibilidade em qualquer
+ * tema que o lojista escolher.
+ *
+ * O clamp em [0,1] antes da luminância é o que o monitor faz de qualquer forma
+ * com cor fora do gamut sRGB, então a conta bate com o pixel pintado.
+ */
+export const contrastRatio = (a: Oklch, b: Oklch): number => {
+  const luminance = (color: Oklch): number => {
+    const [r, g, bl] = oklchToLinearRgb(color).map((v) => clamp(v, 0, 1)) as [
+      number,
+      number,
+      number,
+    ]
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl
+  }
+
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number]
+  return (light + 0.05) / (dark + 0.05)
 }
 
 /** 'oklch(0.62 0.089 42.1)' — o mesmo formato literal já usado no globals.css. */
 export const oklchToCss = ({ l, c, h }: Oklch): string => `oklch(${l} ${c} ${h})`
 
+/** Mínimo do WCAG AA para texto pequeno — e obrigação legal (LBI/eMAG). */
+export const MIN_CONTRAST = 4.5
+
 /**
- * Ponto em que uma cor deixa de aceitar texto claro. 0.62 foi escolhido por
- * teste com a paleta da loja: acima disso o branco perde contraste.
+ * A cor da marca quando ela é TINTA (texto, ícone, borda) sobre uma superfície.
+ *
+ * `contrastForeground` resolve o caso "marca como FUNDO" (devolve a cor do texto
+ * que vai por cima). Esta resolve o inverso, que faltava: a marca escrevendo
+ * SOBRE o fundo do lojista. Sem ela, um primary claro sobre um card claro dá
+ * 1.07:1 — foi exatamente o bug dos ícones invisíveis.
+ *
+ * Preserva matiz e croma e só mexe na luminosidade: a marca continua sendo a
+ * marca. O croma só cede quando o L sozinho não alcança o alvo — cor muito
+ * saturada tem gamut estreito nos extremos, e aí não existe L que resolva.
  */
-const LIGHT_THRESHOLD = 0.62
+export const readableInk = (
+  brand: Oklch,
+  surfaces: Oklch | Oklch[],
+  target: number = MIN_CONTRAST,
+): Oklch => {
+  // A tinta tem que ler em TODAS as superfícies onde vai aparecer, não só na
+  // primeira: o mesmo texto cai sobre card, background e muted.
+  const list = Array.isArray(surfaces) ? surfaces : [surfaces]
+  const worst = (candidate: Oklch): number =>
+    Math.min(...list.map((surface) => contrastRatio(candidate, surface)))
+
+  // A direção vem da superfície MÉDIA: fundo claro pede tinta escura, e vice-versa.
+  const meanL = list.reduce((sum, s) => sum + s.l, 0) / list.length
+  const darken = meanL > 0.5
+  const step = darken ? -0.02 : 0.02
+
+  for (const chromaMultiplier of [1, 0.75, 0.5, 0.3, 0.15, 0]) {
+    const c = round(clamp(brand.c * chromaMultiplier, 0, 0.4), 3)
+
+    // Começa junto das superfícies e se afasta até bastar em todas elas.
+    let l = darken
+      ? Math.min(brand.l, ...list.map((s) => s.l))
+      : Math.max(brand.l, ...list.map((s) => s.l))
+
+    while (l >= 0 && l <= 1) {
+      const candidate = { l: round(l, 3), c, h: brand.h }
+      if (worst(candidate) >= target) return candidate
+      l += step
+    }
+  }
+
+  // Nem preto nem branco bastaram: as superfícies são intermediárias demais
+  // (o admin avisa sobre isso). Devolve o extremo, que é o melhor possível.
+  return darken ? { l: 0, c: 0, h: brand.h } : { l: 1, c: 0, h: brand.h }
+}
 
 /**
  * A cor de texto que fica legível sobre `background`.
@@ -125,14 +200,29 @@ const LIGHT_THRESHOLD = 0.62
  * `--primary-foreground` à mão, mais cedo ou mais tarde escolheria branco sobre
  * amarelo claro, e o botão ficaria ilegível. Aqui a escolha é derivada, sempre.
  *
- * Herda o matiz da cor de fundo com croma baixo em vez de usar preto/branco
- * puros: mantém o resultado "quente" ou "frio" junto com a marca, em vez de um
- * cinza morto que destoa da paleta.
+ * Antes eram dois valores fixos (0.22 e 0.99) escolhidos por um limiar de L.
+ * Não bastava: em fundo intermediário os dois ficavam abaixo de 4.5:1, e o
+ * limiar apenas movia a faixa cega de lugar. Agora ESCOLHE a direção medindo as
+ * duas e MEDE de novo até atingir o alvo — mesmo motor do `readableInk`.
+ *
+ * Herda o matiz do fundo com croma baixo em vez de preto/branco puros: mantém o
+ * resultado quente ou frio junto com a paleta, em vez de um cinza morto.
  */
-export const contrastForeground = (background: Oklch): Oklch =>
-  background.l > LIGHT_THRESHOLD
-    ? { l: 0.22, c: Math.min(background.c, 0.02), h: background.h }
-    : { l: 0.99, c: Math.min(background.c, 0.01), h: background.h }
+export const contrastForeground = (background: Oklch): Oklch => {
+  const dark = { l: 0.22, c: Math.min(background.c, 0.02), h: background.h }
+  const light = { l: 0.99, c: Math.min(background.c, 0.01), h: background.h }
+
+  const darkRatio = contrastRatio(dark, background)
+  const lightRatio = contrastRatio(light, background)
+
+  // O que já basta, vence — preserva a aparência dos temas que hoje funcionam.
+  if (darkRatio >= MIN_CONTRAST && darkRatio >= lightRatio) return dark
+  if (lightRatio >= MIN_CONTRAST) return light
+
+  // Fundo intermediário: nenhum extremo fixo basta. Empurra o mais promissor
+  // até o alvo (ou até o limite físico, no caso da zona morta).
+  return readableInk(darkRatio >= lightRatio ? dark : light, background)
+}
 
 /**
  * Deriva uma variação de uma cor: `card` e `muted` são o fundo um pouco mais
@@ -144,3 +234,107 @@ export const shiftLightness = (color: Oklch, deltaL: number, chromaMultiplier = 
   c: round(clamp(color.c * chromaMultiplier, 0, 0.4), 3),
   h: color.h,
 })
+
+/**
+ * Faixa de fundo em que NENHUMA tinta atinge 4.5:1 sobre as superfícies
+ * derivadas — nem preto, nem branco. É limite físico do par de luminosidades,
+ * não da fórmula: o fundo fica a meio caminho dos dois extremos.
+ *
+ * Não dá para consertar sem mudar a aparência de TODOS os temas, então o admin
+ * avisa e deixa o lojista decidir.
+ */
+export const DEAD_ZONE = { min: 0.5, max: 0.58 }
+
+export const isDeadZone = (backgroundLightness: number): boolean =>
+  backgroundLightness >= DEAD_ZONE.min && backgroundLightness <= DEAD_ZONE.max
+
+/**
+ * As variáveis CSS de COR do tema — a ÚNICA fonte das derivações.
+ *
+ * Loja e admin importam daqui: a loja para injetar no <style>, o admin para
+ * montar a prévia. Antes cada um tinha sua cópia da fórmula, com um comentário
+ * pedindo para manter as duas em dia — o tipo de acordo que ninguém cumpre.
+ * Se a prévia mente, o lojista configura no escuro.
+ *
+ * Não inclui `--radius`: é enum, não cor, e vem de THEME_RADIUS_REM.
+ */
+export const deriveThemeVars = (theme: {
+  primary: Oklch
+  secondary: Oklch
+  accent: Oklch
+  background: Oklch
+}): Record<string, string> => {
+  const { primary, secondary, accent, background } = theme
+
+  /*
+   * Os deltas reproduzem as relações que o globals.css já tinha entre background
+   * (0.985), card (0.997), muted (0.955) e border (0.905) — é o que faz o tema
+   * default renderizar a loja idêntica ao que estava no ar.
+   *
+   * O TETO de croma não é decoração: multiplicar o croma de um fundo já saturado
+   * cria uma superfície tão colorida que nem preto puro atinge 4.5:1 sobre ela.
+   * Com fundo azul c=0.2, o `muted` ia a 0.3 e travava a tinta em 4.39. O teto
+   * não afeta os temas de croma baixo — no default, 0.008 × 1.5 = 0.012.
+   */
+  const SURFACE_MAX_CHROMA = 0.06
+  const surface = (deltaL: number, chromaMultiplier: number): Oklch => {
+    const shifted = shiftLightness(background, deltaL, chromaMultiplier)
+    return { ...shifted, c: Math.min(shifted.c, SURFACE_MAX_CHROMA) }
+  }
+
+  const card = surface(0.012, 0.5)
+  const muted = surface(-0.03, 1.5)
+  const border = surface(-0.08, 2.25)
+  const bodyText = contrastForeground(background)
+
+  /*
+   * A tinta é derivada contra as TRÊS superfícies de uma vez, porque o mesmo
+   * texto cai sobre as três. Escolher "a mais exigente" pelo L daria errado:
+   * `muted` tem croma maior, e croma alto sobe a luminância — um `muted` mais
+   * escuro pode exigir mais que um `card` mais claro.
+   */
+  const surfaces = [card, background, muted]
+
+  const ink = (color: Oklch): string => oklchToCss(readableInk(color, surfaces))
+  const on = (color: Oklch): string => oklchToCss(contrastForeground(color))
+
+  return {
+    '--background': oklchToCss(background),
+    '--foreground': oklchToCss(bodyText),
+
+    '--card': oklchToCss(card),
+    '--card-foreground': oklchToCss(bodyText),
+    '--popover': oklchToCss(card),
+    '--popover-foreground': oklchToCss(bodyText),
+
+    '--primary': oklchToCss(primary),
+    '--primary-foreground': on(primary),
+    // A marca como TINTA. Sem este token, `text-primary` sobre card claro some.
+    '--primary-ink': ink(primary),
+
+    '--secondary': oklchToCss(secondary),
+    '--secondary-foreground': on(secondary),
+
+    '--accent': oklchToCss(accent),
+    '--accent-foreground': on(accent),
+
+    '--muted': oklchToCss(muted),
+    /*
+     * Texto secundário POR CONTRASTE, não por deslocamento fixo. A fórmula
+     * antiga (`bodyText.l ± 0.26`) presumia fundo claro e, num fundo escuro,
+     * devolvia literalmente a cor do próprio fundo — 1.00:1, texto invisível.
+     *
+     * Parte da PRÓPRIA superfície, não do texto principal: assim a busca para no
+     * primeiro L que atinge 4.5:1 e o resultado fica um degrau acima do fundo,
+     * não colado no texto principal. Partir de `bodyText` devolvia o extremo
+     * (15:1) e matava a hierarquia entre texto primário e secundário.
+     */
+    '--muted-foreground': oklchToCss(
+      readableInk({ l: muted.l, c: clamp(background.c * 2, 0, 0.4), h: background.h }, muted),
+    ),
+
+    '--border': oklchToCss(border),
+    '--input': oklchToCss(border),
+    '--ring': oklchToCss(primary),
+  }
+}

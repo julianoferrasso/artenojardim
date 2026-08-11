@@ -49,7 +49,7 @@ export const OrderCard = ({ order }: { order: CustomerOrderListItem }) => {
 
         <div className="flex items-center justify-between gap-3 md:flex-col md:items-end md:gap-1">
           <span className="text-base font-semibold">{formatBRL(order.total)}</span>
-          <span className="text-xs text-primary md:whitespace-nowrap">Ver detalhes →</span>
+          <span className="text-xs text-primary-ink md:whitespace-nowrap">Ver detalhes →</span>
         </div>
       </div>
     </Link>

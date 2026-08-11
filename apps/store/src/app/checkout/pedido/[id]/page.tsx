@@ -123,7 +123,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     return (
       <main className="mx-auto max-w-2xl px-4 py-16 text-center">
         <h1 className="font-display text-3xl font-semibold tracking-tight">Pedido não encontrado</h1>
-        <Link href="/" className="mt-6 inline-block text-sm text-primary hover:underline">
+        <Link href="/" className="mt-6 inline-block text-sm text-primary-ink hover:underline">
           Voltar à loja
         </Link>
       </main>
