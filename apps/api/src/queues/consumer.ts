@@ -53,11 +53,13 @@ const routeToRetryOrDlq = (
   ch: ConfirmChannel,
   queue: string,
   msg: ConsumeMessage,
+  /** Já decidido por quem chamou — e a MESMA decisão que governa se a marca de
+   *  idempotência é liberada. As duas não podem divergir. */
   permanent: boolean,
 ): void => {
   const attempt = retryCountOf(msg)
 
-  if (permanent || attempt >= MAX_RETRIES) {
+  if (permanent) {
     ch.publish(DLX, dlqName(queue), msg.content, {
       persistent: true,
       headers: { ...msg.properties.headers, [RETRY_HEADER]: attempt },
@@ -134,13 +136,23 @@ const handleMessage = async <T>(
     await handler(envelope.payload, envelope)
     ch.ack(msg)
   } catch (err) {
-    // Libera a marca, senão o retry chega, vê "já processado" e descarta a
-    // mensagem sem nunca ter feito o trabalho.
-    await releaseEvent(envelope.id).catch((e: unknown) =>
-      logger.error({ err: e, eventId: envelope.id }, 'falha ao liberar o evento'),
-    )
+    const permanent = isPermanent(err) || retryCountOf(msg) >= MAX_RETRIES
 
-    const permanent = isPermanent(err)
+    // Libera a marca APENAS quando a mensagem vai voltar. Sem isso, o retry
+    // chegaria, veria "já processado" e descartaria a mensagem sem nunca ter
+    // feito o trabalho.
+    //
+    // No caminho permanente a marca FICA, e é o oposto de um esquecimento: a
+    // mensagem vai para a DLQ e não volta sozinha, então liberar deixaria o
+    // evento reprocessável — e uma reentrega do broker (ou um reprocessamento
+    // manual da DLQ depois do fix) rodaria o handler uma segunda vez. Para o
+    // e-mail, isso é o cliente recebendo duas vezes.
+    if (!permanent) {
+      await releaseEvent(envelope.id).catch((e: unknown) =>
+        logger.error({ err: e, eventId: envelope.id }, 'falha ao liberar o evento'),
+      )
+    }
+
     logger.error({ err, queue, eventId: envelope.id, permanent }, 'falha ao processar evento')
     routeToRetryOrDlq(ch, queue, msg, permanent)
   }
