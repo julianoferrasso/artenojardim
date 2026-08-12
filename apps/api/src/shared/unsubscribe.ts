@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto'
+import { ROUTES } from '@ecommerce/shared/constants'
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import { env } from '../config/env.js'
 import { businessError } from './errors.js'
@@ -78,5 +79,16 @@ export const parseUnsubscribeToken = (token: string): string => {
   return email
 }
 
+/** Link do rodapé: leva a uma PÁGINA, onde a pessoa vê o que aconteceu. */
 export const buildUnsubscribeUrl = (email: string): string =>
   `${env.STORE_URL.replace(/\/$/, '')}/descadastrar?token=${encodeURIComponent(buildUnsubscribeToken(email))}`
+
+/**
+ * URL do cabeçalho `List-Unsubscribe`, para o botão nativo do Gmail.
+ *
+ * Aponta para a API e não para a loja: o cliente de e-mail faz um POST direto,
+ * sem navegador e sem executar JavaScript — a página da loja, que só descadastra
+ * depois de montar o React, nunca chegaria a rodar.
+ */
+export const buildOneClickUnsubscribeUrl = (email: string): string =>
+  `${env.API_URL.replace(/\/$/, '')}${ROUTES.newsletter.unsubscribe}?token=${encodeURIComponent(buildUnsubscribeToken(email))}`

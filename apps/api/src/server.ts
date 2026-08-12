@@ -2,8 +2,10 @@ import { createApp } from './app.js'
 import { env } from './config/env.js'
 import { logger } from './config/logger.js'
 import { prisma } from './config/prisma.js'
+import { closeRabbit, initRabbit } from './config/rabbitmq.js'
 import { initStoreContext } from './shared/store-context.js'
 import { storage } from './integrations/storage/index.js'
+import { assertTopology } from './queues/topology.js'
 
 /**
  * Boot: falhar aqui é barato; falhar na primeira requisição de um cliente real,
@@ -12,6 +14,13 @@ import { storage } from './integrations/storage/index.js'
 const start = async (): Promise<void> => {
   await prisma.$connect()
   await initStoreContext()
+
+  // SEM await, e é o ponto todo: broker fora do ar não pode impedir a loja de
+  // vender. A conexão se resolve em segundo plano; até lá, publicar responde 503
+  // com mensagem clara e o /health mostra `queue: down`.
+  //
+  // A API declara a topologia mas NÃO consome nada — quem consome é o worker.
+  initRabbit(assertTopology)
 
   logger.info({ driver: storage().id }, 'storage')
 
@@ -33,6 +42,7 @@ const start = async (): Promise<void> => {
     logger.info({ signal }, 'encerrando')
 
     server.close(async () => {
+      await closeRabbit()
       await prisma.$disconnect()
       logger.info('encerrado')
       process.exit(0)

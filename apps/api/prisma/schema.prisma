@@ -894,6 +894,13 @@ model EmailCampaign {
   productId String?
   subject   String
 
+  /// Foto do produto no instante do disparo: nome, URL, imagem, preço formatado.
+  /// JSON porque é lido inteiro e nunca filtrado — e persistido, não recalculado,
+  /// porque o produto pode mudar de preço ou ser arquivado no meio de um envio de
+  /// 2.000 e-mails. Sem isto, metade da base receberia um e-mail diferente da
+  /// outra metade, e um retry mandaria conteúdo novo numa campanha antiga.
+  snapshotJson Json
+
   /// Denormalizado: a tela de histórico não pode fazer COUNT em milhares de
   /// linhas por campanha só para mostrar um número.
   recipientCount Int @default(0)

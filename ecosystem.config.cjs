@@ -16,6 +16,10 @@
  *
  *   pm2 restart artenojardim-store artenojardim-admin   # relê o .next novo
  *   pm2 reload  artenojardim-api                        # a API é Express, reload ok
+ *   pm2 reload  artenojardim-worker                     # Node puro, reload ok
+ *
+ * Na PRIMEIRA subida do worker, `reload` não serve (o processo não existe):
+ *   pm2 start ecosystem.config.cjs --only artenojardim-worker && pm2 save
  *
  * A API pode usar reload (o dist/server.js é relido no restart do processo, e
  * ela não tem o cache de build do Next). Os fronts precisam de restart.
@@ -62,6 +66,38 @@ module.exports = {
 
       error_file: '/var/www/artenojardim/logs/api-error.log',
       out_file: '/var/www/artenojardim/logs/api-out.log',
+      time: true,
+    },
+    {
+      // Consumidores do RabbitMQ (e-mail de pedido e campanhas de marketing).
+      // Processo SEPARADO da API porque a API pode virar cluster: se virasse,
+      // cada instância abriria um consumidor e o prefetch(1) viraria prefetch(N)
+      // — junto com N vezes a taxa de envio contra o limite do SES.
+      //
+      // Aceita `reload` como a API: é Node puro, sem o cache de build do Next.
+      name: 'artenojardim-worker',
+      cwd: '/var/www/artenojardim/apps/api',
+      script: 'dist/worker.js',
+
+      // NUNCA cluster. Ver acima: N instâncias = N× o prefetch e N× a vazão.
+      exec_mode: 'fork',
+      instances: 1,
+
+      node_args: '--env-file-if-exists=.env',
+      env: { TZ: 'UTC' },
+
+      // Menor que o da API: o worker não serve requisição, e uma campanha que
+      // engorda a heap deve matar só ele — nunca a loja.
+      max_memory_restart: '300M',
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '20s',
+      // Maior que o da API: se o broker estiver fora, reiniciar em rajada só
+      // enche o log. O backoff da reconexão já cobre a janela curta.
+      restart_delay: 5000,
+
+      error_file: '/var/www/artenojardim/logs/worker-error.log',
+      out_file: '/var/www/artenojardim/logs/worker-out.log',
       time: true,
     },
     {
