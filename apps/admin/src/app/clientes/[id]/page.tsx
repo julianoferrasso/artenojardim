@@ -11,15 +11,12 @@ import { Separator } from '@/components/ui/separator'
 import { CopyButton } from '@/components/copy-button'
 import { OrderSituationBadge } from '@/components/order-situation-badge'
 import { CustomerEditDialog } from '@/components/customer-edit-dialog'
-import { CustomerAnonymizeDialog } from '@/components/customer-anonymize-dialog'
 import { useCustomer } from '@/lib/customers'
 import { useOrders } from '@/lib/orders'
-import { useAuth } from '@/lib/auth'
 import { accountState, formatDocument, maskDocument, VERIFIED_BADGE_CLASS } from '@/lib/customer-labels'
 import { formatPhone, formatZip } from '@/lib/order-labels'
 import { cn, formatBRL, formatDate } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
-import { ROLE_RANK } from '@ecommerce/shared/constants'
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -326,23 +323,22 @@ function AccountCard({ customer }: { customer: AdminCustomer }) {
   )
 }
 
+/**
+ * Ações do staff sobre o cliente.
+ *
+ * A anonimização (LGPD) NÃO tem botão aqui de propósito: é irreversível e o
+ * pedido de eliminação é raro o bastante para não valer um gatilho permanente ao
+ * lado de "Editar" — um clique errado destrói dado que não volta. O endpoint
+ * continua existindo (`POST /admin/customers/:id/anonymize`, exige ADMIN) para
+ * quando um cliente exercer esse direito; ver docs/arquitetura.md.
+ */
 function ActionsCard({ customer }: { customer: AdminCustomer }) {
-  const { user } = useAuth()
-  // Ergonomia, não segurança: a autoridade é o requireMinRole da API.
-  const canAnonymize = user ? ROLE_RANK[user.role] >= ROLE_RANK['ADMIN'] : false
-
   return (
     <section className="rounded-lg border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">Ações</h2>
       <div className="mt-3 flex flex-col gap-2">
         <CustomerEditDialog customer={customer} />
-        <CustomerAnonymizeDialog customer={customer} disabled={!canAnonymize} />
       </div>
-      {!canAnonymize && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          Anonimizar exige cargo de administrador.
-        </p>
-      )}
     </section>
   )
 }

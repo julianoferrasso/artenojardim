@@ -22,6 +22,16 @@ import { ApiError } from '@/lib/api'
  * é obrigação fiscal e o pedido já guarda seu próprio snapshot de endereço.
  *
  * Irreversível: por isso AlertDialog, e por isso a API exige ADMIN.
+ *
+ * ── NÃO ESTÁ MONTADO EM NENHUMA TELA ────────────────────────────────────────
+ * Foi retirado da página do cliente por decisão do lojista: um botão que destrói
+ * dado irreversivelmente não vale um gatilho permanente ao lado de "Editar",
+ * para uma situação que acontece raramente.
+ *
+ * Fica aqui, pronto, porque o direito de eliminação da LGPD continua existindo e
+ * o endpoint (`POST /admin/customers/:id/anonymize`) segue no ar. Quando um
+ * cliente pedir, é só voltar a renderizar isto no ActionsCard — ou chamar o
+ * endpoint direto.
  */
 export const CustomerAnonymizeDialog = ({
   customer,
