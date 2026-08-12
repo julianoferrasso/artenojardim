@@ -7,6 +7,7 @@ import { useCreateProduct } from '@/lib/products'
 import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { VariantEditor } from '@/components/variant-editor'
 import { ImageUploader } from '@/components/image-uploader'
+import { useSendCampaign } from '@/lib/campaigns'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +31,9 @@ export default function NewProductPage() {
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /** Só vale no caminho "Publicar": rascunho não tem página para o cliente ver. */
+  const [announce, setAnnounce] = useState(false)
+  const { mutateAsync: sendCampaign, isPending: sending } = useSendCampaign()
 
   const submit = (status: 'DRAFT' | 'ACTIVE') => {
     setError(null)
@@ -46,7 +50,28 @@ export default function NewProductPage() {
     }
 
     create.mutate(input, {
-      onSuccess: (p) => router.replace(`/produtos/${p.id}`),
+      onSuccess: async (p) => {
+        // Duas chamadas e não um campo no createProductSchema: criar produto é
+        // operação de catálogo, e a rota não publica evento nenhum. O redirect
+        // para a tela do produto já existia, então a segunda chamada cabe aqui.
+        if (status === 'ACTIVE' && announce) {
+          try {
+            await sendCampaign({ productId: p.id, input: { kind: 'NEW_PRODUCT', excludedEmails: [] } })
+          } catch (e) {
+            // O produto FOI publicado. Desfazê-lo porque o e-mail falhou seria
+            // trocar um problema pequeno por um grande — e a tela do produto tem
+            // o botão de envio manual para tentar de novo.
+            setError(
+              `Produto publicado, mas o e-mail de divulgação não saiu: ${
+                e instanceof ApiError ? e.message : 'erro inesperado'
+              } Você pode tentar de novo na tela do produto.`,
+            )
+            router.replace(`/produtos/${p.id}`)
+            return
+          }
+        }
+        router.replace(`/produtos/${p.id}`)
+      },
       // A API é a barreira real: publicar sem imagem/peso volta 422 com o motivo,
       // e a gente mostra a mensagem exata em vez de reimplementar a regra aqui.
       onError: (e) => setError(e instanceof ApiError ? e.message : 'Não foi possível salvar.'),
@@ -152,24 +177,42 @@ export default function NewProductPage() {
           </p>
         )}
 
-        <div className="sticky bottom-4 flex gap-2 rounded-lg border border-border bg-card p-3 shadow-sm">
-          <button
-            onClick={() => submit('DRAFT')}
-            disabled={create.isPending || !name}
-            className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-accent disabled:opacity-50"
-          >
-            Salvar rascunho
-          </button>
-          <button
-            onClick={() => submit('ACTIVE')}
-            disabled={create.isPending || !name}
-            className={cn(
-              'h-10 flex-1 rounded-md bg-primary text-sm font-medium text-primary-foreground',
-              'hover:opacity-90 disabled:opacity-50',
-            )}
-          >
-            {create.isPending ? 'Salvando…' : 'Publicar'}
-          </button>
+        <div className="sticky bottom-4 flex flex-col gap-3 rounded-lg border border-border bg-card p-3 shadow-sm">
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={announce}
+              onChange={(e) => setAnnounce(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-primary"
+            />
+            <span>
+              Avisar os clientes por e-mail ao publicar
+              <span className="block text-xs text-muted-foreground">
+                Vai para quem aceita novidades. Só uma vez por produto — depois, use o envio manual
+                na tela dele.
+              </span>
+            </span>
+          </label>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => submit('DRAFT')}
+              disabled={create.isPending || sending || !name}
+              className="h-10 rounded-md border border-border px-4 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            >
+              Salvar rascunho
+            </button>
+            <button
+              onClick={() => submit('ACTIVE')}
+              disabled={create.isPending || sending || !name}
+              className={cn(
+                'h-10 flex-1 rounded-md bg-primary text-sm font-medium text-primary-foreground',
+                'hover:opacity-90 disabled:opacity-50',
+              )}
+            >
+              {create.isPending ? 'Salvando…' : sending ? 'Enviando e-mail…' : 'Publicar'}
+            </button>
+          </div>
         </div>
     </div>
   )

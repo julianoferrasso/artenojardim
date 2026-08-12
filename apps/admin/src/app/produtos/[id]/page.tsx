@@ -14,6 +14,7 @@ import {
 } from '@/lib/products'
 import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { ImageUploader } from '@/components/image-uploader'
+import { ProductCampaignDialog } from '@/components/product-campaign-dialog'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -79,6 +80,9 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
                 Despublicar
               </button>
             )}
+            {/* Ao lado de Publicar/Despublicar porque é a mesma pergunta —
+                "este produto está no ar?" — e aqui o produto já está carregado. */}
+            <ProductCampaignDialog product={product} />
           </div>
         </section>
 

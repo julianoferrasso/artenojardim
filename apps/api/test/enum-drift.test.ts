@@ -9,6 +9,8 @@ import {
   MOVEMENT_TYPES,
   COUPON_TYPES,
   SHIPMENT_STATUSES,
+  EMAIL_CAMPAIGN_KINDS,
+  EMAIL_CAMPAIGN_STATUSES,
 } from '@ecommerce/shared/constants'
 
 /**
@@ -39,6 +41,12 @@ describe('enums: shared/constants vs schema.prisma', () => {
     ['MovementType', ($Enums as Record<string, never>)['MovementType'], MOVEMENT_TYPES],
     ['CouponType', ($Enums as Record<string, never>)['CouponType'], COUPON_TYPES],
     ['ShipmentStatus', ($Enums as Record<string, never>)['ShipmentStatus'], SHIPMENT_STATUSES],
+    ['EmailCampaignKind', ($Enums as Record<string, never>)['EmailCampaignKind'], EMAIL_CAMPAIGN_KINDS],
+    [
+      'EmailCampaignStatus',
+      ($Enums as Record<string, never>)['EmailCampaignStatus'],
+      EMAIL_CAMPAIGN_STATUSES,
+    ],
   ]
 
   for (const [name, prismaEnum, shared] of cases) {

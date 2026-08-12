@@ -102,6 +102,24 @@ const baseSchema = z.object({
     .transform((v) => v || undefined),
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+
+  // Fila (RabbitMQ). Opcional para o boot local — sem ela a API sobe e publicar
+  // responde 503, em vez de impedir qualquer desenvolvimento. Obrigatória em
+  // produção (superRefine abaixo): sem fila, campanha e confirmação de pedido
+  // são gravadas e nunca saem, e o sintoma só aparece pelo suporte.
+  RABBITMQ_URL: z.string().url().optional(),
+  /// Quantas mensagens o consumidor pega antes de dar ack. 1 é a regra do §12:
+  /// acumular trabalho não processado num worker que pode morrer não é vazão, é
+  /// perda. Só suba isto com medida na mão.
+  RABBITMQ_PREFETCH: z.coerce.number().int().positive().default(1),
+  /// Vazão do envio de e-mail. O SES entrega ~14/s; 10 deixa folga para o
+  /// transacional (confirmação de conta, recuperação de senha) não ficar preso
+  /// atrás de uma campanha.
+  EMAIL_SEND_RATE_PER_SECOND: z.coerce.number().int().positive().default(10),
+  /// Assina o link de descadastro. Segredo PRÓPRIO, nunca um dos JWT_*: girar um
+  /// segredo de sessão invalidaria todo link de descadastro já entregue, e um
+  /// e-mail de dois anos atrás precisa continuar funcionando.
+  EMAIL_UNSUBSCRIBE_SECRET: secret('EMAIL_UNSUBSCRIBE_SECRET').optional(),
 })
 
 /** As três andam juntas: com credencial e sem remetente (ou vice-versa) o SES recusa tudo. */
@@ -160,6 +178,26 @@ const envSchema = baseSchema.superRefine((env, ctx) => {
         'Envio de e-mail é obrigatório em produção (confirmação de conta e recuperação de senha)',
     })
   }
+
+  // Mesma lógica para a fila: em produção, e-mail de pedido e campanha passam
+  // por ela. Sem broker, a campanha fica PENDING para sempre — em silêncio.
+  if (env.NODE_ENV === 'production' && !env.RABBITMQ_URL) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['RABBITMQ_URL'],
+      message: 'RABBITMQ_URL é obrigatório em produção (confirmação de pedido e campanhas)',
+    })
+  }
+
+  // Um e-mail de marketing sem link de descadastro funcional é queixa de spam
+  // garantida, e queixa de spam custa a reputação do domínio no SES.
+  if (env.NODE_ENV === 'production' && !env.EMAIL_UNSUBSCRIBE_SECRET) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['EMAIL_UNSUBSCRIBE_SECRET'],
+      message: 'EMAIL_UNSUBSCRIBE_SECRET é obrigatório em produção (link de descadastro do rodapé)',
+    })
+  }
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -182,6 +220,9 @@ export const env = parsed.data
  */
 export const isEmailConfigured = (): boolean =>
   Boolean(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.EMAIL_FROM)
+
+/** Sem broker configurado a API sobe e publica 503 — a loja continua vendendo. */
+export const isQueueConfigured = (): boolean => Boolean(env.RABBITMQ_URL)
 
 export const isProduction = env.NODE_ENV === 'production'
 export const isDevelopment = env.NODE_ENV === 'development'

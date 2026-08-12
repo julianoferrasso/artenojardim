@@ -6,6 +6,8 @@
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch --env-file=.env src/server.ts",
+    "dev:worker": "tsx watch --env-file=.env src/worker.ts",
+    "start:worker": "node --env-file-if-exists=.env dist/worker.js",
     "build": "tsc -p tsconfig.json",
     "start": "node --env-file-if-exists=.env dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -23,6 +25,7 @@
     "@aws-sdk/s3-request-presigner": "^3.716.0",
     "@ecommerce/shared": "workspace:*",
     "@prisma/client": "^6.19.0",
+    "amqplib": "^2.0.1",
     "argon2": "^0.44.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -36,6 +39,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.8",
     "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",

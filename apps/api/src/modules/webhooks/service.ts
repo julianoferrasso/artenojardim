@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma.js'
 import { logger } from '../../config/logger.js'
 import { retrievePaymentIntent, type StripeWebhookEvent } from '../../integrations/stripe/index.js'
 import { settleOrderReservations } from '../inventory/service.js'
+import { publish } from '../../shared/publish.js'
 
 /**
  * Processa um evento do Stripe já verificado. O webhook é A ÚNICA FONTE DE VERDADE
@@ -58,7 +59,12 @@ const handleSucceeded = async (
   const details = await retrievePaymentIntent(event.paymentIntentId)
   const method = mapMethod(details.paymentMethodType)
 
-  await prisma.$transaction(async (tx) => {
+  // A transação DEVOLVE o pedido que ela de fato marcou como pago — e é o que
+  // torna o publish abaixo seguro. Os `return` lá dentro saem do CALLBACK, não
+  // desta função: código posto depois do `$transaction` roda também no caminho
+  // idempotente (reentrega do Stripe, pedido já pago), e um publish ali mandaria
+  // um segundo e-mail de confirmação a cada reentrega.
+  const paidOrderId = await prisma.$transaction(async (tx) => {
     // PROCESSING → PAID. updateMany é no-op se não houver Payment (ex.: PI de teste
     // do `stripe trigger`, sem pedido nosso).
     await tx.payment.updateMany({
@@ -73,7 +79,7 @@ const handleSucceeded = async (
     const orderId = payment?.orderId ?? event.orderId
     if (!orderId) {
       logger.warn({ pi: event.paymentIntentId }, 'webhook Stripe: succeeded sem pedido casado')
-      return
+      return null
     }
 
     const order = await tx.order.findUnique({
@@ -81,7 +87,7 @@ const handleSucceeded = async (
       select: { id: true, storeId: true, paymentStatus: true },
     })
     // Já não-PENDING (reprocesso, cancelado): nada a fazer — idempotente.
-    if (!order || order.paymentStatus !== 'PENDING') return
+    if (!order || order.paymentStatus !== 'PENDING') return null
 
     await tx.order.update({ where: { id: orderId }, data: { paymentStatus: 'PAID' } })
     await tx.orderEvent.create({
@@ -90,9 +96,27 @@ const handleSucceeded = async (
 
     // A reserva vira venda: SALE no ledger + libera a reserva.
     await settleOrderReservations(tx, order.storeId, orderId)
+
+    return orderId
   })
 
   logger.info({ pi: event.paymentIntentId, orderId: event.orderId }, 'webhook Stripe: pagamento confirmado')
+
+  // Só para a transição que ACONTECEU AGORA (`paidOrderId` não-nulo), e sempre
+  // DEPOIS do commit: publicar lá dentro colocaria na fila um evento sobre um
+  // pagamento que um rollback desfez.
+  //
+  // A falha não propaga: o pagamento já está registrado e o pedido é válido. Um
+  // throw aqui devolveria erro ao Stripe, que reentregaria o evento — e o guard
+  // de PENDING faria a segunda passagem não republicar nada, deixando o cliente
+  // sem e-mail E o webhook em falha permanente.
+  if (paidOrderId) {
+    try {
+      await publish(EVENTS.order.paid, { orderId: paidOrderId })
+    } catch (err) {
+      logger.error({ err, orderId: paidOrderId }, 'falha ao publicar order.paid — e-mail de confirmação não sairá')
+    }
+  }
 }
 
 /**

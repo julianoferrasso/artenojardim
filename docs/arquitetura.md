@@ -1013,7 +1013,11 @@ Assíncrono por necessidade: a compra de etiqueta pode falhar (saldo, indisponib
 
 ## 12. Eventos e RabbitMQ
 
-### Decisão: fila **apenas** para o que é genuinamente assíncrono. Quatro filas.
+### Decisão: fila **apenas** para o que é genuinamente assíncrono. Cinco filas.
+
+> **Revisado em 12/08/2026 — eram quatro.** A quinta (`campaign.dispatch`) nasceu com o
+> primeiro consumidor real, que é o gatilho que esta seção sempre previu. A justificativa
+> está em "A quinta fila", logo abaixo da topologia.
 
 O erro comum é tratar eventos como arquitetura principal e publicar tudo "porque um dia alguém pode consumir". Cada evento sem consumidor é topologia para manter, mensagem para depurar e um lugar a mais onde procurar quando algo não acontece. **Cadastrar um produto não precisa publicar evento.**
 
@@ -1031,7 +1035,7 @@ O critério é único e binário:
 | `notification.*` | Não existe notificação além de e-mail na v1 |
 | `product.*`, `category.*` | CRUD síncrono. Quem precisa saber já sabe: quem chamou |
 
-De 7 filas para 4.
+De 7 filas para 4 — e para 5 quando a campanha de marketing trouxe um consumidor real.
 
 ### Topologia
 
@@ -1039,11 +1043,12 @@ De 7 filas para 4.
 Exchange:  ecommerce.events  (topic, durable)
 Exchange:  ecommerce.dlx     (topic, durable)
 
-FILAS (4):
-  email.send         ← email.*                  e-mail é lento e falha
-  order.paid         ← order.paid               fan-out do pós-pagamento
-  shipping.label     ← shipping.label.requested API externa, pode falhar
-  shipping.tracking  ← shipping.tracking.sync   API externa, em lote
+FILAS (5):
+  email.send         ← email.*                     e-mail é lento e falha
+  campaign.dispatch  ← campaign.dispatch_requested fan-out da campanha
+  order.paid         ← order.paid                  fan-out do pós-pagamento
+  shipping.label     ← shipping.label.requested    API externa, pode falhar
+  shipping.tracking  ← shipping.tracking.sync      API externa, em lote
 
 RETRY (por fila; TTL crescente, dead-letter de volta à origem):
   <fila>.retry.5s     x-message-ttl=5000
@@ -1053,6 +1058,31 @@ RETRY (por fila; TTL crescente, dead-letter de volta à origem):
 DEAD LETTER:
   <fila>.dlq          ← ecommerce.dlx   (sem consumidor; inspeção manual)
 ```
+
+### A quinta fila: por que `campaign.dispatch` não é `email.send`
+
+Uma campanha de marketing é, no fim, N e-mails — e a tentação é publicar os N direto na
+`email.send`, sem fila nova. O problema não é de vocabulário, é de **vazão**.
+
+Com `prefetch(1)`, o consumidor processa uma mensagem por vez. Se o fan-out de 2.000
+destinatários rodasse dentro de um handler da `email.send`, ele ocuparia o único slot por
+minutos — e a recuperação de senha de um cliente ficaria **presa atrás da campanha de
+marketing**. Pior: uma falha no destinatário 1.500 faria o retry reprocessar os 1.499
+anteriores, reenviando e-mail para quem já recebeu.
+
+Separando, cada uma faz uma coisa só:
+
+- `campaign.dispatch` recebe **uma** mensagem (`{campaignId}`), lê os destinatários `PENDING`
+  e publica uma mensagem por pessoa. Não envia nada.
+- `email.send` continua com o que sempre teve: um e-mail, um destinatário, um retry próprio.
+
+O fan-out é **retomável** porque as linhas de `EmailCampaignRecipient` são gravadas de forma
+síncrona no `POST` (um `createMany`): se o worker morrer no meio, o retry relê os que ficaram
+`PENDING` e continua de onde parou — sem cursor, sem contador, sem estado extra.
+
+> **Ordem dentro do fan-out:** marca `QUEUED` **antes** de publicar. Cair entre os dois deixa
+> um destinatário sem mensagem (um e-mail a menos); a ordem inversa duplicaria o e-mail no
+> retry. Entre perder e duplicar, perder é o que dá para consertar.
 
 ### Vocabulário de eventos — a convenção vale mesmo com poucas filas
 
@@ -1095,19 +1125,35 @@ publish(routingKey, payload):
 ### Eventos que realmente vão para fila na v1
 
 ```text
-order.paid                  → publicado pelo webhook
-  └─ order-paid.worker      → publica email.order_confirmation
-                            → publica shipping.label.requested
+order.paid                  → publicado pelo webhook, DEPOIS do commit
+  └─ order-paid.worker      → publica email.order_confirmation          [NO AR]
+                            → publica shipping.label.requested          (a fazer)
 
-email.order_confirmation    email.order_shipped     email.order_delivered
-email.payment_failed        email.boleto_issued     email.password_reset
-                            → email.worker (genérico: {template, to, data})
+campaign.dispatch_requested → publicado pelo service da campanha
+  └─ campaign-dispatch      → publica email.marketing_product × N       [NO AR]
 
-shipping.label.requested    → shipping-label.worker
-shipping.tracking.sync      → shipping-tracking.worker (alimentado por cron)
+email.order_confirmation    email.marketing_product                     [NO AR]
+email.order_shipped         email.order_delivered                       (a fazer)
+email.payment_failed        email.boleto_issued     email.password_reset (a fazer)
+                            → email-send.worker (genérico: {template, to, data})
+
+shipping.label.requested    → shipping-label.worker                     (a fazer)
+shipping.tracking.sync      → shipping-tracking.worker (cron)           (a fazer)
 ```
 
 `order.paid` tem um worker **orquestrador** de propósito: um lugar único que responde "o que acontece quando um pedido é pago?". Quando surgir analytics server-side ou ERP, é ali que entra — sem tocar no webhook.
+
+> **O publish do webhook exigiu uma refatoração que vale registrar.** `handleSucceeded` tem
+> dois `return` dentro do callback do `$transaction` — e eles saem do **callback**, não da
+> função. Código posto depois da transação roda **também** no caminho idempotente (reentrega
+> do Stripe, pedido já pago), então um `publish` ali mandaria um segundo e-mail de
+> confirmação a cada reentrega. A transação passou a **devolver** o `orderId` que ela de fato
+> marcou como pago, e o publish é guardado por ele.
+>
+> A falha do publish **não propaga**: o pagamento já está registrado e o pedido é válido. Um
+> `throw` devolveria erro ao Stripe, que reentregaria o evento — e o guard de `PENDING` faria
+> a segunda passagem não publicar nada, deixando o cliente sem e-mail **e** o webhook em
+> falha permanente.
 
 ### Consumidores
 
@@ -1722,7 +1768,7 @@ Portanto:
 | 11 | Checkout: recálculo (`domain/totals`) + pedido + reservas | 8, 9, 10 |
 | 12 | Payments: PI + Payment Element (cartão/Pix/boleto) | 11 |
 | 13 | **Webhooks + idempotência + reconciliação** | 12 |
-| 14 | RabbitMQ: 4 filas + workers + e-mails | 13 |
+| 14 | RabbitMQ: 5 filas + worker + e-mail de pedido e de campanha (12/08/2026) | 13 |
 | 15 | Admin: pedidos, separação, expedição | 13 |
 | 16 | Shipping: etiqueta + rastreio (worker + cron) | 14, 15 |
 | 17 | Conta: pedidos e rastreio | 15 |

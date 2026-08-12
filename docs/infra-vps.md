@@ -267,6 +267,31 @@ falta o passo no `pg-backup.sh`, num bucket privado próprio (não o da mídia).
 pedido PENDING, mas nada varre e libera as reservas vencidas (TTL em `Setting.reservation_ttl_minutes`).
 Checkout abandonado prende `reserved` até o job existir (`jobs/release-reservations`, Fase 1.18).
 
+**RabbitMQ ainda não está instalado.** O código da fila está no ar (Fase 14), mas sem broker a
+API sobe normalmente, `/health` responde `queue: "off"` e publicar devolve 503 — a loja vende,
+só o e-mail de confirmação de pedido e as campanhas não saem. Para habilitar:
+
+```bash
+systemctl status rabbitmq-server            # PRIMEIRO: o rag_sefaz já usa? Se sim, só vhost.
+apt-get install -y rabbitmq-server
+rabbitmq-plugins enable rabbitmq_management
+rabbitmqctl add_vhost artenojardim
+rabbitmqctl add_user artenojardim "$(openssl rand -base64 32)"
+rabbitmqctl set_permissions -p artenojardim artenojardim '.*' '.*' '.*'
+rabbitmqctl delete_user guest               # o default 'guest' entra sem senha pelo loopback
+```
+
+- **Não abra 5672 nem 15672 no UFW** — mesma razão da 5432: o painel vai por túnel SSH.
+- `/etc/rabbitmq/rabbitmq.conf`: `vm_memory_high_watermark.relative = 0.2`. O default é 40% da
+  RAM, e esta VPS é compartilhada com o `rag_sefaz`.
+- Depois: `RABBITMQ_URL` e `EMAIL_UNSUBSCRIBE_SECRET` no `.env` da API (ver `.env.example`),
+  e subir o worker pela primeira vez:
+  `pm2 start ecosystem.config.cjs --only artenojardim-worker && pm2 save`.
+
+**SES ainda em sandbox.** 200 e-mails/dia e só para endereços verificados um a um. A campanha
+de marketing funciona no código, mas falha por destinatário até sair — peça "Production
+access" no console da AWS (leva ~24h) antes do primeiro envio real.
+
 ## Backups da configuração
 
 Tudo que foi alterado tem cópia com timestamp na VPS:

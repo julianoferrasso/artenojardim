@@ -13,9 +13,27 @@ export const registerSchema = z.object({
   name: z.string().min(2, 'Informe seu nome').max(120).trim(),
   email: emailSchema,
   password: passwordSchema,
+  /**
+   * Novidades e promoções. Marcado por padrão no formulário, o cliente desmarca.
+   *
+   * O default TRUE mora AQUI e não na coluna do Prisma, que segue `false`. A
+   * coluna também governa quem nasce pelo guest checkout — sem nunca ter visto
+   * caixa nenhuma. Mudá-la lá inscreveria todo comprador convidado em silêncio,
+   * que é exatamente o que a LGPD não perdoa. Aqui, o default significa "quem
+   * usou o formulário e não mexeu na caixa quis dizer sim".
+   */
+  acceptsMarketing: z.boolean().default(true),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>
+
+/**
+ * O que o FORMULÁRIO preenche, antes do Zod aplicar o default. Difere de
+ * `RegisterInput` só em `acceptsMarketing`, que aqui é opcional e lá é
+ * obrigatório — é a diferença que o `useForm<Entrada, _, Saída>` precisa
+ * enxergar, senão o resolver não casa com o tipo do formulário.
+ */
+export type RegisterFormInput = z.input<typeof registerSchema>
 
 export const forgotPasswordSchema = z.object({ email: emailSchema })
 
