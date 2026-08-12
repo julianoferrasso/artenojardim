@@ -189,6 +189,13 @@ export const newsletterLimiter = build({ name: 'newsletter', windowMs: 60 * 60_0
 export const unsubscribeLimiter = build({ name: 'unsubscribe', windowMs: 60 * 60_000, max: 30 })
 
 /**
+ * Disparo de campanha. Apertado porque cada chamada manda milhares de e-mails
+ * de verdade: o teto existe contra o duplo clique e contra o script que
+ * queimaria a lista inteira (e a reputação do domínio) numa tarde.
+ */
+export const campaignSendLimiter = build({ name: 'campaign-send', windowMs: 60 * 60_000, max: 10 })
+
+/**
  * Beacon de visita ao produto. Generoso de propósito: um cliente navegando pela
  * loja dispara um por produto aberto, e apertar aqui mutila a própria métrica.
  * O limite existe contra o script que inflaria "mais visitados", não contra quem

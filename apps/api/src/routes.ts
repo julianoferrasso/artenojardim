@@ -15,6 +15,7 @@ import { checkoutRoutes } from './modules/checkout/routes.js'
 import { orderRoutes } from './modules/orders/routes.js'
 import { adminOrderRoutes } from './modules/admin-orders/routes.js'
 import { adminCustomerRoutes } from './modules/admin-customers/routes.js'
+import { campaignRoutes } from './modules/campaigns/routes.js'
 import { adminUserRoutes } from './modules/admin-users/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
@@ -53,6 +54,8 @@ apiRoutes.use('/orders', orderRoutes)
 apiRoutes.use('/admin/orders', adminOrderRoutes)
 // Gestão de clientes. Aberta ao staff; só a anonimização exige ADMIN.
 apiRoutes.use('/admin/customers', adminCustomerRoutes)
+// E-mail de marketing de produto. Aberto ao staff, como a gestão de clientes.
+apiRoutes.use('/admin/campaigns', campaignRoutes)
 // Gestão de staff. O router inteiro exige cargo mínimo ADMIN.
 apiRoutes.use('/admin/users', adminUserRoutes)
 // Aparência da loja. Também exige ADMIN — ver o comentário no router.
