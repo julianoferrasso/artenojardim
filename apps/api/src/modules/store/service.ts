@@ -52,7 +52,7 @@ const toPublicTheme = async ({ logoId, ...theme }: StoreTheme): Promise<PublicTh
   logoUrl: await resolveLogoUrl(logoId),
 })
 
-const resolveLogoUrl = async (logoId: string | null): Promise<string | null> => {
+export const resolveLogoUrl = async (logoId: string | null): Promise<string | null> => {
   if (!logoId) return null
 
   const upload = await prisma.upload.findFirst({

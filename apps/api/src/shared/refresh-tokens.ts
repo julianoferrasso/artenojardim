@@ -1,6 +1,6 @@
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import { EVENTS } from '@ecommerce/shared/constants'
-import { prisma } from '../config/prisma.js'
+import { prisma, type PrismaTransaction } from '../config/prisma.js'
 import { env } from '../config/env.js'
 import { logger } from '../config/logger.js'
 import { appError } from './errors.js'
@@ -50,10 +50,19 @@ export const issueRefreshToken = async (
   return token
 }
 
-/** Revoga TODAS as sessões ativas do principal — não só a cadeia. Num incidente
- *  de credencial, um login a mais é irrelevante perto de deixar sessão viva. */
-export const revokeAllSessions = async (principal: Principal): Promise<number> => {
-  const { count } = await prisma.refreshToken.updateMany({
+/**
+ * Revoga TODAS as sessões ativas do principal — não só a cadeia. Num incidente
+ * de credencial, um login a mais é irrelevante perto de deixar sessão viva.
+ *
+ * Aceita um client de transação porque a troca de senha precisa revogar JUNTO
+ * com o UPDATE da senha: fora da transação, um erro no meio deixaria a senha
+ * nova valendo e as sessões do invasor de pé.
+ */
+export const revokeAllSessions = async (
+  principal: Principal,
+  client: PrismaTransaction = prisma,
+): Promise<number> => {
+  const { count } = await client.refreshToken.updateMany({
     where: { ...principalWhere(principal), revokedAt: null },
     data: { revokedAt: new Date() },
   })

@@ -24,6 +24,27 @@ export const resetPasswordSchema = z.object({
   password: passwordSchema,
 })
 
+export const verifyEmailSchema = z.object({ token: z.string().min(1) })
+
+export const resendVerificationSchema = z.object({ email: emailSchema })
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>
+
+/**
+ * Resposta do cadastro. NÃO traz sessão: a conta só entra depois que o cliente
+ * clica no link enviado por e-mail. O `email` volta para a tela poder dizer
+ * "enviamos para fulano@..." e oferecer o reenvio sem pedir de novo.
+ */
+export const registerResponseSchema = z.object({
+  data: z.object({
+    emailVerificationRequired: z.literal(true),
+    email: z.string(),
+  }),
+})
+
 /**
  * A resposta NÃO carrega o refresh token: ele vai em cookie HttpOnly, fora do
  * alcance do JS. `expiresIn` em segundos para o cliente agendar a renovação.
@@ -44,6 +65,8 @@ export const authCustomerSchema = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string(),
+  /// Derivado de `emailVerifiedAt`: o front não precisa da data, só do estado.
+  emailVerified: z.boolean(),
 })
 
 export const adminLoginResponseSchema = z.object({

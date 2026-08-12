@@ -43,6 +43,16 @@ export const prisma = globalForPrisma.prisma ?? createClient()
 
 if (isDevelopment) globalForPrisma.prisma = prisma
 
+/**
+ * O client de dentro de um `$transaction`. Serve para uma função aceitar tanto
+ * o client global quanto a transação de quem a chamou — sem isso, um helper
+ * compartilhado escreve fora da transação e quebra a invariante em silêncio.
+ */
+export type PrismaTransaction = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+>
+
 export const checkDatabase = async (): Promise<'up' | 'down'> => {
   try {
     await prisma.$queryRaw`SELECT 1`

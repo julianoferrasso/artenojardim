@@ -47,6 +47,9 @@ export const EVENTS = {
   },
   customer: {
     registered: 'customer.registered',
+    emailVerified: 'customer.email_verified',
+    /** Senha trocada PELO CLIENTE via link de e-mail. Derruba todas as sessões. */
+    passwordReset: 'customer.password_reset',
   },
   inventory: {
     adjusted: 'inventory.adjusted',

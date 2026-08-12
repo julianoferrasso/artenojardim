@@ -1,8 +1,23 @@
 import { Router } from 'express'
-import { loginSchema, registerSchema } from '@ecommerce/shared/contracts'
+import {
+  forgotPasswordSchema,
+  loginSchema,
+  registerSchema,
+  resendVerificationSchema,
+  resetPasswordSchema,
+  verifyEmailSchema,
+} from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticateCustomer } from '../../middlewares/authenticate.js'
-import { loginLimiter, refreshLimiter, registerLimiter } from '../../middlewares/rate-limit.js'
+import {
+  forgotPasswordLimiter,
+  loginLimiter,
+  refreshLimiter,
+  registerLimiter,
+  resendVerificationLimiter,
+  resetPasswordLimiter,
+  verifyEmailLimiter,
+} from '../../middlewares/rate-limit.js'
 import * as controller from './controller.js'
 
 /**
@@ -10,6 +25,9 @@ import * as controller from './controller.js'
  * /auth/login, /auth/refresh, /auth/logout, /auth/me. Os mesmos schemas de
  * login/register do staff (shared/contracts) — o formato é o mesmo, o segredo
  * e o cookie é que diferem.
+ *
+ * As rotas de e-mail (confirmação e recuperação de senha) são todas PÚBLICAS: o
+ * cliente que precisa delas é, por definição, quem não consegue autenticar.
  */
 export const customerAuthRoutes: Router = Router()
 
@@ -18,3 +36,8 @@ customerAuthRoutes.post('/login', loginLimiter, validate({ body: loginSchema }),
 customerAuthRoutes.post('/refresh', refreshLimiter, controller.refreshController)
 customerAuthRoutes.post('/logout', controller.logoutController)
 customerAuthRoutes.get('/me', authenticateCustomer, controller.meController)
+
+customerAuthRoutes.post('/verify-email', verifyEmailLimiter, validate({ body: verifyEmailSchema }), controller.verifyEmailController)
+customerAuthRoutes.post('/resend-verification', resendVerificationLimiter, validate({ body: resendVerificationSchema }), controller.resendVerificationController)
+customerAuthRoutes.post('/forgot-password', forgotPasswordLimiter, validate({ body: forgotPasswordSchema }), controller.forgotPasswordController)
+customerAuthRoutes.post('/reset-password', resetPasswordLimiter, validate({ body: resetPasswordSchema }), controller.resetPasswordController)

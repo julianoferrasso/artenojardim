@@ -23,6 +23,15 @@ export const ERROR_CODES = {
   REFRESH_REUSED: 'REFRESH_REUSED',
   ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
   EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
+  /// Token de e-mail inválido, expirado OU já usado. Um código para os três de
+  /// propósito: distinguir "expirado" de "inexistente" confirmaria ao atacante
+  /// que aquele token um dia existiu.
+  EMAIL_TOKEN_INVALID: 'EMAIL_TOKEN_INVALID',
+  EMAIL_ALREADY_VERIFIED: 'EMAIL_ALREADY_VERIFIED',
+  /// Login recusado por falta de confirmação do e-mail. O front reage a este
+  /// code oferecendo o reenvio — sem ele, o cliente lê "senha inválida" e não
+  /// tem para onde ir.
+  EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
 
   // Catálogo
   SLUG_ALREADY_EXISTS: 'SLUG_ALREADY_EXISTS',

@@ -1,4 +1,10 @@
-import { rateLimit, type Store, type ClientRateLimitInfo, type Options } from 'express-rate-limit'
+import {
+  ipKeyGenerator,
+  rateLimit,
+  type Store,
+  type ClientRateLimitInfo,
+  type Options,
+} from 'express-rate-limit'
 import type { Request, RequestHandler } from 'express'
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import { prisma } from '../config/prisma.js'
@@ -80,8 +86,14 @@ type LimiterConfig = {
   name: string
   windowMs: number
   max: number
-  /** Escopo do contador. Sem isto, o limite é por IP. */
-  keyBy?: (req: Request) => string
+  /**
+   * Escopo do contador. Sem isto, o limite é por IP.
+   *
+   * Recebe o IP JÁ NORMALIZADO: um endereço IPv6 é reduzido ao prefixo /64. Sem
+   * essa redução o limite por IP é decorativo — uma faixa IPv6 doméstica tem
+   * trilhões de endereços, e trocar de endereço a cada tentativa zera o contador.
+   */
+  keyBy?: (req: Request, ip: string) => string
 }
 
 const build = ({ name, windowMs, max, keyBy }: LimiterConfig): RequestHandler =>
@@ -94,7 +106,14 @@ const build = ({ name, windowMs, max, keyBy }: LimiterConfig): RequestHandler =>
     handler,
     // O prefixo evita que dois limitadores diferentes compartilhem contador para
     // o mesmo IP — sem ele, errar o login consumiria a cota do checkout.
-    keyGenerator: (req) => `${name}:${keyBy ? keyBy(req) : (req.ip ?? 'unknown')}`,
+    //
+    // `ipKeyGenerator` normaliza IPv6 para o prefixo /64. É a própria lib que
+    // exige: um keyGenerator que use req.ip cru derruba o boot com
+    // ERR_ERL_KEY_GEN_IPV6, porque o limite por IP seria contornável.
+    keyGenerator: (req) => {
+      const ip = ipKeyGenerator(req.ip ?? '')
+      return `${name}:${keyBy ? keyBy(req, ip) : ip || 'unknown'}`
+    },
     skip: () => isTest,
   })
 
@@ -110,9 +129,9 @@ export const loginLimiter = build({
   name: 'login',
   windowMs: 15 * 60_000,
   max: 5,
-  keyBy: (req) => {
+  keyBy: (req, ip) => {
     const email = (req.body as { email?: string })?.email?.toLowerCase().trim() ?? ''
-    return `${req.ip}:${email}`
+    return `${ip}:${email}`
   },
 })
 
@@ -124,7 +143,28 @@ export const forgotPasswordLimiter = build({
   name: 'forgot',
   windowMs: 60 * 60_000,
   max: 3,
-  keyBy: (req) => (req.body as { email?: string })?.email?.toLowerCase().trim() ?? (req.ip ?? ''),
+  keyBy: (req, ip) => (req.body as { email?: string })?.email?.toLowerCase().trim() || ip,
+})
+
+/**
+ * Consumir um link de e-mail: por IP, contra varredura de token. Mais folgado
+ * que o envio porque o mesmo cliente reabre o link, volta e clica de novo — e
+ * nenhuma dessas tentativas é ataque.
+ *
+ * Dois limitadores e não um: com o contador compartilhado, uma casa atrás do
+ * mesmo NAT gastaria no reset a cota de confirmar a conta, e vice-versa.
+ */
+export const verifyEmailLimiter = build({ name: 'verify-email', windowMs: 60 * 60_000, max: 10 })
+
+export const resetPasswordLimiter = build({ name: 'reset-password', windowMs: 60 * 60_000, max: 10 })
+
+/** Reenvio da confirmação: por e-mail, como o forgot. Só por IP, um atacante
+ *  varreria mil endereços; só por IP também puniria a casa toda atrás do NAT. */
+export const resendVerificationLimiter = build({
+  name: 'resend-verification',
+  windowMs: 60 * 60_000,
+  max: 3,
+  keyBy: (req, ip) => (req.body as { email?: string })?.email?.toLowerCase().trim() || ip,
 })
 
 /**

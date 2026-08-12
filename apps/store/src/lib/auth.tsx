@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ROUTES } from '@ecommerce/shared/constants'
-import type { AuthCustomer, LoginInput, RegisterInput } from '@ecommerce/shared/contracts'
+import type { AuthCustomer, LoginInput } from '@ecommerce/shared/contracts'
 import { ApiError } from './api'
 import { clientFetch as call, setAccessToken } from './client'
 
@@ -28,11 +28,15 @@ export { getAccessToken } from './client'
 
 type SessionResp = { customer: AuthCustomer; tokens: { accessToken: string } }
 
+/**
+ * `register` NÃO está aqui: o cadastro não cria sessão — o cliente precisa
+ * confirmar o e-mail antes de entrar. Ele vive em `lib/account.ts`, junto das
+ * outras chamadas que acontecem fora de uma sessão.
+ */
 type AuthState = {
   customer: AuthCustomer | null
   loading: boolean
   login: (input: LoginInput) => Promise<void>
-  register: (input: RegisterInput) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -73,11 +77,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     body: JSON.stringify(input),
   }))
 
-  const register = async (input: RegisterInput) => apply(await call<SessionResp>(ROUTES.auth.register, {
-    method: 'POST',
-    body: JSON.stringify(input),
-  }))
-
   const logout = async () => {
     try {
       await call(ROUTES.auth.logout, { method: 'POST' })
@@ -92,7 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ customer, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ customer, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
@@ -111,6 +110,12 @@ export const authErrorMessage = (err: unknown): string => {
       return 'E-mail ou senha inválidos.'
     case 'EMAIL_ALREADY_EXISTS':
       return 'Já existe uma conta com este e-mail. Faça login.'
+    case 'EMAIL_NOT_VERIFIED':
+      return 'Confirme o seu e-mail antes de entrar. Verifique a sua caixa de entrada.'
+    case 'EMAIL_TOKEN_INVALID':
+      return 'Este link expirou ou já foi utilizado. Solicite um novo.'
+    case 'EMAIL_ALREADY_VERIFIED':
+      return 'Este e-mail já foi confirmado. É só entrar.'
     case 'RATE_LIMITED':
       return 'Muitas tentativas. Aguarde alguns minutos.'
     default:

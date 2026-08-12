@@ -22,6 +22,8 @@ export const ROUTES = {
     me: `${base}/auth/me`,
     forgotPassword: `${base}/auth/forgot-password`,
     resetPassword: `${base}/auth/reset-password`,
+    verifyEmail: `${base}/auth/verify-email`,
+    resendVerification: `${base}/auth/resend-verification`,
   },
 
   store: `${base}/store`,

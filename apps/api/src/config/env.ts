@@ -57,7 +57,33 @@ const baseSchema = z.object({
   STRIPE_PUBLIC: z.string().optional(),
   STRIPE_SECRET: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+
+  // E-mail transacional via AWS SES (domínio artenojardim.com.br verificado).
+  // Opcionais para o boot local, mas OBRIGATÓRIAS em produção (superRefine
+  // abaixo): com a verificação de e-mail bloqueando o login, uma loja sem envio
+  // é uma loja onde ninguém consegue criar conta nem recuperar senha.
+  AWS_REGION: z.string().default('us-east-1'),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  /// Precisa ser um endereço do domínio verificado, senão o SES recusa o envio.
+  EMAIL_FROM: z.string().email().optional(),
+  EMAIL_FROM_NAME: z.string().default('Arte no Jardim'),
+  /// Para onde vai a resposta de quem responde ao "noreply". Ausente ou vazio =
+  /// e-mail sai sem Reply-To. O `or(literal(''))` existe porque um `.env` com a
+  /// chave presente e valor vazio é o jeito natural de dizer "não quero isto" —
+  /// e sem ele o boot morreria reclamando de e-mail inválido.
+  EMAIL_REPLY_TO: z
+    .string()
+    .email()
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
+  EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
 })
+
+/** As três andam juntas: com credencial e sem remetente (ou vice-versa) o SES recusa tudo. */
+const EMAIL_KEYS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'EMAIL_FROM'] as const
 
 /**
  * Credencial de R2 é obrigatória apenas quando o driver é r2. É o que permite
@@ -65,24 +91,53 @@ const baseSchema = z.object({
  * com STORAGE_DRIVER=r2 e o bucket em branco.
  */
 const envSchema = baseSchema.superRefine((env, ctx) => {
-  if (env.STORAGE_DRIVER !== 'r2') return
+  // Sem early-return: há mais de uma regra condicional aqui, e um `return` no
+  // meio silenciaria as seguintes.
+  if (env.STORAGE_DRIVER === 'r2') {
+    const required = [
+      'R2_ACCOUNT_ID',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+      'R2_BUCKET',
+      'R2_PUBLIC_URL',
+    ] as const
 
-  const required = [
-    'R2_ACCOUNT_ID',
-    'R2_ACCESS_KEY_ID',
-    'R2_SECRET_ACCESS_KEY',
-    'R2_BUCKET',
-    'R2_PUBLIC_URL',
-  ] as const
-
-  for (const key of required) {
-    if (!env[key]) {
-      ctx.addIssue({
-        code: 'custom',
-        path: [key],
-        message: `${key} é obrigatório quando STORAGE_DRIVER=r2`,
-      })
+    for (const key of required) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} é obrigatório quando STORAGE_DRIVER=r2`,
+        })
+      }
     }
+  }
+
+  const emailConfigured = EMAIL_KEYS.filter((key) => env[key])
+
+  // "Configurado pela metade" é pior que "não configurado": o boot passa e o
+  // erro só aparece no primeiro cliente que tenta se cadastrar.
+  if (emailConfigured.length > 0 && emailConfigured.length < EMAIL_KEYS.length) {
+    for (const key of EMAIL_KEYS) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} é obrigatório quando o envio de e-mail está configurado — as três andam juntas`,
+        })
+      }
+    }
+  }
+
+  // Em produção não existe "loja sem e-mail": sem envio, ninguém confirma conta
+  // nem recupera senha. Falhar no boot é melhor que descobrir pelo suporte.
+  if (env.NODE_ENV === 'production' && emailConfigured.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['EMAIL_FROM'],
+      message:
+        'Envio de e-mail é obrigatório em produção (confirmação de conta e recuperação de senha)',
+    })
   }
 })
 
@@ -99,6 +154,13 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data
+
+/**
+ * Em desenvolvimento a loja sobe sem SES. Quem for enviar consulta isto antes —
+ * ou recebe 503 do client, que é o mesmo contrato do Stripe.
+ */
+export const isEmailConfigured = (): boolean =>
+  Boolean(env.AWS_ACCESS_KEY_ID && env.AWS_SECRET_ACCESS_KEY && env.EMAIL_FROM)
 
 export const isProduction = env.NODE_ENV === 'production'
 export const isDevelopment = env.NODE_ENV === 'development'

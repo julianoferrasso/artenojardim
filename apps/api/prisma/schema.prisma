@@ -176,20 +176,59 @@ model Customer {
   documentType     String?
   birthDate        DateTime?
   emailVerifiedAt  DateTime?
+  /// Nome digitado ao criar senha sobre uma conta de guest checkout. Fica em
+  /// espera até a confirmação do e-mail: antes disso quem cadastrou só provou
+  /// saber um endereço, e sobrescrever `name` na hora deixaria qualquer um mudar
+  /// o nome que aparece nos pedidos já feitos por aquele cliente.
+  pendingName      String?
   acceptsMarketing Boolean   @default(false)
   deletedAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store         Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
+  tokens        CustomerToken[]
   carts         Cart[]
   addresses     Address[]
   orders        Order[]
 
   @@unique([storeId, email])
   @@index([storeId])
+}
+
+/// Finalidade do token de uso único enviado por e-mail. Uma tabela para as duas
+/// porque a mecânica é idêntica (hash, expiração, single-use); o que muda é o TTL
+/// e o efeito do consumo.
+enum CustomerTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+/// Token opaco de uso único que viaja por e-mail. Guardamos o HASH, nunca o token
+/// cru — mesma razão do RefreshToken: um dump do banco não vira conta tomada.
+/// Sem storeId próprio: o dono é o Customer, que já pertence à loja, e a busca é
+/// sempre pelo tokenHash (unique global, 256 bits de entropia).
+model CustomerToken {
+  id         String               @id @default(cuid())
+  customerId String
+  purpose    CustomerTokenPurpose
+  tokenHash  String               @unique
+  expiresAt  DateTime
+  /// Single-use: preenchido no consumo. Só `usedAt: null` é um token válido.
+  usedAt     DateTime?
+  createdAt  DateTime             @default(now())
+
+  ip        String?
+  userAgent String?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Consulta quente: "tokens vivos deste cliente para esta finalidade" — é o que
+  /// a emissão usa para invalidar os anteriores.
+  @@index([customerId, purpose])
+  @@index([expiresAt])
 }
 
 /// Endereço do cliente (entrega/cobrança). Filho de Customer — a posse é sempre
