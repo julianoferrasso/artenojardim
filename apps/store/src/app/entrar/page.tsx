@@ -5,7 +5,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { loginSchema, registerSchema, type LoginInput, type RegisterInput } from '@ecommerce/shared/contracts'
+import {
+  loginSchema,
+  registerSchema,
+  type LoginInput,
+  type RegisterFormInput,
+  type RegisterInput,
+} from '@ecommerce/shared/contracts'
 import { ApiError } from '@/lib/api'
 import { registerAccount, resendVerification } from '@/lib/account'
 import { useAuth, authErrorMessage } from '@/lib/auth'
@@ -149,7 +155,13 @@ function RegisterForm() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<RegisterInput>({ resolver: zodResolver(registerSchema) })
+  } = useForm<RegisterFormInput, unknown, RegisterInput>({
+    resolver: zodResolver(registerSchema),
+    // Sem defaultValues o `.default(true)` do contrato não serve para nada aqui:
+    // uma caixa desmarcada envia `false`, não `undefined`, e o default nunca é
+    // exercido. É esta linha que faz a caixa nascer marcada.
+    defaultValues: { acceptsMarketing: true },
+  })
 
   // A conta existe, mas ainda não entra: o cadastro não emite sessão.
   if (pendingEmail) {
@@ -198,6 +210,18 @@ function RegisterForm() {
         {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         <span className="text-xs text-muted-foreground">Mínimo 6 caracteres.</span>
       </div>
+      {/* Marcada por padrão (defaultValues acima). O mesmo controle mora em
+          /conta/preferencias, para quem mudar de ideia depois. */}
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          {...register('acceptsMarketing')}
+          className="mt-0.5 size-4 shrink-0 accent-primary"
+        />
+        <span className="text-sm text-muted-foreground">
+          Quero receber novidades e promoções por e-mail. Você pode desmarcar quando quiser.
+        </span>
+      </label>
       {error && <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
       <button type="submit" disabled={isSubmitting} className={submitButtonClass}>
         {isSubmitting ? 'Criando…' : 'Criar conta'}

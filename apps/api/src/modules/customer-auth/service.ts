@@ -204,14 +204,29 @@ export const registerCustomer = async (
   // alheio. Deixar o nome ser reescrito aqui permitiria trocar o nome que aparece
   // nos pedidos já feitos, sem provar posse de nada. O nome do formulário passa a
   // valer quando ele confirmar o e-mail.
+  // `acceptsMarketing` vai nos DOIS braços, inclusive no de guest checkout: ao
+  // contrário do nome, ele não afirma nada sobre pedidos passados — é a escolha
+  // que a pessoa acabou de fazer na caixa, e vale a partir de agora. Esquecê-lo
+  // aqui deixaria todo cliente vindo do guest checkout preso em `false`, com a
+  // caixa do formulário mentindo para ele.
+  //
+  // Gravado já no cadastro, e não na confirmação do e-mail: a campanha só
+  // considera quem tem `emailVerifiedAt`, então conta não confirmada com `true`
+  // não recebe nada. O dado fica certo sem precisar de um segundo passo.
   const customer = existing
     ? await prisma.customer.update({
         where: { id: existing.id },
-        data: { passwordHash, pendingName: input.name },
+        data: { passwordHash, pendingName: input.name, acceptsMarketing: input.acceptsMarketing },
         select: { id: true, name: true, email: true },
       })
     : await prisma.customer.create({
-        data: { storeId, name: input.name, email: input.email, passwordHash },
+        data: {
+          storeId,
+          name: input.name,
+          email: input.email,
+          passwordHash,
+          acceptsMarketing: input.acceptsMarketing,
+        },
         select: { id: true, name: true, email: true },
       })
 

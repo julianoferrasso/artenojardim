@@ -97,6 +97,14 @@ export const EVENTS = {
     paymentFailed: 'email.payment_failed',
     boletoIssued: 'email.boleto_issued',
     passwordReset: 'email.password_reset',
+    /** UM destinatário de campanha. O fan-out publica uma destas por pessoa. */
+    marketingProduct: 'email.marketing_product',
+  },
+  campaign: {
+    /** Campanha criada; o orquestrador resolve o fan-out. */
+    dispatchRequested: 'campaign.dispatch_requested',
+    /** Só auditoria: quem disparou, para qual produto, para quantos. */
+    sent: 'campaign.sent',
   },
   shipping: {
     labelRequested: 'shipping.label.requested',
@@ -110,16 +118,19 @@ export const EVENTS = {
 
 /**
  * Os únicos eventos que realmente vão para o RabbitMQ na v1.
- * Publicar fora desta lista é bug: mensagem sem consumidor.
+ * Publicar fora desta lista é bug: mensagem sem consumidor. `shared/publish.ts`
+ * verifica isto em runtime, então a regra falha alto em vez de silenciosamente.
  */
 export const QUEUED_EVENTS = [
   EVENTS.order.paid,
+  EVENTS.campaign.dispatchRequested,
   EVENTS.email.orderConfirmation,
   EVENTS.email.orderShipped,
   EVENTS.email.orderDelivered,
   EVENTS.email.paymentFailed,
   EVENTS.email.boletoIssued,
   EVENTS.email.passwordReset,
+  EVENTS.email.marketingProduct,
   EVENTS.shipping.labelRequested,
   EVENTS.shipping.trackingSync,
 ] as const

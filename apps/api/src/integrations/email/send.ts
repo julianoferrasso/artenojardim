@@ -16,6 +16,16 @@ export type SendEmailInput = EmailContent & {
   /** Correlaciona bounce/complaint no SES com o e-mail que originou. Só rótulo:
    *  o SES rejeita valores fora de [A-Za-z0-9_-]. */
   tags?: Record<string, string>
+  /**
+   * Cabeçalhos extras. Existe para o `List-Unsubscribe`, que é o que faz o Gmail
+   * mostrar "Cancelar inscrição" ao lado do remetente — o botão que o cliente
+   * aperta em vez de "marcar como spam". A diferença entre os dois é a reputação
+   * do domínio no SES.
+   *
+   * Transacional não passa nada: o campo existir não significa que todo e-mail
+   * deva usá-lo.
+   */
+  headers?: Record<string, string>
 }
 
 export const sendEmail = async (input: SendEmailInput): Promise<void> => {
@@ -38,6 +48,11 @@ export const sendEmail = async (input: SendEmailInput): Promise<void> => {
           Html: { Data: input.html, Charset: 'UTF-8' },
           Text: { Data: input.text, Charset: 'UTF-8' },
         },
+        ...(input.headers
+          ? {
+              Headers: Object.entries(input.headers).map(([Name, Value]) => ({ Name, Value })),
+            }
+          : {}),
       },
     },
     ...(input.tags

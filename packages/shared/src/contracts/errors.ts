@@ -63,6 +63,17 @@ export const ERROR_CODES = {
   PAYMENT_DECLINED: 'PAYMENT_DECLINED',
   ORDER_NOT_CANCELABLE: 'ORDER_NOT_CANCELABLE',
 
+  // Campanhas de e-mail
+  /// Este produto já teve o e-mail de novidade disparado. Trava de índice
+  /// parcial no banco: anunciar duas vezes o mesmo lançamento queima a lista.
+  CAMPAIGN_ALREADY_SENT: 'CAMPAIGN_ALREADY_SENT',
+  /// Ninguém aceita marketing, ou o lojista desmarcou todo mundo.
+  CAMPAIGN_NO_RECIPIENTS: 'CAMPAIGN_NO_RECIPIENTS',
+  /// Divulgar rascunho manda o cliente para um 404 da loja.
+  PRODUCT_NOT_ACTIVE: 'PRODUCT_NOT_ACTIVE',
+  /// Token de descadastro adulterado ou de outra loja.
+  UNSUBSCRIBE_TOKEN_INVALID: 'UNSUBSCRIBE_TOKEN_INVALID',
+
   // Uploads
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',

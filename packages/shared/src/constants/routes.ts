@@ -119,6 +119,15 @@ export const ROUTES = {
       anonymize: (id: string) => `${base}/admin/customers/${id}/anonymize`,
     },
 
+    /** E-mail de marketing de produto. Router inteiro atrás de requireStaff. */
+    campaigns: {
+      list: `${base}/admin/campaigns`,
+      /** Quem vai receber, paginado — alimenta a aba "Avançado" do diálogo. */
+      preview: (productId: string) => `${base}/admin/campaigns/product/${productId}/preview`,
+      /** Responde 202: o envio acontece na fila, não no request. */
+      send: (productId: string) => `${base}/admin/campaigns/product/${productId}/send`,
+    },
+
     /** Gestão de usuários de staff. Router inteiro atrás de requireMinRole. */
     users: {
       list: `${base}/admin/users`,

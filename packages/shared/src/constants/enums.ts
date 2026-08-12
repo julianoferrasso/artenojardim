@@ -79,3 +79,16 @@ export const SHIPMENT_STATUSES = [
 ] as const
 export const shipmentStatusSchema = z.enum(SHIPMENT_STATUSES)
 export type ShipmentStatus = z.infer<typeof shipmentStatusSchema>
+
+/**
+ * O que originou a campanha. NEW_PRODUCT só pode acontecer uma vez por produto
+ * (índice parcial no banco); MANUAL é o botão da tela do produto e pode repetir.
+ */
+export const EMAIL_CAMPAIGN_KINDS = ['NEW_PRODUCT', 'MANUAL'] as const
+export const emailCampaignKindSchema = z.enum(EMAIL_CAMPAIGN_KINDS)
+export type EmailCampaignKind = z.infer<typeof emailCampaignKindSchema>
+
+/** PENDING = fan-out em curso. SENDING = todos na fila, envios em andamento. */
+export const EMAIL_CAMPAIGN_STATUSES = ['PENDING', 'SENDING', 'SENT', 'FAILED'] as const
+export const emailCampaignStatusSchema = z.enum(EMAIL_CAMPAIGN_STATUSES)
+export type EmailCampaignStatus = z.infer<typeof emailCampaignStatusSchema>

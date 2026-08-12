@@ -70,6 +70,23 @@ enum PaymentMethod {
   BOLETO
 }
 
+/// O que originou a campanha. NEW_PRODUCT é disparado ao publicar e só pode
+/// acontecer UMA vez por produto (índice parcial em EmailCampaign); MANUAL é o
+/// botão da tela do produto e pode repetir — divulgar de novo é o objetivo dele.
+enum EmailCampaignKind {
+  NEW_PRODUCT
+  MANUAL
+}
+
+/// PENDING = destinatários gravados, fan-out ainda não terminou.
+/// SENDING  = todos publicados na fila, envios em andamento.
+enum EmailCampaignStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -92,18 +109,19 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users      User[]
-  customers  Customer[]
-  settings   Setting[]
-  auditLogs  AuditLog[]
-  uploads    Upload[]
-  categories Category[]
-  products   Product[]
-  variants   ProductVariant[]
-  movements  InventoryMovement[]
-  carts      Cart[]
-  orders     Order[]
+  users                 User[]
+  customers             Customer[]
+  settings              Setting[]
+  auditLogs             AuditLog[]
+  uploads               Upload[]
+  categories            Category[]
+  products              Product[]
+  variants              ProductVariant[]
+  movements             InventoryMovement[]
+  carts                 Cart[]
+  orders                Order[]
   newsletterSubscribers NewsletterSubscriber[]
+  emailCampaigns        EmailCampaign[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -121,11 +139,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store         Store               @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  refreshTokens RefreshToken[]
-  auditLogs     AuditLog[]
-  uploads       Upload[]
-  movements     InventoryMovement[]
+  store          Store               @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
+  uploads        Upload[]
+  movements      InventoryMovement[]
+  emailCampaigns EmailCampaign[]
 
   /// Hoje redundante (uma loja). Na Fase 4 é o que impede colisão entre lojas.
   @@unique([storeId, email])
@@ -391,13 +410,14 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store      Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store         Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
   categories    ProductCategory[]
   images        ProductImage[]
   options       ProductOption[]
   variants      ProductVariant[]
   views         ProductView[]
   customerViews CustomerProductView[]
+  campaigns     EmailCampaign[]
 
   @@unique([storeId, slug])
   @@index([storeId, status])
@@ -823,9 +843,11 @@ model StripeEvent {
   payloadJson Json?
 }
 
-/// Inscrito na newsletter (formulário público da loja). Sem confirmação por
-/// e-mail por ora — não há envio de campanha ainda; quando houver, o double
-/// opt-in nasce junto. Re-inscrição zera `unsubscribedAt` (upsert idempotente).
+/// Inscrito na newsletter (formulário público da loja). Ainda sem double opt-in:
+/// a campanha já existe (EmailCampaign), mas a confirmação em dois passos entra
+/// junto com a primeira queixa de spam ou quando a base passar de alguns
+/// milhares — antes disso, o custo de conversão não se paga.
+/// Re-inscrição zera `unsubscribedAt` (upsert idempotente).
 model NewsletterSubscriber {
   id             String    @id @default(cuid())
   storeId        String
@@ -837,4 +859,86 @@ model NewsletterSubscriber {
 
   @@unique([storeId, email])
   @@index([storeId])
+}
+
+/// Idempotência dos consumidores de fila (arquitetura §12). A PK é o `id` do
+/// envelope publicado: inserir o mesmo evento duas vezes bate no unique = já
+/// processado = ack e segue. Mesma mecânica do StripeEvent, para o barramento
+/// interno — RabbitMQ é *at-least-once*, um ack perdido por queda de rede
+/// reentrega, e sem isto o cliente recebe dois e-mails.
+model ProcessedEvent {
+  id          String   @id
+  queue       String
+  processedAt DateTime @default(now())
+
+  /// Para a varredura de limpeza (>30 dias) que ainda não existe.
+  @@index([processedAt])
+}
+
+/// Uma campanha = um clique em "enviar". `subject` é SNAPSHOT: o produto muda de
+/// nome e de preço, e o histórico não pode mentir sobre o que o cliente recebeu.
+///
+/// ⚠️ NEW_PRODUCT tem trava de envio único por produto, num índice PARCIAL que o
+/// Prisma não sabe expressar (`@@unique` não aceita WHERE). Ele vive só no SQL da
+/// migration `..._email_campaigns` — se um `migrate dev` futuro recriar esta
+/// tabela, o índice precisa ser recolocado à mão:
+///   CREATE UNIQUE INDEX "EmailCampaign_new_product_once"
+///     ON "EmailCampaign" ("storeId", "productId")
+///     WHERE "kind" = 'NEW_PRODUCT' AND "canceledAt" IS NULL;
+model EmailCampaign {
+  id      String              @id @default(cuid())
+  storeId String
+  kind    EmailCampaignKind
+  status  EmailCampaignStatus @default(PENDING)
+
+  productId String?
+  subject   String
+
+  /// Denormalizado: a tela de histórico não pode fazer COUNT em milhares de
+  /// linhas por campanha só para mostrar um número.
+  recipientCount Int @default(0)
+
+  /// Staff que disparou. Nulo se o usuário for removido depois.
+  createdBy String?
+
+  createdAt  DateTime  @default(now())
+  sentAt     DateTime?
+  canceledAt DateTime?
+
+  store      Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product    Product?                 @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user       User?                    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  recipients EmailCampaignRecipient[]
+
+  @@index([storeId, createdAt])
+  @@index([productId])
+}
+
+/// Uma linha por destino. É o log ("para quem foi, e deu certo?") E a trava de
+/// idempotência de negócio: o worker só envia se conseguir mover QUEUED→SENDING,
+/// então uma reentrega do RabbitMQ não vira um segundo e-mail. Redundante com
+/// ProcessedEvent de propósito — aquele protege contra a MESMA mensagem chegar
+/// duas vezes, este contra DUAS mensagens para o mesmo destino.
+///
+/// `status` é String e não enum: cinco valores internos ao worker, que não
+/// aparecem em contrato nem em filtro. Enum obrigaria a duplicar em
+/// constants/enums.ts e a entrar no teste de drift, sem ninguém ganhar nada.
+model EmailCampaignRecipient {
+  id         String @id @default(cuid())
+  campaignId String
+  email      String
+
+  /// Nulo = só inscrito da newsletter, sem conta na loja.
+  customerId String?
+
+  /// PENDING | QUEUED | SENDING | SENT | FAILED
+  status String    @default("PENDING")
+  error  String?
+  sentAt DateTime?
+
+  campaign EmailCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, email])
+  /// A consulta do fan-out: "os que faltam desta campanha".
+  @@index([campaignId, status])
 }
