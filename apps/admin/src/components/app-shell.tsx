@@ -9,6 +9,7 @@ import {
   FolderTree,
   Boxes,
   Images,
+  Mail,
   Palette,
   UserRound,
   Users,
@@ -34,6 +35,8 @@ const NAV: NavItem[] = [
   { href: '/categorias', label: 'Categorias', icon: FolderTree },
   { href: '/estoque', label: 'Estoque', icon: Boxes },
   { href: '/uploads', label: 'Biblioteca de mídia', icon: Images },
+  // O disparo mora na tela do produto; aqui fica só o histórico do que saiu.
+  { href: '/campanhas', label: 'Campanhas', icon: Mail },
   // Mexe na cara da loja inteira: mesmo piso de cargo da gestão de usuários.
   { href: '/aparencia', label: 'Aparência', icon: Palette, minRole: 'ADMIN' },
   { href: '/usuarios', label: 'Usuários', icon: Users, minRole: MANAGE_USERS_MIN_ROLE },
