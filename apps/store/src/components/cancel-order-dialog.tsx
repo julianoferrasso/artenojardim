@@ -3,7 +3,9 @@
 import { useState, type FormEvent } from 'react'
 import type { CustomerCancelMode } from '@ecommerce/shared/contracts'
 import { ApiError } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { useCancelOrder } from '@/lib/orders'
+import { buttonVariants } from './ui/button'
 
 /**
  * Cancelar um pedido são duas ações diferentes com o mesmo botão, e a cópia
@@ -61,7 +63,7 @@ export const CancelOrderDialog = ({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'w-full text-muted-foreground')}
       >
         {copy.trigger}
       </button>
@@ -94,7 +96,7 @@ export const CancelOrderDialog = ({
         <button
           type="submit"
           disabled={reason.trim().length < 5 || cancel.isPending}
-          className="flex-1 rounded-lg bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground shadow-soft transition-all duration-200 hover:bg-destructive/90 disabled:opacity-50"
+          className={cn(buttonVariants({ variant: 'danger', size: 'sm' }), 'flex-1')}
         >
           {cancel.isPending ? 'Enviando…' : copy.submit}
         </button>
@@ -104,7 +106,7 @@ export const CancelOrderDialog = ({
             setOpen(false)
             setError(null)
           }}
-          className="rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
+          className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}
         >
           Voltar
         </button>

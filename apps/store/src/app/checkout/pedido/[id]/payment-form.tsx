@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from 'react'
 import { PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js'
+import { buttonVariants } from '@/components/ui/button'
 
 /**
  * Formulário do Payment Element. Ao confirmar, o Stripe cuida de tudo — 3DS do
@@ -44,7 +45,7 @@ export function PaymentForm({ returnUrl }: { returnUrl: string }) {
       <button
         type="submit"
         disabled={!stripe || submitting}
-        className="rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+        className={buttonVariants({ size: 'lg' })}
       >
         {submitting ? 'Processando…' : 'Pagar agora'}
       </button>

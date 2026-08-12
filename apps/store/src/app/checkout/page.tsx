@@ -9,8 +9,9 @@ import { useCart } from '@/lib/cart'
 import { listAddresses } from '@/lib/addresses'
 import { quoteShipping } from '@/lib/shipping'
 import { confirmCheckout } from '@/lib/checkout'
-import { formatBRL } from '@/lib/utils'
+import { formatBRL, cn } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
+import { buttonVariants } from '@/components/ui/button'
 import { ProductImage } from '@/components/product-image'
 
 /**
@@ -229,7 +230,7 @@ export default function CheckoutPage() {
       <button
         onClick={() => void place()}
         disabled={!addressId || !serviceId || placing}
-        className="h-12 w-full rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
+        className={cn(buttonVariants({ size: 'lg' }), 'w-full')}
       >
         {placing ? 'Finalizando…' : `Confirmar pedido · ${formatBRL(total)}`}
       </button>

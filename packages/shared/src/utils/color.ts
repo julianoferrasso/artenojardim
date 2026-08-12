@@ -236,6 +236,65 @@ export const shiftLightness = (color: Oklch, deltaL: number, chromaMultiplier = 
 })
 
 /**
+ * As variáveis CSS dos BOTÕES.
+ *
+ * Separada de `deriveThemeVars` de propósito: aquela é consumida por toda a
+ * bateria de testes e pela prévia, e não deve inchar com um parâmetro a mais
+ * para quem só quer as cores base.
+ *
+ * `source` é de qual cor do tema o botão sai — é o "replicar" que o lojista
+ * escolhe. `custom` é a cor própria dele. O TEXTO nunca é escolhido: sai de
+ * `contrastForeground`, exatamente como o dos botões de hoje. É isso que
+ * permite liberar a cor de fundo sem liberar botão ilegível.
+ */
+export const deriveButtonVars = (
+  theme: { primary: Oklch; secondary: Oklch; accent: Oklch; background: Oklch },
+  buttons?: {
+    primary?: { source: string; custom: Oklch | null }
+    secondary?: { source: string; custom: Oklch | null }
+  },
+): Record<string, string> => {
+  const { background } = theme
+
+  /*
+   * `buttons` é opcional porque loja e API sobem em momentos diferentes: uma
+   * resposta antiga em cache (sem a chave) derrubaria a home inteira. Sem a
+   * configuração, os dois níveis caem na marca — que é o default.
+   */
+  const fallback = { source: 'primary', custom: null }
+  const primaryStyle = buttons?.primary ?? fallback
+  const secondaryStyle = buttons?.secondary ?? fallback
+
+  // As mesmas superfícies de deriveThemeVars — a tinta do botão contornado
+  // precisa ler nas três, igual à tinta da marca.
+  const SURFACE_MAX_CHROMA = 0.06
+  const surface = (deltaL: number, chromaMultiplier: number): Oklch => {
+    const shifted = shiftLightness(background, deltaL, chromaMultiplier)
+    return { ...shifted, c: Math.min(shifted.c, SURFACE_MAX_CHROMA) }
+  }
+  const surfaces = [surface(0.012, 0.5), background, surface(-0.03, 1.5)]
+
+  const resolve = (style: { source: string; custom: Oklch | null }): Oklch => {
+    if (style.source === 'custom') return style.custom ?? theme.primary
+    if (style.source === 'secondary') return theme.secondary
+    if (style.source === 'accent') return theme.accent
+    return theme.primary
+  }
+
+  const vars = (name: string, style: { source: string; custom: Oklch | null }) => {
+    const color = resolve(style)
+    return {
+      [`--btn-${name}`]: oklchToCss(color),
+      [`--btn-${name}-foreground`]: oklchToCss(contrastForeground(color)),
+      // Para o estilo contornado: a cor como TINTA sobre as superfícies claras.
+      [`--btn-${name}-ink`]: oklchToCss(readableInk(color, surfaces)),
+    }
+  }
+
+  return { ...vars('primary', primaryStyle), ...vars('secondary', secondaryStyle) }
+}
+
+/**
  * Faixa de fundo em que NENHUMA tinta atinge 4.5:1 sobre as superfícies
  * derivadas — nem preto, nem branco. É limite físico do par de luminosidades,
  * não da fórmula: o fundo fica a meio caminho dos dois extremos.

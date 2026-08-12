@@ -2,6 +2,7 @@ import {
   type AdminTheme,
   type PublicStore,
   type PublicTheme,
+  type StoreButtons,
   type StoreTheme,
   type UpdateStoreThemeInput,
 } from '@ecommerce/shared/contracts'
@@ -74,10 +75,21 @@ export const getAdminTheme = async (): Promise<AdminTheme> => {
     background: oklchToHex(theme.background),
     radius: theme.radius,
     badgeStyle: theme.badgeStyle,
+    buttons: {
+      primary: toAdminButton(theme.buttons.primary),
+      secondary: toAdminButton(theme.buttons.secondary),
+    },
     logoId: theme.logoId,
     logoUrl: await resolveLogoUrl(theme.logoId),
   }
 }
+
+/** A cor própria do botão viaja em hex para o formulário, como as do tema. */
+const toAdminButton = (style: StoreButtons['primary']) => ({
+  source: style.source,
+  custom: style.custom ? oklchToHex(style.custom) : null,
+  emphasis: style.emphasis,
+})
 
 export const updateTheme = async (
   input: UpdateStoreThemeInput,
@@ -102,6 +114,10 @@ export const updateTheme = async (
     background: hexToOklch(input.background),
     radius: input.radius,
     badgeStyle: input.badgeStyle,
+    buttons: {
+      primary: fromAdminButton(input.buttons.primary),
+      secondary: fromAdminButton(input.buttons.secondary),
+    },
     logoId: input.logoId,
   }
 
@@ -129,6 +145,14 @@ export const updateTheme = async (
  * objetos `{l,c,h}` diferentes sempre pareceriam "mudou" na comparação por
  * referência. Como string, o log fica legível para quem audita.
  */
+const fromAdminButton = (
+  style: UpdateStoreThemeInput['buttons']['primary'],
+): StoreButtons['primary'] => ({
+  source: style.source,
+  custom: style.custom ? hexToOklch(style.custom) : null,
+  emphasis: style.emphasis,
+})
+
 const flatten = (theme: StoreTheme): Record<string, unknown> => ({
   primary: oklchToHex(theme.primary),
   secondary: oklchToHex(theme.secondary),
@@ -136,5 +160,8 @@ const flatten = (theme: StoreTheme): Record<string, unknown> => ({
   background: oklchToHex(theme.background),
   radius: theme.radius,
   badgeStyle: theme.badgeStyle,
+  // Serializado: o diff da auditoria compara valor a valor, e dois objetos
+  // aninhados sempre pareceriam "mudou" na comparação por referência.
+  buttons: JSON.stringify(theme.buttons),
   logoId: theme.logoId,
 })

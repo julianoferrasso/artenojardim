@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ROUTES } from '@ecommerce/shared/constants'
+import { buttonVariants } from '@/components/ui/button'
 
 /**
  * Callback do OAuth do Melhor Envio. É a `URL de redirecionamento após
@@ -55,7 +56,7 @@ export default async function MelhorEnvioCallbackPage({
           </p>
         </>
       )}
-      <Link href="/" className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent">
+      <Link href="/" className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}>
         Voltar à loja
       </Link>
     </main>

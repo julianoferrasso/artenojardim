@@ -11,6 +11,8 @@ import { getOrder, getOrderPayment, getOrderStatus } from '@/lib/checkout'
 import { getStripePromise } from '@/lib/stripe'
 import { OrderItemList, OrderDeliveryCard, OrderTotals } from '@/components/order-summary'
 import { PaymentForm } from './payment-form'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * Tela do pedido — o FUNIL DE PAGAMENTO, não um recibo. O pedido nasce PENDING
@@ -179,7 +181,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               // Recarrega para reabrir o Payment Element com um novo intento.
               setTimeout(() => window.location.reload(), 0)
             }}
-            className="mt-3 rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
+            className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'mt-3')}
           >
             Tentar novamente
           </button>
@@ -213,13 +215,13 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">
         <Link
           href={`/conta/pedidos/${order.id}`}
-          className="flex-1 rounded-lg bg-primary px-4 py-3 text-center text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
+          className={cn(buttonVariants(), 'flex-1')}
         >
           Acompanhar pedido
         </Link>
         <Link
           href="/"
-          className="flex-1 rounded-lg border border-border px-4 py-3 text-center text-sm transition-colors hover:bg-accent"
+          className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet' }), 'flex-1')}
         >
           Continuar comprando
         </Link>

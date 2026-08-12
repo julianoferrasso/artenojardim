@@ -33,6 +33,15 @@
      reescreve o valor por cor — o admin em si não muda de tema. */
   --primary-ink: oklch(0.48 0.13 255);
 
+  /* Tokens de botão da LOJA. Existem aqui só para a prévia da tela de
+     Aparência, que reescreve os valores; o admin não muda de tema. */
+  --btn-primary: oklch(0.48 0.13 255);
+  --btn-primary-foreground: oklch(0.985 0 0);
+  --btn-primary-ink: oklch(0.48 0.13 255);
+  --btn-secondary: oklch(0.48 0.13 255);
+  --btn-secondary-foreground: oklch(0.985 0 0);
+  --btn-secondary-ink: oklch(0.48 0.13 255);
+
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
 
@@ -103,6 +112,12 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-ink: var(--primary-ink);
+  --color-btn-primary: var(--btn-primary);
+  --color-btn-primary-foreground: var(--btn-primary-foreground);
+  --color-btn-primary-ink: var(--btn-primary-ink);
+  --color-btn-secondary: var(--btn-secondary);
+  --color-btn-secondary-foreground: var(--btn-secondary-foreground);
+  --color-btn-secondary-ink: var(--btn-secondary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

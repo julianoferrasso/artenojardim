@@ -72,7 +72,7 @@ export default async function HomePage() {
               {firstCategory && (
                 <Link
                   href={`/categorias/${firstCategory.slug}`}
-                  className={buttonVariants({ variant: 'outline', size: 'lg' })}
+                  className={buttonVariants({ variant: 'secondary', emphasis: 'quiet', size: 'lg' })}
                 >
                   {firstCategory.name}
                 </Link>

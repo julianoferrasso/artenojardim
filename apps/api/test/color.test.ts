@@ -5,6 +5,7 @@ import {
   oklchToCss,
   contrastForeground,
   contrastRatio,
+  deriveButtonVars,
   deriveThemeVars,
   isDeadZone,
   readableInk,
@@ -12,6 +13,7 @@ import {
   MIN_CONTRAST,
   type Oklch,
 } from '@ecommerce/shared/utils'
+import { storeThemeSchema, DEFAULT_STORE_BUTTONS } from '@ecommerce/shared/contracts'
 
 /**
  * A conversão de cor é o que sustenta a tela de Aparência: o lojista escolhe em
@@ -214,6 +216,95 @@ describe('deriveThemeVars — contraste garantido em qualquer tema', () => {
     expect(
       contrastRatio(parseOklch(vars['--primary-foreground']!), parseOklch(vars['--primary']!)),
     ).toBeGreaterThanOrEqual(MIN_CONTRAST)
+  })
+})
+
+describe('deriveButtonVars — o botão do lojista, legível em qualquer cor', () => {
+  const PALETTE = {
+    primary: { l: 0.56, c: 0.11, h: 30 },
+    secondary: { l: 0.945, c: 0.025, h: 35 },
+    accent: { l: 0.93, c: 0.032, h: 55 },
+    background: { l: 0.985, c: 0.008, h: 75 },
+  }
+
+  const sources = ['primary', 'secondary', 'accent'] as const
+
+  it.each(sources)('replicando a cor "%s": o texto do botão é legível', (source) => {
+    const vars = deriveButtonVars(PALETTE, {
+      primary: { source, custom: null },
+      secondary: { source, custom: null },
+    })
+
+    expect(
+      contrastRatio(parseOklch(vars['--btn-primary-foreground']!), parseOklch(vars['--btn-primary']!)),
+    ).toBeGreaterThanOrEqual(MIN_CONTRAST)
+  })
+
+  // As cores que mais quebram contraste: claríssima, escuríssima e saturada.
+  const CUSTOMS: Oklch[] = [
+    { l: 0.95, c: 0.16, h: 95 },
+    { l: 0.08, c: 0.05, h: 260 },
+    { l: 0.62, c: 0.28, h: 20 },
+    { l: 1, c: 0, h: 0 },
+  ]
+
+  it.each(CUSTOMS)('cor própria l=$l c=$c: texto legível e tinta legível', (custom) => {
+    const vars = deriveButtonVars(PALETTE, {
+      primary: { source: 'custom', custom },
+      secondary: { source: 'custom', custom },
+    })
+
+    // Sólido: o texto sobre a cor escolhida.
+    expect(
+      contrastRatio(parseOklch(vars['--btn-primary-foreground']!), parseOklch(vars['--btn-primary']!)),
+    ).toBeGreaterThanOrEqual(MIN_CONTRAST)
+
+    // Contornado: a cor como tinta sobre o fundo da loja.
+    expect(
+      contrastRatio(parseOklch(vars['--btn-primary-ink']!), PALETTE.background),
+    ).toBeGreaterThanOrEqual(MIN_CONTRAST)
+  })
+
+  it('cor própria ausente cai na marca em vez de virar preto', () => {
+    const vars = deriveButtonVars(PALETTE, {
+      primary: { source: 'custom', custom: null },
+      secondary: { source: 'primary', custom: null },
+    })
+    expect(vars['--btn-primary']).toBe(oklchToCss(PALETTE.primary))
+  })
+})
+
+/**
+ * O tema vive como JSON em Setting e os já gravados não têm as chaves novas.
+ * Sem `.default()`, o safeParse rejeitaria o tema inteiro e a loja voltaria à
+ * paleta de fábrica — já aconteceu uma vez, e é o que este teste tranca.
+ */
+describe('storeThemeSchema — compatibilidade com tema já gravado', () => {
+  const GRAVADO = {
+    primary: { l: 0.8, c: 0.034, h: 196.5 },
+    secondary: { l: 0.942, c: 0.044, h: 328.2 },
+    accent: { l: 0.93, c: 0.032, h: 55.3 },
+    background: { l: 0.825, c: 0.006, h: 183 },
+    radius: 'medium',
+    logoId: 'cmsowlvol00294olvv07kl8gm',
+  }
+
+  it('aceita um tema SEM as chaves novas e preenche os defaults', () => {
+    const parsed = storeThemeSchema.parse(GRAVADO)
+
+    expect(parsed.buttons).toEqual(DEFAULT_STORE_BUTTONS)
+    expect(parsed.badgeStyle).toBe('filled')
+    // O que o lojista escolheu continua intacto.
+    expect(parsed.primary).toEqual(GRAVADO.primary)
+    expect(parsed.logoId).toBe(GRAVADO.logoId)
+  })
+
+  it('o default dos botões reproduz o que estava fixo no CSS', () => {
+    expect(DEFAULT_STORE_BUTTONS.primary).toEqual({
+      source: 'primary',
+      custom: null,
+      emphasis: 'solid',
+    })
   })
 })
 

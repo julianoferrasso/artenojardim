@@ -1,22 +1,27 @@
 'use client'
 
 import { useEffect, useState, type CSSProperties } from 'react'
-import { useController, useForm, type Control } from 'react-hook-form'
+import { useController, useForm, type Control, type UseFormSetValue } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Truck } from 'lucide-react'
 import {
   updateStoreThemeSchema,
   BADGE_STYLE_CLASSES,
+  BUTTON_COLOR_SOURCE,
+  BUTTON_EMPHASIS,
   THEME_BADGE_STYLE,
   THEME_RADIUS,
   THEME_RADIUS_REM,
   type AdminTheme,
+  type ButtonColorSource,
+  type ButtonEmphasis,
   type ThemeBadgeStyle,
   type ThemeRadius,
   type UpdateStoreThemeInput,
 } from '@ecommerce/shared/contracts'
 import {
   contrastRatio,
+  deriveButtonVars,
   deriveThemeVars,
   hexToOklch,
   isDeadZone,
@@ -52,6 +57,119 @@ const RADIUS_LABEL: Record<ThemeRadius, string> = {
 const BADGE_STYLE_LABEL: Record<ThemeBadgeStyle, string> = {
   filled: 'Preenchida',
   outlined: 'Contornada',
+}
+
+/**
+ * De onde o botão tira a cor. É escolha EXCLUSIVA — por isso botões de rádio, e
+ * não caixas de seleção: caixa comunica "posso marcar várias".
+ *
+ * Não existe "cor de fundo" na lista: botão da cor do fundo desaparece contra a
+ * página. Quem quer isso quer o contornado, que é a escolha de estilo ao lado.
+ */
+const SOURCE_LABEL: Record<ButtonColorSource, string> = {
+  primary: 'Cor principal',
+  secondary: 'Cor secundária',
+  accent: 'Cor de realce',
+  custom: 'Escolher outra',
+}
+
+const EMPHASIS_LABEL: Record<ButtonEmphasis, string> = {
+  solid: 'Preenchido',
+  quiet: 'Contornado',
+}
+
+/** Amostra da cor que a opção representa, para a escolha ser visual. */
+const sourceSwatch = (source: ButtonColorSource, values: UpdateStoreThemeInput, custom: string) =>
+  source === 'custom' ? custom : values[source]
+
+const ButtonLevelField = ({
+  level,
+  label,
+  hint,
+  values,
+  setValue,
+}: {
+  level: 'primary' | 'secondary'
+  label: string
+  hint: string
+  values: UpdateStoreThemeInput
+  setValue: UseFormSetValue<UpdateStoreThemeInput>
+}) => {
+  const style = values.buttons[level]
+  const dirty = { shouldDirty: true } as const
+
+  return (
+    <div className="rounded-lg border border-border p-4">
+      <h3 className="text-sm font-medium">{label}</h3>
+      <p className="mb-3 text-sm text-muted-foreground">{hint}</p>
+
+      <div className="flex flex-wrap gap-2">
+        {BUTTON_COLOR_SOURCE.map((source) => {
+          const active = style.source === source
+          return (
+            <button
+              key={source}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setValue(`buttons.${level}.source`, source, dirty)}
+              className={cn(
+                'flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors',
+                active ? 'border-primary bg-accent' : 'border-border hover:border-primary/50',
+              )}
+            >
+              <span
+                aria-hidden
+                className="size-4 shrink-0 rounded-full border border-border"
+                style={{ background: sourceSwatch(source, values, style.custom ?? '#888888') }}
+              />
+              {SOURCE_LABEL[source]}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Só aparece quando é cor própria — sem campo morto na tela. */}
+      {style.source === 'custom' && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="color"
+            aria-label={`${label}: cor própria`}
+            value={style.custom ?? '#888888'}
+            onChange={(e) => setValue(`buttons.${level}.custom`, e.target.value, dirty)}
+            className="size-10 shrink-0 cursor-pointer rounded-md border border-input bg-background p-1"
+          />
+          <input
+            type="text"
+            aria-label={`${label}: cor própria em hexadecimal`}
+            value={style.custom ?? ''}
+            spellCheck={false}
+            onChange={(e) => setValue(`buttons.${level}.custom`, e.target.value, dirty)}
+            className={cn(FIELD_CLASS, 'w-full font-mono uppercase')}
+          />
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {BUTTON_EMPHASIS.map((emphasis) => {
+          const active = style.emphasis === emphasis
+          return (
+            <button
+              key={emphasis}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setValue(`buttons.${level}.emphasis`, emphasis, dirty)}
+              className={cn(
+                'rounded-md border px-3 py-1.5 text-sm transition-colors',
+                active ? 'border-primary bg-accent' : 'border-border hover:border-primary/50',
+              )}
+            >
+              {EMPHASIS_LABEL[emphasis]}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 type ColorName = (typeof COLOR_FIELDS)[number]['name']
@@ -146,16 +264,28 @@ const ColorField = ({
  * pedindo para manter as duas em dia — acordo que ninguém cumpre. Prévia que
  * mente é pior que prévia nenhuma: o lojista configura no escuro.
  */
-const previewVars = (values: UpdateStoreThemeInput): CSSProperties =>
-  ({
+const previewVars = (values: UpdateStoreThemeInput): CSSProperties => {
+  const palette = {
+    primary: hexToOklch(values.primary),
+    secondary: hexToOklch(values.secondary),
+    accent: hexToOklch(values.accent),
+    background: hexToOklch(values.background),
+  }
+
+  const toOklch = (b: UpdateStoreThemeInput['buttons']['primary']) => ({
+    source: b.source,
+    custom: b.custom ? hexToOklch(b.custom) : null,
+  })
+
+  return {
     '--radius': THEME_RADIUS_REM[values.radius],
-    ...deriveThemeVars({
-      primary: hexToOklch(values.primary),
-      secondary: hexToOklch(values.secondary),
-      accent: hexToOklch(values.accent),
-      background: hexToOklch(values.background),
+    ...deriveThemeVars(palette),
+    ...deriveButtonVars(palette, {
+      primary: toOklch(values.buttons.primary),
+      secondary: toOklch(values.buttons.secondary),
     }),
-  }) as CSSProperties
+  } as CSSProperties
+}
 
 /**
  * Avisos de legibilidade — medidos, nunca estimados por diferença de
@@ -208,6 +338,7 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
       background: initial.background,
       radius: initial.radius,
       badgeStyle: initial.badgeStyle,
+      buttons: initial.buttons,
       logoId: initial.logoId,
     },
   })
@@ -291,6 +422,31 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
                 </button>
               )
             })}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-1 text-sm font-medium">Botões</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            A cor do texto é calculada automaticamente para continuar legível. Botões de apoio e
+            links seguem as cores da marca sozinhos.
+          </p>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ButtonLevelField
+              level="primary"
+              label="Botão principal"
+              hint="Comprar, Finalizar compra, Pagar."
+              values={values}
+              setValue={setValue}
+            />
+            <ButtonLevelField
+              level="secondary"
+              label="Botão secundário"
+              hint="Ver produtos, Continuar comprando."
+              values={values}
+              setValue={setValue}
+            />
           </div>
         </section>
 
@@ -431,16 +587,27 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
               <p className="text-sm text-muted-foreground">R$ 89,00</p>
             </div>
 
+            {/* Os MESMOS tokens que a loja pinta — é o que impede a prévia de mentir. */}
             <button
               type="button"
-              className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+              className={cn(
+                'rounded-lg px-3 py-2 text-sm font-medium',
+                values.buttons.primary.emphasis === 'solid'
+                  ? 'bg-btn-primary text-btn-primary-foreground'
+                  : 'border border-btn-primary-ink text-btn-primary-ink',
+              )}
             >
               Comprar agora
             </button>
 
             <button
               type="button"
-              className="rounded-lg bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground"
+              className={cn(
+                'rounded-lg px-3 py-2 text-sm font-medium',
+                values.buttons.secondary.emphasis === 'solid'
+                  ? 'bg-btn-secondary text-btn-secondary-foreground'
+                  : 'border border-btn-secondary-ink text-btn-secondary-ink',
+              )}
             >
               Ver detalhes
             </button>

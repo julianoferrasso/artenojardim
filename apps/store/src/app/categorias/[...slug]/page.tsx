@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { listProducts, getCategoryTree } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
 import type { CategoryTreeNode } from '@ecommerce/shared/contracts'
+import { buttonVariants } from '@/components/ui/button'
 
 /** Acha a categoria pelo último segmento do caminho (…/vasos/ceramica → ceramica). */
 const findBySlug = (nodes: CategoryTreeNode[], slug: string): CategoryTreeNode | undefined => {
@@ -67,7 +68,7 @@ export default async function CategoryPage({ params }: { params: Promise<Params>
               <a
                 key={c.id}
                 href={`/categorias/${c.slug}`}
-                className="rounded-full border border-border bg-card px-4 py-1.5 text-sm shadow-soft transition-colors hover:border-primary/40 hover:bg-accent"
+                className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}
               >
                 {c.name}
               </a>

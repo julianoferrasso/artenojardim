@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCart } from '@/lib/cart'
 import { formatBRL } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { buttonVariants } from '@/components/ui/button'
 import { ShippingCalculator } from '@/components/shipping-calculator'
 import { ProductImage } from '@/components/product-image'
 import { QuantityStepper } from '@/components/quantity-stepper'
@@ -25,7 +26,7 @@ export default function CartPage() {
         <p className="mt-2 text-muted-foreground">Que tal dar uma olhada nas novidades?</p>
         <Link
           href="/"
-          className="mt-6 inline-block rounded-lg bg-primary px-7 py-3 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
+          className={cn(buttonVariants({ size: 'lg' }), 'mt-6')}
         >
           Ver produtos
         </Link>
@@ -119,7 +120,8 @@ export default function CartPage() {
         href="/checkout"
         aria-disabled={(cart?.itemCount ?? 0) === 0}
         className={cn(
-          'mt-6 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90',
+          buttonVariants({ size: 'lg' }),
+          'mt-6 w-full',
           (cart?.itemCount ?? 0) === 0 && 'pointer-events-none opacity-50',
         )}
       >

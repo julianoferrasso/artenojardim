@@ -8,6 +8,8 @@ import { useMyOrders } from '@/lib/orders'
 import { OrderCard } from '@/components/order-card'
 import { OrderFilters, type OrderFiltersValue } from '@/components/order-filters'
 import { Pagination } from '@/components/pagination'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * Meus pedidos.
@@ -101,7 +103,7 @@ const OrdersList = () => {
               <p className="text-sm text-muted-foreground">Você ainda não fez nenhum pedido.</p>
               <Link
                 href="/"
-                className="mt-4 inline-block rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
+                className={cn(buttonVariants({ size: 'sm' }), 'mt-4')}
               >
                 Ver produtos
               </Link>

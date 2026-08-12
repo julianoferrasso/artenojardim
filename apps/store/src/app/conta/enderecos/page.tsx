@@ -12,6 +12,7 @@ import {
   deleteAddress,
   lookupCep,
 } from '@/lib/addresses'
+import { buttonVariants } from '@/components/ui/button'
 
 /**
  * Endereços do cliente. Toda a validação e a posse são da API — aqui é só CRUD de
@@ -200,7 +201,7 @@ export default function EnderecosPage() {
         {!showForm && (
           <button
             onClick={openNew}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
+            className={buttonVariants({ size: 'sm' })}
           >
             Novo endereço
           </button>
@@ -303,14 +304,14 @@ export default function EnderecosPage() {
             <button
               type="submit"
               disabled={saving}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
+              className={buttonVariants({ size: 'sm' })}
             >
               {saving ? 'Salvando…' : 'Salvar'}
             </button>
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
+              className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}
             >
               Cancelar
             </button>

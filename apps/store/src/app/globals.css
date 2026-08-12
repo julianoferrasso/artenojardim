@@ -46,6 +46,19 @@
    */
   --primary-ink: oklch(0.54 0.11 30);
 
+  /*
+   * Botões. Tokens PRÓPRIOS, e não `--primary` direto, porque o lojista escolhe
+   * de qual cor do tema (ou de uma cor própria) cada nível de botão sai. Os
+   * defaults abaixo reproduzem o que estava fixo: principal = marca, secundário
+   * = marca discreta. Quem calcula em runtime é deriveButtonVars.
+   */
+  --btn-primary: oklch(0.56 0.11 30);
+  --btn-primary-foreground: oklch(0.99 0.008 75);
+  --btn-primary-ink: oklch(0.54 0.11 30);
+  --btn-secondary: oklch(0.56 0.11 30);
+  --btn-secondary-foreground: oklch(0.99 0.008 75);
+  --btn-secondary-ink: oklch(0.54 0.11 30);
+
   --secondary: oklch(0.945 0.025 35);
   --secondary-foreground: oklch(0.35 0.055 30);
 
@@ -96,6 +109,12 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-ink: var(--primary-ink);
+  --color-btn-primary: var(--btn-primary);
+  --color-btn-primary-foreground: var(--btn-primary-foreground);
+  --color-btn-primary-ink: var(--btn-primary-ink);
+  --color-btn-secondary: var(--btn-secondary);
+  --color-btn-secondary-foreground: var(--btn-secondary-foreground);
+  --color-btn-secondary-ink: var(--btn-secondary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);

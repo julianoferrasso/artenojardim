@@ -81,6 +81,25 @@ export const BADGE_STYLE_CLASSES: Record<ThemeBadgeStyle, string> = {
 }
 
 /**
+ * ── Botões ──────────────────────────────────────────────────────────────────
+ *
+ * De qual cor do tema cada nível de botão sai. `custom` é a cor própria do
+ * lojista; nas outras ele "replica" uma cor que já escolheu.
+ *
+ * NÃO existe a opção "fundo": botão da cor do fundo é botão invisível — mesmo
+ * com o texto legível, a superfície clicável some contra a página. Quem quer
+ * isso quer o botão CONTORNADO, que é `emphasis`, não cor.
+ */
+export const BUTTON_COLOR_SOURCE = ['primary', 'secondary', 'accent', 'custom'] as const
+export const buttonColorSourceSchema = z.enum(BUTTON_COLOR_SOURCE)
+export type ButtonColorSource = z.infer<typeof buttonColorSourceSchema>
+
+/** Sólido (preenchido) ou discreto (contornado). */
+export const BUTTON_EMPHASIS = ['solid', 'quiet'] as const
+export const buttonEmphasisSchema = z.enum(BUTTON_EMPHASIS)
+export type ButtonEmphasis = z.infer<typeof buttonEmphasisSchema>
+
+/**
  * O tema como fica no banco.
  *
  * Só QUATRO cores são editáveis. Todos os `-foreground`, além de card, muted,
@@ -92,12 +111,43 @@ export const BADGE_STYLE_CLASSES: Record<ThemeBadgeStyle, string> = {
  * universal (vermelho é erro em qualquer marca), não identidade. As sombras
  * também, por decisão registrada no próprio globals.css.
  */
+/** Um nível de botão, como fica no banco: cor própria em OKLCH. */
+const buttonStyleSchema = z.object({
+  source: buttonColorSourceSchema,
+  custom: oklchSchema.nullable(),
+  emphasis: buttonEmphasisSchema,
+})
+
+export type ButtonStyle = z.infer<typeof buttonStyleSchema>
+
+export const storeButtonsSchema = z.object({
+  primary: buttonStyleSchema,
+  secondary: buttonStyleSchema,
+})
+
+export type StoreButtons = z.infer<typeof storeButtonsSchema>
+
+/**
+ * Reproduz o que estava fixo no CSS: principal = marca sólida, secundário =
+ * marca contornada. Subir não muda nada até o lojista mexer.
+ */
+export const DEFAULT_STORE_BUTTONS: StoreButtons = {
+  primary: { source: 'primary', custom: null, emphasis: 'solid' },
+  secondary: { source: 'primary', custom: null, emphasis: 'quiet' },
+}
+
 export const storeThemeSchema = z.object({
   primary: oklchSchema,
   secondary: oklchSchema,
   accent: oklchSchema,
   background: oklchSchema,
   radius: themeRadiusSchema,
+  /*
+   * `.default()` no OBJETO inteiro, não campo a campo: os temas já gravados não
+   * têm a chave `buttons`, e sem isto o safeParse da leitura rejeitaria o tema
+   * e a loja voltaria à paleta de fábrica. Já aconteceu uma vez.
+   */
+  buttons: storeButtonsSchema.default(DEFAULT_STORE_BUTTONS),
   /*
    * `.default()` é obrigatório em campo novo: o tema vive como JSON em Setting e
    * os já gravados não têm esta chave. Sem o default, o safeParse da leitura
@@ -123,6 +173,7 @@ export const DEFAULT_STORE_THEME: StoreTheme = {
   // 'large' achando que é "o mais bonito": o default existe para não mudar nada.
   radius: 'medium',
   badgeStyle: 'filled',
+  buttons: DEFAULT_STORE_BUTTONS,
   logoId: null,
 }
 
@@ -136,6 +187,13 @@ export type PublicTheme = z.infer<typeof publicThemeSchema>
 const hexColorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'Use uma cor no formato #rrggbb')
+
+/** O mesmo nível de botão visto pelo formulário: cor própria em hex. */
+const updateButtonStyleSchema = z.object({
+  source: buttonColorSourceSchema,
+  custom: hexColorSchema.nullable(),
+  emphasis: buttonEmphasisSchema,
+})
 
 /**
  * O que o ADMIN envia: hex, porque é o que `<input type="color">` fala. O
@@ -153,6 +211,10 @@ export const updateStoreThemeSchema = z.object({
    * entrada e de saída — o que deixa o useForm ambíguo sem ganho nenhum.
    */
   badgeStyle: themeBadgeStyleSchema,
+  buttons: z.object({
+    primary: updateButtonStyleSchema,
+    secondary: updateButtonStyleSchema,
+  }),
   logoId: z.string().nullable(),
 })
 

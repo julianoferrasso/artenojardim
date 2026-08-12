@@ -8,12 +8,13 @@ import type { ReorderResult } from '@ecommerce/shared/contracts'
 import { ApiError } from '@/lib/api'
 import { useMyOrder, useReorder } from '@/lib/orders'
 import { useCart } from '@/lib/cart'
-import { formatBRL, formatDateLong, formatDateTime } from '@/lib/utils'
+import { formatBRL, formatDateLong, formatDateTime, cn } from '@/lib/utils'
 import { OrderItemList, OrderDeliveryCard, OrderTotals } from '@/components/order-summary'
 import { OrderSituationBadge } from '@/components/order-situation-badge'
 import { OrderTimeline } from '@/components/order-timeline'
 import { CancelOrderDialog } from '@/components/cancel-order-dialog'
 import { SupportForm } from '@/components/support-form'
+import { buttonVariants } from '@/components/ui/button'
 
 /**
  * Detalhe do pedido: o que foi comprado, para onde vai, como está e o que dá
@@ -213,7 +214,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
                 type="button"
                 onClick={() => void buyAgain()}
                 disabled={reorder.isPending}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
+                className={cn(buttonVariants({ size: 'sm' }), 'w-full')}
               >
                 <RotateCcw className="size-4" aria-hidden />
                 {reorder.isPending ? 'Adicionando…' : 'Comprar de novo'}

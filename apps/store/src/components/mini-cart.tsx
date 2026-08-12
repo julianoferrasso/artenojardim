@@ -7,6 +7,7 @@ import { X } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { formatBRL, cn } from '@/lib/utils'
 import { useBodyScrollLock, useEscapeKey, useFocusTrap } from '@/lib/overlay'
+import { buttonVariants } from './ui/button'
 import { ProductImage } from './product-image'
 import { QuantityStepper } from './quantity-stepper'
 
@@ -67,7 +68,7 @@ export const MiniCart = () => {
             <Link
               href="/"
               onClick={closeCart}
-              className="mt-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
+              className={cn(buttonVariants(), 'mt-2')}
             >
               Ver produtos
             </Link>
@@ -142,7 +143,7 @@ export const MiniCart = () => {
             <Link
               href="/checkout"
               onClick={closeCart}
-              className="mt-3 flex h-12 w-full items-center justify-center rounded-lg bg-primary text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90"
+              className={cn(buttonVariants({ size: 'lg' }), 'mt-3 w-full')}
             >
               Finalizar compra
             </Link>

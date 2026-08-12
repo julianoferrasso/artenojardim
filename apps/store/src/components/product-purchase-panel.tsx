@@ -3,13 +3,13 @@
 import { useState } from 'react'
 import type { Product, Variant } from '@ecommerce/shared/contracts'
 import type { DerivedOption } from '@/lib/product-options'
-import { formatBRL } from '@/lib/utils'
+import { formatBRL, cn } from '@/lib/utils'
 import { useCart } from '@/lib/cart'
 import { ApiError } from '@/lib/api'
 import { VariantSelector } from './variant-selector'
 import { ShippingCalculator } from './shipping-calculator'
 import { FavoriteButton } from './favorite-button'
-import { Button } from './ui/button'
+import { Button, buttonVariants } from './ui/button'
 
 /**
  * Preço, opções, comprar e frete. Adicionar ao carrinho abre o minicarrinho em
@@ -79,9 +79,14 @@ export const ProductPurchasePanel = ({
         >
           {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
         </Button>
+        {/* icon-lg pareia com o size="lg" do botão ao lado: antes o alinhamento
+            dependia de alguém escrever 12 nos dois lugares. */}
         <FavoriteButton
           product={{ id: product.id, slug: product.slug }}
-          className="size-12 shrink-0 rounded-lg border border-input bg-card hover:bg-accent"
+          className={cn(
+            buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'iconLg' }),
+            'shrink-0',
+          )}
           iconClassName="size-5"
         />
       </div>

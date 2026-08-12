@@ -1,4 +1,6 @@
 import type { PaginationMeta } from '@ecommerce/shared/contracts'
+import { cn } from '@/lib/utils'
+import { buttonVariants } from './ui/button'
 
 /**
  * Paginação simples: anterior, posição, próxima.
@@ -19,8 +21,11 @@ export const Pagination = ({
 }) => {
   if (meta.totalPages <= 1) return null
 
-  const buttonCls =
-    'rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card'
+  // Era `rounded-full` fixo, que IGNORAVA o raio escolhido no painel.
+  const buttonCls = cn(
+    buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }),
+    'disabled:cursor-not-allowed disabled:opacity-40',
+  )
 
   return (
     <nav className="mt-6 flex items-center justify-between gap-4" aria-label="Paginação">

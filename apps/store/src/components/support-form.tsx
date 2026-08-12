@@ -6,6 +6,8 @@ import { SUPPORT_TOPICS } from '@ecommerce/shared/contracts'
 import { SUPPORT_TOPIC_LABEL } from '@ecommerce/shared/constants'
 import { ApiError } from '@/lib/api'
 import { useSendSupport } from '@/lib/orders'
+import { buttonVariants } from './ui/button'
+import { cn } from '@/lib/utils'
 
 /**
  * Fala com o suporte a partir do pedido. A mensagem entra na timeline do pedido
@@ -60,7 +62,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-border bg-card px-4 py-2 text-sm transition-colors hover:bg-accent"
+        className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'w-full')}
       >
         Falar com o suporte
       </button>
@@ -110,7 +112,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
         <button
           type="submit"
           disabled={tooShort || send.isPending}
-          className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-soft transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
+          className={cn(buttonVariants({ size: 'sm' }), 'flex-1')}
         >
           {send.isPending ? 'Enviando…' : 'Enviar mensagem'}
         </button>
@@ -120,7 +122,7 @@ export const SupportForm = ({ orderId }: { orderId: string }) => {
             setOpen(false)
             setError(null)
           }}
-          className="rounded-lg border border-border px-4 py-2 text-sm transition-colors hover:bg-accent"
+          className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}
         >
           Cancelar
         </button>

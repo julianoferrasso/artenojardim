@@ -69,7 +69,7 @@ export const ShippingCalculator = ({ items, disabled = false }: Props) => {
           disabled={disabled || loading}
           className="w-40"
         />
-        <Button type="submit" variant="outline" disabled={disabled || loading}>
+        <Button type="submit" variant="neutral" emphasis="quiet" disabled={disabled || loading}>
           {loading ? 'Calculando…' : 'Calcular'}
         </Button>
       </form>
