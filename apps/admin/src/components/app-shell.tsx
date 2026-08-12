@@ -10,6 +10,7 @@ import {
   Boxes,
   Images,
   Palette,
+  UserRound,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -27,6 +28,8 @@ type NavItem = { href: string; label: string; icon: LucideIcon; minRole?: UserRo
 const NAV: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/pedidos', label: 'Pedidos', icon: ShoppingCart },
+  // Logo depois de Pedidos: o atendimento abre o cliente a partir do pedido.
+  { href: '/clientes', label: 'Clientes', icon: UserRound },
   { href: '/produtos', label: 'Produtos', icon: Package },
   { href: '/categorias', label: 'Categorias', icon: FolderTree },
   { href: '/estoque', label: 'Estoque', icon: Boxes },

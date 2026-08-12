@@ -19,6 +19,7 @@ const LINKS = [
   { href: '/conta', label: 'Visão geral' },
   { href: '/conta/pedidos', label: 'Meus pedidos' },
   { href: '/conta/enderecos', label: 'Endereços' },
+  { href: '/conta/preferencias', label: 'Preferências' },
 ]
 
 export default function ContaLayout({ children }: { children: ReactNode }) {

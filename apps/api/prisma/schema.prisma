@@ -176,6 +176,10 @@ model Customer {
   documentType     String?
   birthDate        DateTime?
   emailVerifiedAt  DateTime?
+  /// Gravado no login BEM-SUCEDIDO — nunca no refresh: o refresh roda a cada
+  /// 15min numa aba aberta e transformaria "último acesso" em "última renovação
+  /// de token", fazendo todo mundo parecer ativo agora.
+  lastLoginAt      DateTime?
   /// Nome digitado ao criar senha sobre uma conta de guest checkout. Fica em
   /// espera até a confirmação do e-mail: antes disso quem cadastrou só provou
   /// saber um endereço, e sobrescrever `name` na hora deixaria qualquer um mudar
@@ -187,12 +191,13 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store         Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store         Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
   tokens        CustomerToken[]
   carts         Cart[]
   addresses     Address[]
   orders        Order[]
+  productViews  CustomerProductView[]
 
   @@unique([storeId, email])
   @@index([storeId])
@@ -377,11 +382,12 @@ model Product {
   updatedAt DateTime @updatedAt
 
   store      Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  categories ProductCategory[]
-  images     ProductImage[]
-  options    ProductOption[]
-  variants   ProductVariant[]
-  views      ProductView[]
+  categories    ProductCategory[]
+  images        ProductImage[]
+  options       ProductOption[]
+  variants      ProductVariant[]
+  views         ProductView[]
+  customerViews CustomerProductView[]
 
   @@unique([storeId, slug])
   @@index([storeId, status])
@@ -401,6 +407,38 @@ model ProductView {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, productId, date])
+  @@index([storeId, date])
+}
+
+/// Visita de um cliente IDENTIFICADO a um produto. COMPLEMENTA o ProductView
+/// acima, não o substitui: aquele conta o tráfego total (inclusive anônimo) e
+/// alimenta o "mais visitados"; este responde "o que ESTE cliente andou olhando",
+/// que é pergunta de atendimento. Somar um do outro nunca — são universos
+/// diferentes.
+///
+/// Uma linha por (cliente, produto, DIA), não por clique: sem isso um cliente
+/// indeciso que abre o mesmo vaso oito vezes numa tarde vira oito linhas e
+/// esconde os outros produtos da tela.
+///
+/// Anônimo NÃO entra aqui — sem customerId a linha não existe. É o que mantém a
+/// promessa de que quem não se identificou continua não identificado.
+model CustomerProductView {
+  id         String   @id @default(cuid())
+  storeId    String
+  customerId String
+  productId  String
+  /// Dia BRASILEIRO da visita. Só deduplica; quem ordena a tela é `viewedAt`.
+  date       DateTime @db.Date
+  count      Int      @default(1)
+  viewedAt   DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, productId, date])
+  /// Consulta quente e única da tela: "últimos produtos vistos por este cliente".
+  @@index([customerId, viewedAt])
+  /// Existe para a limpeza por data quando o volume incomodar (não há job ainda).
   @@index([storeId, date])
 }
 

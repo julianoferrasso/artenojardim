@@ -106,6 +106,16 @@ export const ROUTES = {
       events: (id: string) => `${base}/admin/orders/${id}/events`,
     },
 
+    /** Gestão de clientes da loja. Aberta ao staff — atender é trabalho dele. */
+    customers: {
+      list: `${base}/admin/customers`,
+      detail: (id: string) => `${base}/admin/customers/${id}`,
+      update: (id: string) => `${base}/admin/customers/${id}`,
+      /** LGPD. Verbo próprio: não é editar um campo, é destruir dado pessoal
+       *  preservando o histórico fiscal dos pedidos. Exige ADMIN. */
+      anonymize: (id: string) => `${base}/admin/customers/${id}/anonymize`,
+    },
+
     /** Gestão de usuários de staff. Router inteiro atrás de requireMinRole. */
     users: {
       list: `${base}/admin/users`,
@@ -119,12 +129,11 @@ export const ROUTES = {
     },
   },
 
+  /** Superfície do PRÓPRIO cliente. A visão de staff vive em `admin.customers`. */
   customers: {
     me: `${base}/customers/me`,
     addresses: `${base}/customers/me/addresses`,
     address: (id: string) => `${base}/customers/me/addresses/${id}`,
-    list: `${base}/customers`,
-    detail: (id: string) => `${base}/customers/${id}`,
   },
 
   coupons: {

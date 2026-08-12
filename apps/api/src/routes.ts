@@ -9,10 +9,12 @@ import { productRoutes } from './modules/products/routes.js'
 import { inventoryRoutes } from './modules/inventory/routes.js'
 import { cartRoutes } from './modules/cart/routes.js'
 import { addressRoutes, cepRoutes } from './modules/addresses/routes.js'
+import { customerProfileRoutes } from './modules/customer-profile/routes.js'
 import { shippingRoutes } from './modules/shipping/routes.js'
 import { checkoutRoutes } from './modules/checkout/routes.js'
 import { orderRoutes } from './modules/orders/routes.js'
 import { adminOrderRoutes } from './modules/admin-orders/routes.js'
+import { adminCustomerRoutes } from './modules/admin-customers/routes.js'
 import { adminUserRoutes } from './modules/admin-users/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
@@ -39,6 +41,9 @@ apiRoutes.use('/products', productRoutes)
 apiRoutes.use('/inventory', inventoryRoutes)
 apiRoutes.use('/cart', cartRoutes)
 apiRoutes.use('/customers/me/addresses', addressRoutes)
+// DEPOIS de addresses: o Express casa prefixo na ordem de registro, e
+// `/customers/me` engoliria `/customers/me/addresses` se viesse antes.
+apiRoutes.use('/customers/me', customerProfileRoutes)
 apiRoutes.use('/cep', cepRoutes)
 apiRoutes.use('/shipping', shippingRoutes)
 apiRoutes.use('/checkout', checkoutRoutes)
@@ -46,6 +51,8 @@ apiRoutes.use('/orders', orderRoutes)
 // Staff. Caminho distinto de /orders (cliente) de propósito: os dois têm auth
 // diferente, e um Router só com `authenticateCustomer` não comporta os dois.
 apiRoutes.use('/admin/orders', adminOrderRoutes)
+// Gestão de clientes. Aberta ao staff; só a anonimização exige ADMIN.
+apiRoutes.use('/admin/customers', adminCustomerRoutes)
 // Gestão de staff. O router inteiro exige cargo mínimo ADMIN.
 apiRoutes.use('/admin/users', adminUserRoutes)
 // Aparência da loja. Também exige ADMIN — ver o comentário no router.

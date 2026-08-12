@@ -38,6 +38,12 @@ type AuthState = {
   loading: boolean
   login: (input: LoginInput) => Promise<void>
   logout: () => Promise<void>
+  /**
+   * Aplica um perfil recém-salvo sem refazer o /auth/me. A tela de preferências
+   * já recebe o AuthCustomer inteiro de volta do PATCH; ignorá-lo faria o toggle
+   * voltar ao estado antigo no render seguinte.
+   */
+  applyProfile: (customer: AuthCustomer) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -91,7 +97,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ customer, loading, login, logout }}>
+    <AuthContext.Provider value={{ customer, loading, login, logout, applyProfile: setCustomer }}>
       {children}
     </AuthContext.Provider>
   )

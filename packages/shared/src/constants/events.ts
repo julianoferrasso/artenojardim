@@ -50,6 +50,10 @@ export const EVENTS = {
     emailVerified: 'customer.email_verified',
     /** Senha trocada PELO CLIENTE via link de e-mail. Derruba todas as sessões. */
     passwordReset: 'customer.password_reset',
+    /** Staff corrigiu dado cadastral (telefone errado, e-mail com typo). */
+    updated: 'customer.updated',
+    /** LGPD: dado pessoal destruído, pedidos preservados. Irreversível. */
+    anonymized: 'customer.anonymized',
   },
   inventory: {
     adjusted: 'inventory.adjusted',

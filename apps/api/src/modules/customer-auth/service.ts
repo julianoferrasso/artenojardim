@@ -46,9 +46,15 @@ export type CustomerSession = {
   refreshToken: string
 }
 
-/** Campos mínimos de todo `select` de customer — `emailVerifiedAt` inclusive,
- *  que o contrato exige como `emailVerified`. */
-const AUTH_SELECT = { id: true, name: true, email: true, emailVerifiedAt: true } as const
+/** Campos mínimos de todo `select` de customer. Esquecer um deles aqui faz o Zod
+ *  do front rejeitar a resposta inteira, sem mensagem útil. */
+const AUTH_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  emailVerifiedAt: true,
+  acceptsMarketing: true,
+} as const
 
 const issueAccess = (customerId: string): Promise<string> =>
   signAccessToken(
@@ -57,16 +63,18 @@ const issueAccess = (customerId: string): Promise<string> =>
     env.ACCESS_TOKEN_TTL,
   )
 
-const toAuthCustomer = (c: {
+export const toAuthCustomer = (c: {
   id: string
   name: string
   email: string
   emailVerifiedAt: Date | null
+  acceptsMarketing: boolean
 }): AuthCustomer => ({
   id: c.id,
   name: c.name,
   email: c.email,
   emailVerified: c.emailVerifiedAt !== null,
+  acceptsMarketing: c.acceptsMarketing,
 })
 
 const verificationTtlMs = (): number => env.EMAIL_VERIFICATION_TTL_HOURS * 3600 * 1000
@@ -254,9 +262,14 @@ export const loginCustomer = async (
     )
   }
 
+  // O update entra no mesmo Promise.all do staff (auth/service.ts) — mesmo
+  // padrão, para não haver dois jeitos de gravar a mesma coisa no projeto.
+  // Só no LOGIN: o refresh roda a cada 15min numa aba aberta e faria "último
+  // acesso" virar "última renovação de token".
   const [accessToken, refreshToken] = await Promise.all([
     issueAccess(customer.id),
     issueRefreshToken({ kind: 'customer', id: customer.id }, ctx),
+    prisma.customer.update({ where: { id: customer.id }, data: { lastLoginAt: new Date() } }),
   ])
 
   return {

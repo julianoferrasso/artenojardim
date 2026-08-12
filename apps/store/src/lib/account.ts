@@ -2,9 +2,11 @@
 
 import { ROUTES } from '@ecommerce/shared/constants'
 import type {
+  AuthCustomer,
   ForgotPasswordInput,
   RegisterInput,
   ResetPasswordInput,
+  UpdateCustomerProfileInput,
 } from '@ecommerce/shared/contracts'
 import { clientFetch } from './client'
 
@@ -36,3 +38,11 @@ export const forgotPassword = (input: ForgotPasswordInput): Promise<{ success: t
 
 export const resetPassword = (input: ResetPasswordInput): Promise<{ success: true }> =>
   post<{ success: true }>(ROUTES.auth.resetPassword, input)
+
+/** Atualiza o próprio cadastro. Devolve o perfil inteiro, para o AuthProvider
+ *  aplicar sem refazer o /auth/me. */
+export const updateProfile = (input: UpdateCustomerProfileInput): Promise<{ customer: AuthCustomer }> =>
+  clientFetch<{ customer: AuthCustomer }>(ROUTES.customers.me, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })

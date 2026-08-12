@@ -67,6 +67,9 @@ export const authCustomerSchema = z.object({
   email: z.string(),
   /// Derivado de `emailVerifiedAt`: o front não precisa da data, só do estado.
   emailVerified: z.boolean(),
+  /// Vem junto da sessão para a tela de preferências abrir já no estado certo,
+  /// sem um segundo request só para ler um booleano.
+  acceptsMarketing: z.boolean(),
 })
 
 export const adminLoginResponseSchema = z.object({

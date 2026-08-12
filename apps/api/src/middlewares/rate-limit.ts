@@ -181,6 +181,15 @@ export const checkoutConfirmLimiter = build({ name: 'checkout-confirm', windowMs
 export const newsletterLimiter = build({ name: 'newsletter', windowMs: 60 * 60_000, max: 5 })
 
 /**
+ * Beacon de visita ao produto. Generoso de propósito: um cliente navegando pela
+ * loja dispara um por produto aberto, e apertar aqui mutila a própria métrica.
+ * O limite existe contra o script que inflaria "mais visitados", não contra quem
+ * está comprando. Por IP mesmo quando há cliente logado — o abuso que importa
+ * vem do anônimo, e limitar por customerId deixaria a rota pública sem teto.
+ */
+export const productViewLimiter = build({ name: 'product-view', windowMs: 60_000, max: 60 })
+
+/**
  * Ações do cliente sobre o próprio pedido.
  *
  * Escopo por CLIENTE e não por IP: estas rotas estão atrás de
