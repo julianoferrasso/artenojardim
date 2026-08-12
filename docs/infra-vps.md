@@ -231,6 +231,54 @@ existem. O que falta é o passo no `pg-backup.sh` que copia o dump para lá.
 público para leitura em `store/*` e o usuário da API só tem permissão nesse prefixo,
 de propósito. Backup pede bucket **privado próprio**, com versionamento e lifecycle.
 
+## RabbitMQ (12/08/2026)
+
+Instalado do repositório do Ubuntu (`rabbitmq-server`, com Erlang junto). O `rag_sefaz` **não**
+usa broker — as portas estavam livres, então não houve conflito.
+
+```
+vhost   artenojardim        produção (a API e o worker usam este)
+vhost   artenojardim_dev    dev pelo túnel SSH — NÃO aponte dev para o de produção,
+                            senão a sua máquina consome mensagens reais
+user    artenojardim        senha aleatória, permissões só nos dois vhosts acima
+```
+
+**Três decisões que valem lembrar:**
+
+- **Escuta só em `127.0.0.1`** (`listeners.tcp.local` e `management.tcp.ip` no
+  `/etc/rabbitmq/rabbitmq.conf`). O default é `0.0.0.0`, e depender só do UFW seria uma camada
+  única — a mesma razão pela qual a 5432 foi fechada na auditoria de 16/07. **Não abra 5672
+  nem 15672 no UFW**; o painel vai por túnel SSH:
+  `plink -i chave.ppk -L 15672:127.0.0.1:15672 root@23.29.114.96` → `http://localhost:15672`.
+- **`vm_memory_high_watermark.relative = 0.2`** e não o default de 0.4. Com 3.9 GB, o default
+  deixaria o broker se achar dono de 1.6 GB numa VPS compartilhada.
+- **O usuário `guest` foi removido.** Ele entra sem senha pelo loopback e teria acesso a tudo.
+
+### Topologia (declarada pelo código, no boot da API e do worker)
+
+5 filas + 15 de retry + 5 DLQ, nos exchanges `ecommerce.events` e `ecommerce.dlx`. As DLQ
+**não têm consumidor de propósito**: mensagem parada lá é bug, e bug se corrige. Alerta quando
+qualquer uma passar de 0:
+
+```bash
+rabbitmqctl list_queues -p artenojardim name messages | grep dlq
+```
+
+`shipping.label` e `shipping.tracking` existem declaradas mas sem consumidor — ninguém publica
+nelas ainda (Fase 16).
+
+### O worker
+
+`artenojardim-worker` no PM2 (`apps/api/dist/worker.js`), processo separado da API. **Nunca
+cluster:** N instâncias = N× o `prefetch` e N× a vazão contra o limite do SES.
+
+> **`pm2 reload` não recarrega o worker.** No deploy da correção de idempotência, o `reload`
+> devolveu ✓ mas o processo seguiu com o código antigo (uptime não zerou). Use
+> `pm2 restart artenojardim-worker` e **confira o uptime** — é como saber que pegou.
+
+Sem broker, a API sobe normalmente: `/health` responde `queue: "off"` e publicar devolve 503.
+A loja continua vendendo; só o e-mail espera.
+
 ## Storage de mídia (AWS S3)
 
 Produção roda `STORAGE_DRIVER=s3`. **A VPS não está no caminho da imagem**: o browser
@@ -267,30 +315,10 @@ falta o passo no `pg-backup.sh`, num bucket privado próprio (não o da mídia).
 pedido PENDING, mas nada varre e libera as reservas vencidas (TTL em `Setting.reservation_ttl_minutes`).
 Checkout abandonado prende `reserved` até o job existir (`jobs/release-reservations`, Fase 1.18).
 
-**RabbitMQ ainda não está instalado.** O código da fila está no ar (Fase 14), mas sem broker a
-API sobe normalmente, `/health` responde `queue: "off"` e publicar devolve 503 — a loja vende,
-só o e-mail de confirmação de pedido e as campanhas não saem. Para habilitar:
-
-```bash
-systemctl status rabbitmq-server            # PRIMEIRO: o rag_sefaz já usa? Se sim, só vhost.
-apt-get install -y rabbitmq-server
-rabbitmq-plugins enable rabbitmq_management
-rabbitmqctl add_vhost artenojardim
-rabbitmqctl add_user artenojardim "$(openssl rand -base64 32)"
-rabbitmqctl set_permissions -p artenojardim artenojardim '.*' '.*' '.*'
-rabbitmqctl delete_user guest               # o default 'guest' entra sem senha pelo loopback
-```
-
-- **Não abra 5672 nem 15672 no UFW** — mesma razão da 5432: o painel vai por túnel SSH.
-- `/etc/rabbitmq/rabbitmq.conf`: `vm_memory_high_watermark.relative = 0.2`. O default é 40% da
-  RAM, e esta VPS é compartilhada com o `rag_sefaz`.
-- Depois: `RABBITMQ_URL` e `EMAIL_UNSUBSCRIBE_SECRET` no `.env` da API (ver `.env.example`),
-  e subir o worker pela primeira vez:
-  `pm2 start ecosystem.config.cjs --only artenojardim-worker && pm2 save`.
-
 **SES ainda em sandbox.** 200 e-mails/dia e só para endereços verificados um a um. A campanha
 de marketing funciona no código, mas falha por destinatário até sair — peça "Production
-access" no console da AWS (leva ~24h) antes do primeiro envio real.
+access" no console da AWS (leva ~24h) antes do primeiro envio real. **É o único bloqueio que
+resta para a campanha funcionar de verdade.**
 
 ## Backups da configuração
 
