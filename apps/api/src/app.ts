@@ -43,15 +43,15 @@ export const createApp = (): Express => {
   app.use(express.urlencoded({ extended: true, limit: '1mb' }))
   app.use(cookieParser())
 
-  // Serve ./uploads SEMPRE que o driver for local — inclusive em produção, onde
-  // rodamos o driver local por ora (sem credenciais R2 ainda). O `!isProduction`
-  // que estava aqui assumia que produção usaria R2; enquanto não usa, a imagem
-  // gravada no disco precisa ser servida, senão dá 404.
+  // Serve ./uploads quando o driver for local — o caso de DESENVOLVIMENTO. Em
+  // produção o driver é s3 e este bloco não roda: o bucket responde direto ao
+  // browser, sem passar pela VPS.
   //
-  // CORP `cross-origin`: o admin e a loja vivem em subdomínios diferentes da API,
-  // e o helmet põe `Cross-Origin-Resource-Policy: same-origin` por padrão, que
-  // bloquearia o <img> carregando a foto de api.artenojardim.com.br. A imagem é
-  // pública; liberar o CORP dela não expõe nada.
+  // CORP `cross-origin`: com o driver local o admin e a loja vivem em origens
+  // diferentes da API, e o helmet põe `Cross-Origin-Resource-Policy: same-origin`
+  // por padrão, que bloquearia o <img> carregando a foto. A imagem é pública;
+  // liberar o CORP dela não expõe nada. (O S3 não manda esse header, então o
+  // caminho de produção não precisa de nada equivalente.)
   if (env.STORAGE_DRIVER === 'local') {
     app.use(
       '/uploads',

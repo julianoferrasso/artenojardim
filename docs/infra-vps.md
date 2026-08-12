@@ -223,9 +223,34 @@ artenojardim-pg-restore /var/backups/artenojardim/<arquivo>.dump
 
 Os dumps vivem na **mesma VPS** que o banco. Isso cobre o comum — DROP
 acidental, migration ruim, corrupção — mas **se a VPS for perdida por inteiro, o
-backup vai junto.** O próximo tier é copiar cada dump para fora (R2/S3 ou outro
-host). Depende das credenciais de storage, que ainda não estão configuradas
-(mesma pendência do driver de upload em produção). Documentado como gap conhecido.
+backup vai junto.**
+
+O bloqueio sumiu: com o S3 configurado (arquitetura §13) a conta e as credenciais
+existem. O que falta é o passo no `pg-backup.sh` que copia o dump para lá.
+**Não reutilize o bucket de mídia nem o usuário IAM da API** — o bucket de mídia é
+público para leitura em `store/*` e o usuário da API só tem permissão nesse prefixo,
+de propósito. Backup pede bucket **privado próprio**, com versionamento e lifecycle.
+
+## Storage de mídia (AWS S3)
+
+Produção roda `STORAGE_DRIVER=s3`. **A VPS não está no caminho da imagem**: o browser
+faz PUT direto no bucket com URL assinada, e a loja lê direto do bucket. O Nginx nunca
+serviu mídia — quem servia era um `express.static` dentro do processo Node, e ele só
+roda quando o driver é `local` (desenvolvimento).
+
+- Bucket **`artenojardimbucket`**, público para leitura só no prefixo `store/*`
+  (bucket policy). Escrita apenas por URL assinada de 5 min.
+- Usuário IAM **próprio, separado do usuário do SES**: `PutObject`/`GetObject`/
+  `DeleteObject` em `store/*` e **`ListBucket`** no bucket. O `ListBucket` não é
+  opcional — sem ele o S3 devolve 403 em vez de 404 numa key inexistente e o confirm
+  de upload responde 502 no lugar do 422.
+- **CORS do bucket** precisa listar o domínio do admin (`AllowedMethods: [PUT]`,
+  `AllowedHeaders: [Content-Type]`). Domínio de admin novo sem entrada no CORS = upload
+  quebra só em produção, com erro apenas no console do browser.
+
+> ⚠️ **`NEXT_PUBLIC_CDN_HOST` é inlined no BUILD.** Trocar o host das imagens exige
+> `pnpm build` nos apps Next — editar o `.env` e dar `pm2 restart` **não** surte efeito.
+> É o erro mais provável do próximo deploy que mexer nisso.
 
 ## Pendências
 
@@ -235,8 +260,8 @@ risco caiu muito. Ainda assim, vale trocar por uma senha aleatória antes de a l
 no ar (`openssl rand -base64 32`), atualizando o `.env`.
 
 **Cópia off-site do backup.** Os dumps vivem na mesma VPS que o banco (ver seção Backup):
-cobre DROP/migration ruim, mas não a perda da VPS inteira. Depende das credenciais de storage
-(R2), a mesma pendência do driver de upload em produção.
+cobre DROP/migration ruim, mas não a perda da VPS inteira. Não depende mais de credencial —
+falta o passo no `pg-backup.sh`, num bucket privado próprio (não o da mídia).
 
 **Job de liberação de reserva de estoque.** O checkout (Fase 1.11) reserva estoque ao criar o
 pedido PENDING, mas nada varre e libera as reservas vencidas (TTL em `Setting.reservation_ttl_minutes`).

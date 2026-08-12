@@ -22,6 +22,10 @@ const client = () =>
       accessKeyId: env.R2_ACCESS_KEY_ID!,
       secretAccessKey: env.R2_SECRET_ACCESS_KEY!,
     },
+    // NÃO REMOVER — mesmo motivo do s3.ts, e no R2 é pior: desde a 3.729.0 o SDK
+    // assina um CRC32 do corpo VAZIO na URL, e o R2 sequer implementa CRC32
+    // ("checksum-algorithm not implemented"). Sem isto, todo PUT falha.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
   })
 
 export const createR2Storage = (): StorageProvider => {
@@ -37,7 +41,9 @@ export const createR2Storage = (): StorageProvider => {
         const uploadUrl = await getSignedUrl(
           s3,
           new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: mimeType }),
-          { expiresIn: 300 },
+          // Sem signableHeaders o SDK assina só o `host`, e a URL aceitaria um PUT
+          // com qualquer Content-Type. Ver s3.ts.
+          { expiresIn: 300, signableHeaders: new Set(['content-type']) },
         )
 
         return {

@@ -32,13 +32,35 @@ const baseSchema = z.object({
   STORE_URL: z.string().url(),
   ADMIN_URL: z.string().url(),
 
-  STORAGE_DRIVER: z.enum(['local', 'r2']).default('local'),
+  STORAGE_DRIVER: z.enum(['local', 'r2', 's3']).default('local'),
   LOCAL_UPLOAD_DIR: z.string().default('./uploads'),
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET: z.string().optional(),
   R2_PUBLIC_URL: z.string().url().optional(),
+
+  // AWS S3 (driver de produção). Credenciais PRÓPRIAS, separadas das do SES de
+  // propósito: são dois usuários IAM com permissões disjuntas, e vazar uma não
+  // vaza a outra. Reusar AWS_ACCESS_KEY_ID aqui também confundiria o superRefine
+  // — a chave participa da regra de e-mail ("as três andam juntas"), e a mensagem
+  // de erro passaria a culpar o SES por um problema de storage.
+  // A region é a DO BUCKET, não necessariamente a mesma AWS_REGION do SES.
+  S3_REGION: z.string().default('us-east-1'),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_BUCKET: z.string().optional(),
+  /// Opcional: só quando houver CloudFront ou domínio próprio. Vazio = a URL
+  /// pública é derivada de bucket + region (o endpoint virtual-hosted da AWS).
+  /// O `or(literal(''))` existe porque deixar a chave no .env com valor vazio é o
+  /// jeito natural de dizer "não quero isto" — sem ele o boot morre com "Invalid
+  /// URL". Mesmo tratamento do EMAIL_REPLY_TO.
+  S3_PUBLIC_URL: z
+    .string()
+    .url()
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
 
   // Frete via Melhor Envio (OAuth2). Opcional: sem isso a cotação responde um
   // erro de negócio claro ("frete não configurado"), não derruba o boot. O
@@ -86,30 +108,29 @@ const baseSchema = z.object({
 const EMAIL_KEYS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'EMAIL_FROM'] as const
 
 /**
- * Credencial de R2 é obrigatória apenas quando o driver é r2. É o que permite
- * `pnpm dev` sem nenhuma credencial de nuvem — e o que impede subir em produção
- * com STORAGE_DRIVER=r2 e o bucket em branco.
+ * A credencial de storage é obrigatória apenas para o driver selecionado. É o que
+ * permite `pnpm dev` sem nenhuma credencial de nuvem — e o que impede subir em
+ * produção com STORAGE_DRIVER=s3 e o bucket em branco.
+ *
+ * S3_PUBLIC_URL fica de fora de propósito: sem CDN ela não existe, e o driver
+ * deriva a URL de bucket + region. S3_REGION tem default, então nunca falta.
  */
+const STORAGE_KEYS = {
+  local: [],
+  r2: ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'R2_PUBLIC_URL'],
+  s3: ['S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY', 'S3_BUCKET'],
+} as const satisfies Record<'local' | 'r2' | 's3', readonly (keyof z.infer<typeof baseSchema>)[]>
+
 const envSchema = baseSchema.superRefine((env, ctx) => {
   // Sem early-return: há mais de uma regra condicional aqui, e um `return` no
   // meio silenciaria as seguintes.
-  if (env.STORAGE_DRIVER === 'r2') {
-    const required = [
-      'R2_ACCOUNT_ID',
-      'R2_ACCESS_KEY_ID',
-      'R2_SECRET_ACCESS_KEY',
-      'R2_BUCKET',
-      'R2_PUBLIC_URL',
-    ] as const
-
-    for (const key of required) {
-      if (!env[key]) {
-        ctx.addIssue({
-          code: 'custom',
-          path: [key],
-          message: `${key} é obrigatório quando STORAGE_DRIVER=r2`,
-        })
-      }
+  for (const key of STORAGE_KEYS[env.STORAGE_DRIVER]) {
+    if (!env[key]) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `${key} é obrigatório quando STORAGE_DRIVER=${env.STORAGE_DRIVER}`,
+      })
     }
   }
 

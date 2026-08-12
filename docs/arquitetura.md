@@ -21,7 +21,7 @@ Concretamente, aceitamos **três** coisas de "SaaS" desde já — a entidade `St
 | Identidade | Tabelas separadas: `User` (staff/admin) e `Customer` (cliente da loja) |
 | Filas | RabbitMQ **apenas** para e-mail, etiqueta, rastreio e pós-pagamento — 4 filas |
 | Busca | `unaccent + ILIKE` na v1; `tsvector` + GIN quando o catálogo crescer |
-| Storage | Interface `StorageProvider`; R2 em produção, disco local em desenvolvimento |
+| Storage | Interface `StorageProvider`; S3 em produção, disco local em desenvolvimento |
 | Módulos | `domain/` para funções puras, ao lado de service/repository |
 | Pacote compartilhado | Um só: `packages/shared` com `/contracts` e `/constants` |
 
@@ -268,7 +268,8 @@ apps/api/
 │   │   │   └── templates/
 │   │   ├── storage/
 │   │   │   ├── types.ts        StorageProvider
-│   │   │   ├── r2.ts           produção
+│   │   │   ├── s3.ts           produção
+│   │   │   ├── r2.ts           alternativa mantida
 │   │   │   ├── local.ts        desenvolvimento
 │   │   │   └── index.ts        escolhe pelo env
 │   │   └── viacep/
@@ -1162,12 +1163,13 @@ Precisa do resultado agora? Síncrono. É varredura periódica? `jobs/`, cron. N
 
 ## 13. Storage e Uploads
 
-### Decisão: interface `StorageProvider`; **R2 em produção, disco local em desenvolvimento**
+### Decisão: interface `StorageProvider`; **S3 em produção, disco local em desenvolvimento**
 
 ```text
 integrations/storage/
 ├── types.ts     StorageProvider
-├── r2.ts        produção — Cloudflare R2 (S3-compatível)
+├── s3.ts        produção — AWS S3 nativo
+├── r2.ts        alternativa mantida — Cloudflare R2 (egress grátis)
 ├── local.ts     desenvolvimento — ./uploads + rota de recebimento
 └── index.ts     escolhe por env.STORAGE_DRIVER
 ```
@@ -1189,10 +1191,10 @@ A assinatura intuitiva — `upload(file)` / `delete(file)` / `getUrl(file)` — 
 
 - O Node bufferiza dezenas de MB em memória (pico por request concorrente);
 - entra `multer`, disco temporário e limite de body;
-- a VPS paga a banda **duas vezes** (recebe do cliente, envia ao R2);
+- a VPS paga a banda **duas vezes** (recebe do cliente, envia ao bucket);
 - upload de 20 MB em 4G estoura o timeout do request.
 
-Com `getUploadUrl`, o browser faz `PUT` **direto** no R2 e o arquivo **nunca toca a API**. Sem multer, sem disco temporário, sem timeout, sem pico de memória.
+Com `getUploadUrl`, o browser faz `PUT` **direto** no bucket e o arquivo **nunca toca a API**. Sem multer, sem disco temporário, sem timeout, sem pico de memória.
 
 A interface acomoda os dois mundos porque `local.ts` retorna uma URL apontando para uma rota **da própria API** (`/api/v1/uploads/direct?token=…`) que grava em `./uploads`. **O código do front é idêntico nos dois casos** — ele pede uma URL e faz PUT nela.
 
@@ -1202,15 +1204,29 @@ Não é pelo swap futuro — é porque **`local.ts` é a implementação de dese
 
 O swap futuro vem de brinde. Mas o valor é hoje.
 
-### Por que R2 em produção **desde o dia um**, e não disco local
+### Por que object storage em produção, e não disco local
 
 Disco local em produção é tentador (é grátis, o Nginx serve). Rejeitado por três motivos concretos:
 
 1. **Backup** — `pg_dump` não leva as imagens. Vira um segundo processo de backup, que será esquecido até o dia do desastre.
-2. **É um caminho sem volta** — a interface torna a troca de **código** gratuita, mas **não** a troca de **dados**: migrar mídia com URLs já indexadas pelo Google exige mover arquivos e manter os caminhos antigos vivos (ou 301) para sempre. **A interface resolve o acoplamento, não a migração.** Começando no R2, essa migração simplesmente nunca acontece.
+2. **É um caminho sem volta** — a interface torna a troca de **código** gratuita, mas **não** a troca de **dados**: migrar mídia com URLs já indexadas pelo Google exige mover arquivos e manter os caminhos antigos vivos (ou 301) para sempre. **A interface resolve o acoplamento, não a migração.**
 3. **Sem CDN** — toda imagem sai do Brasil, do mesmo IP, competindo com o Postgres pelo I/O da mesma máquina.
 
-R2 custa centavos nesse volume, **não cobra egress** (o diferencial real contra o S3, onde a banda de imagem é o custo dominante em e-commerce) e serve por CDN global.
+O R2 custa centavos nesse volume, **não cobra egress** (o diferencial real contra o S3, onde a banda de imagem é o custo dominante em e-commerce) e serve por CDN global.
+
+### Por que S3 e não R2, apesar do egress
+
+O argumento acima continua verdadeiro — é por isso que o `r2.ts` **permanece no registry**. O que decidiu a favor do S3 foi operacional: a conta AWS já estava de pé para o SES (domínio verificado, DKIM publicado, faturamento configurado). Subir o S3 custou um bucket e um usuário IAM; o R2 custaria uma segunda conta de nuvem, um segundo par de credenciais e um segundo lugar onde a fatura pode surpreender.
+
+**A conta a refazer:** com egress do S3 a ~US$ 0,09/GB, 100 GB/mês de imagem são ~US$ 9/mês — nesse volume a diferença é irrelevante. **Reavaliar quando** o egress passar de ~200 GB/mês: o `STORAGE_DRIVER=r2` já está pronto e a troca de código é uma variável de ambiente. O que a troca **não** resolve é a migração dos bytes e das URLs indexadas (ver o ponto 2 acima) — por isso a reavaliação tem que acontecer **antes** de o Google indexar o catálogo inteiro, não depois.
+
+**Sem CloudFront por ora.** O bucket responde direto, público para leitura via bucket policy (`s3:GetObject` em `<bucket>/store/*`, não em `/*` — assim um dump de backup no mesmo bucket não fica público por acidente). A escrita é só por URL assinada de 5 min. O `next/image` na frente já cacheia as derivadas, então a origem só é atingida na primeira renderização de cada tamanho. Entra CloudFront quando a latência da origem única aparecer no LCP — e aí é preencher `S3_PUBLIC_URL`, sem tocar em código nem no banco.
+
+**Três armadilhas registradas**, porque custam horas quando aparecem:
+
+- **`requestChecksumCalculation: 'WHEN_REQUIRED'` no `S3Client` não pode sair.** Desde a versão 3.729.0 o SDK calcula um CRC32 por padrão — mas numa URL assinada ainda não existe corpo, então ele assina o checksum do **vazio** (`x-amz-checksum-crc32=AAAAAA==`) e congela essa afirmação na query string. O browser depois manda o arquivo de verdade e o S3 recusa o PUT. Vale para o `r2.ts` também, onde é pior: o R2 nem implementa CRC32. A integridade não se perde — o TLS já protege o transporte.
+- O usuário IAM precisa de **`s3:ListBucket`** além do trio `PutObject`/`GetObject`/`DeleteObject`. Sem ele o S3 não revela existência e responde **403 em vez de 404** numa key inexistente — o `exists()` estouraria e o `confirm` devolveria 502 no lugar do 422 "upload não concluído".
+- O **`Content-Type` só vai assinado** porque passamos `signableHeaders: new Set(['content-type'])` ao `getSignedUrl`. Por padrão o SDK assina apenas o `host`, e a URL aceitaria um PUT de qualquer mime — o presign valida contra a allowlist, mas o upload subiria outro. Como está, divergência entre o header do PUT e o da assinatura dá 403 `SignatureDoesNotMatch`, que o front mostra como um genérico "falha ao enviar".
 
 ### Fluxo
 
@@ -1221,7 +1237,7 @@ R2 custa centavos nesse volume, **não cobra egress** (o diferencial real contra
      key: store/<storeId>/products/<ano>/<mes>/<cuid>.<ext>
      → storage.getUploadUrl(key, mimeType)
      → { uploadUrl, key }
-3. Browser faz PUT direto           ← R2 em prod, rota local em dev
+3. Browser faz PUT direto           ← S3 em prod, rota local em dev
 4. POST /api/v1/uploads/confirm  { key, width, height }
      → cria Upload, retorna { id, url: getPublicUrl(key) }
 5. O produto referencia uploadId
@@ -1231,11 +1247,13 @@ R2 custa centavos nesse volume, **não cobra egress** (o diferencial real contra
 
 ### Redimensionamento
 
-**Não gerar derivadas.** Guardar o original e deixar o `next/image` otimizar sob demanda (`remotePatterns` para o domínio do R2). O Next redimensiona, converte para WebP/AVIF e cacheia.
+**Não gerar derivadas.** Guardar o original e deixar o `next/image` otimizar sob demanda (`remotePatterns` para o host do bucket, via `NEXT_PUBLIC_CDN_HOST`). O Next redimensiona, converte para WebP/AVIF e cacheia.
 
 Um worker com `sharp` gerando 4 tamanhos por imagem é ~150 linhas, uma fila, uma tabela de variantes e um caminho de invalidação — para resolver o que o framework já resolve. **Reavaliar quando** o cache de imagem do Next virar gargalo de I/O.
 
 Validação: `image/jpeg|png|webp|avif`, ≤10 MB, dimensões mínimas. Órfãos (confirmados e nunca referenciados por >24h) são varridos por um job semanal.
+
+**Onde dev e prod divergem:** o limite de tamanho é reforçado de verdade só no driver local (`express.raw({ limit: MAX_UPLOAD_BYTES })` na rota `/uploads/direct`). No S3 a URL assinada autoriza um PUT de **qualquer tamanho** — a validação é o Zod no presign mais a checagem no cliente, e quem tem token de staff poderia declarar 1 KB e subir 5 GB. É risco de **fatura**, não de segurança (quem tem esse token já pode coisas piores), e fechá-lo exigiria assinar o `ContentLength`, o que mudaria a assinatura de `getUploadUrl` nos três drivers. A mitigação proporcional é um **budget alert** na conta AWS. **Reavaliar quando** o bucket virar alvo de abuso interno ou a conta surpreender.
 
 ---
 
@@ -1677,7 +1695,7 @@ Portanto:
 1. Monorepo pnpm, três apps, `packages/shared` com `/contracts` e `/constants`.
 2. VPS: Ubuntu, Node LTS, Postgres, RabbitMQ, Nginx, PM2, UFW, certbot.
 3. `config/env.ts` com Zod, `logger`, `prisma`, `error-handler`, `validate`, envelope, `shared/audit.ts`, `shared/flags.ts`.
-4. `integrations/storage` com `local.ts` e `r2.ts`.
+4. `integrations/storage` com `local.ts`, `r2.ts` e `s3.ts`.
 5. Prisma inicial: `Store`, `User`, `RefreshToken`, `AuditLog`, `Setting`. Seed da loja única.
 6. `getActiveStoreId()`.
 7. shadcn/ui instalado nos dois fronts, tokens semânticos definidos.
@@ -1814,8 +1832,8 @@ Como confirmar que cada parte funciona de ponta a ponta. Sem isso, o documento �
 
 ### Storage
 - Presign + PUT direto → o arquivo **não aparece** no processo da API (sem pico de memória).
-- `Upload` guarda `key`, não URL. Trocar `CDN_URL` no env → **todas** as imagens seguem o novo domínio sem UPDATE no banco.
-- `delete` remove do R2 e do banco.
+- `Upload` guarda `key`, não URL. Trocar o host público no env → **todas** as imagens seguem o novo domínio sem UPDATE no banco.
+- `delete` remove do storage e do banco.
 
 ### Segurança
 - `GET /orders/:id` com o id de outro cliente → **403**, não 200. Repetir para addresses, carts, customers. (IDOR.)
@@ -1853,7 +1871,7 @@ Toda decisão de "não agora" tem um gatilho explícito. É o que separa simplic
 | Motor de busca | Postgres | Facetas complexas ou > 100k produtos |
 | Cache distribuído | Nenhum (memória + Postgres) | 2ª VPS ou rate limit vira gargalo |
 | Paginação | Offset | > 100k linhas ou scroll infinito |
-| **Storage prod** | **R2 desde o dia um** | Nunca (egress grátis vence) |
+| **Storage prod** | **S3 (a conta AWS já existia para o SES)** | Egress > ~200 GB/mês → o `r2.ts` já está no registry |
 | Storage dev | Disco local | Nunca |
 | Derivadas de imagem | `next/image` sob demanda | Cache de imagem satura o I/O |
 | Publicação de eventos | Após commit + reconciliação | Perda de evento não-financeiro doer |

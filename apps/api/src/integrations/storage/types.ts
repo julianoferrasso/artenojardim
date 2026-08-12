@@ -22,7 +22,7 @@
  */
 
 export type UploadTarget = {
-  /** Para onde o browser faz PUT. R2 assinado em prod; a própria API em dev. */
+  /** Para onde o browser faz PUT. S3/R2 assinado em prod; a própria API em dev. */
   uploadUrl: string
   method: 'PUT'
   headers: Record<string, string>
@@ -30,7 +30,7 @@ export type UploadTarget = {
 }
 
 export type StorageProvider = {
-  readonly id: 'local' | 'r2'
+  readonly id: 'local' | 'r2' | 's3'
 
   getUploadUrl: (key: string, mimeType: string) => Promise<UploadTarget>
 
