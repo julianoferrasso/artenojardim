@@ -3,41 +3,19 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react'
 import { ROUTES } from '@ecommerce/shared/constants'
 import type { Cart, AddToCartInput } from '@ecommerce/shared/contracts'
-import { getAccessToken, useAuth } from './auth'
-import { ApiError } from './api'
+import { useAuth } from './auth'
+import { clientFetch as call } from './client'
 
 /**
- * Carrinho no browser. Client-side: bate no domínio público da API com
- * credentials (o cookie de sessão anônima E o de refresh de cliente viajam). O
- * access token de cliente (em memória, via auth) é anexado quando há sessão.
+ * Carrinho no browser. Usa o `clientFetch` compartilhado: o cookie de sessão
+ * anônima e o de refresh viajam por `credentials`, o access token de cliente é
+ * anexado quando há sessão, e o 401 por token expirado RENOVA a sessão em vez de
+ * falhar — que era o que fazia o carrinho quebrar numa aba aberta há mais de 15
+ * minutos.
  *
  * O estado do carrinho vem SEMPRE da API recalculada — o contexto só guarda o
  * último snapshot. Nunca calcula preço/total no cliente.
  */
-
-const apiBase = (): string => {
-  const url = process.env.NEXT_PUBLIC_API_URL
-  if (!url) throw new Error('NEXT_PUBLIC_API_URL não configurada')
-  return url
-}
-
-const call = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
-  const token = getAccessToken()
-  const res = await fetch(`${apiBase()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    throw new ApiError(body?.error?.code ?? 'INTERNAL_ERROR', body?.error?.message ?? `Erro ${res.status}`, res.status)
-  }
-  return ((await res.json()) as { data: T }).data
-}
 
 type CartState = {
   cart: Cart | null

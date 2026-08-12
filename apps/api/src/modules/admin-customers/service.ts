@@ -14,6 +14,7 @@ import { buildMeta, toPrismaPagination } from '../../shared/pagination.js'
 import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { conflict, notFound } from '../../shared/errors.js'
 import { revokeAllSessions } from '../../shared/refresh-tokens.js'
+import { anonymizeCustomerData } from '../../shared/anonymize-customer.js'
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import {
   ADDRESS_SELECT,
@@ -322,31 +323,9 @@ export const updateCustomer = async (
 export const anonymizeCustomer = async (id: string, ctx: AuditContext): Promise<AdminCustomer> => {
   await findOrThrow(id)
 
-  await prisma.$transaction(async (tx) => {
-    await tx.customer.update({
-      where: { id },
-      data: {
-        name: 'Cliente removido',
-        // O e-mail continua sendo único por loja (@@unique([storeId, email])):
-        // um literal fixo colidiria no segundo cliente anonimizado.
-        email: `anonimizado+${id}@invalido.local`,
-        phone: null,
-        document: null,
-        documentType: null,
-        birthDate: null,
-        passwordHash: null,
-        acceptsMarketing: false,
-        deletedAt: new Date(),
-      },
-    })
-
-    await tx.address.deleteMany({ where: { customerId: id } })
-    await tx.customerProductView.deleteMany({ where: { customerId: id } })
-    await tx.customerToken.deleteMany({ where: { customerId: id } })
-    // Na mesma transação: conta anonimizada com sessão viva ainda abre os
-    // pedidos, porque o token carrega o id.
-    await revokeAllSessions({ kind: 'customer', id }, tx)
-  })
+  // O efeito mora em shared/: o cliente também pode pedir a própria exclusão, e
+  // duas cópias de "o que apagar" divergem no dia em que nascer um campo novo.
+  await anonymizeCustomerData(id)
 
   // SEM `changes`: o diff seria justamente o dado pessoal que esta ação existe
   // para destruir — gravá-lo no AuditLog anularia a anonimização.

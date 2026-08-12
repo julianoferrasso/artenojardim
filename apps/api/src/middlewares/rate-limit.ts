@@ -181,6 +181,14 @@ export const checkoutConfirmLimiter = build({ name: 'checkout-confirm', windowMs
 export const newsletterLimiter = build({ name: 'newsletter', windowMs: 60 * 60_000, max: 5 })
 
 /**
+ * Descadastro. Mais folgado que a inscrição de propósito: sair da lista não pode
+ * ser mais difícil que entrar. Quem clica duas vezes no link, ou volta ao e-mail
+ * antigo semanas depois, precisa conseguir — um 429 aqui empurra a pessoa direto
+ * para o botão de spam, que custa a reputação do domínio no SES.
+ */
+export const unsubscribeLimiter = build({ name: 'unsubscribe', windowMs: 60 * 60_000, max: 30 })
+
+/**
  * Beacon de visita ao produto. Generoso de propósito: um cliente navegando pela
  * loja dispara um por produto aberto, e apertar aqui mutila a própria métrica.
  * O limite existe contra o script que inflaria "mais visitados", não contra quem
@@ -224,5 +232,50 @@ export const orderReorderLimiter = build({
   name: 'order-reorder',
   windowMs: 60 * 60_000,
   max: 30,
+  keyBy: byCustomer,
+})
+
+/**
+ * Trocar a senha sabendo a atual. Escopo por CLIENTE, não por IP: a rota exige
+ * sessão, e limitar por IP faria uma casa atrás do mesmo NAT dividir a cota.
+ *
+ * 5 e não 3 porque `currentPassword` errado consome tentativa, e quem erra a
+ * senha atual três vezes costuma acertar na quarta. O que este limite impede é
+ * usar a rota como oráculo de senha a partir de uma sessão roubada — e para isso
+ * 5 por hora já é intransponível.
+ */
+export const changePasswordLimiter = build({
+  name: 'change-password',
+  windowMs: 60 * 60_000,
+  max: 5,
+  keyBy: byCustomer,
+})
+
+/** Pedir a troca de e-mail dispara DOIS envios (novo + aviso ao antigo). O teto
+ *  aqui é a nossa cota no SES, não o abuso de conta: 3/h, como o cadastro. */
+export const changeEmailLimiter = build({
+  name: 'change-email',
+  windowMs: 60 * 60_000,
+  max: 3,
+  keyBy: byCustomer,
+})
+
+/**
+ * Consumir o link da troca. PÚBLICO — o cliente costuma clicar deslogado, noutro
+ * navegador — então por IP, porque não há `req.auth` para escopar. Os mesmos
+ * 10/h dos outros consumos de link: reabrir a aba e clicar de novo não é ataque.
+ */
+export const confirmEmailChangeLimiter = build({
+  name: 'confirm-email-change',
+  windowMs: 60 * 60_000,
+  max: 10,
+})
+
+/** Excluir a conta é irreversível e exige a senha: o limite é contra usar a rota
+ *  como oráculo de senha, não contra o cliente decidido. */
+export const deleteAccountLimiter = build({
+  name: 'delete-account',
+  windowMs: 60 * 60_000,
+  max: 3,
   keyBy: byCustomer,
 })

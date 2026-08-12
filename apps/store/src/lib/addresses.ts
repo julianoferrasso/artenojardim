@@ -7,42 +7,20 @@ import type {
   UpdateAddressInput,
   CepLookup,
 } from '@ecommerce/shared/contracts'
-import { getAccessToken } from './auth'
-import { ApiError } from './api'
+import { clientFetch as call } from './client'
 
 /**
- * Acesso client-side aos endereços do cliente. Mesmo padrão do carrinho: bate no
- * domínio público da API com o Bearer em memória e credentials para o cookie. A
- * consulta de CEP é pública (não anexa token — serve o guest também).
+ * Acesso client-side aos endereços do cliente. Usa o `clientFetch` compartilhado:
+ * Bearer em memória, cookie de refresh e — o que este arquivo não tinha — a
+ * RENOVAÇÃO SILENCIOSA no 401.
+ *
+ * Sem ela, uma aba aberta há mais de 15 minutos falhava ao salvar um endereço, e
+ * o cliente perdia o formulário preenchido. A consulta de CEP é pública; mandar o
+ * token junto é inofensivo e evita um segundo caminho de fetch.
  *
  * Não recalcula nem valida nada de negócio no cliente: a API é a dona. Aqui só
  * transporta.
  */
-
-const apiBase = (): string => {
-  const url = process.env.NEXT_PUBLIC_API_URL
-  if (!url) throw new Error('NEXT_PUBLIC_API_URL não configurada')
-  return url
-}
-
-const call = async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
-  const token = getAccessToken()
-  const res = await fetch(`${apiBase()}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => null)
-    throw new ApiError(body?.error?.code ?? 'INTERNAL_ERROR', body?.error?.message ?? `Erro ${res.status}`, res.status)
-  }
-  if (res.status === 204) return undefined as T
-  return ((await res.json()) as { data: T }).data
-}
 
 export const listAddresses = (): Promise<Address[]> => call<Address[]>(ROUTES.customers.addresses)
 

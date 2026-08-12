@@ -24,6 +24,9 @@ export const ROUTES = {
     resetPassword: `${base}/auth/reset-password`,
     verifyEmail: `${base}/auth/verify-email`,
     resendVerification: `${base}/auth/resend-verification`,
+    /** Consome o link da troca de e-mail. PÚBLICA, como as outras rotas de link:
+     *  quem clica costuma estar deslogado, e a posse do token é a prova. */
+    confirmEmailChange: `${base}/auth/confirm-email-change`,
   },
 
   store: `${base}/store`,
@@ -132,6 +135,13 @@ export const ROUTES = {
   /** Superfície do PRÓPRIO cliente. A visão de staff vive em `admin.customers`. */
   customers: {
     me: `${base}/customers/me`,
+    /** Verbo próprio, não campo do PATCH: trocar credencial derruba as outras
+     *  sessões e exige a senha atual. */
+    password: `${base}/customers/me/password`,
+    /** POST pede a troca (grava o pendente e manda os e-mails); DELETE cancela. */
+    email: `${base}/customers/me/email`,
+    /** GET lista os dispositivos conectados; DELETE encerra os outros. */
+    sessions: `${base}/customers/me/sessions`,
     addresses: `${base}/customers/me/addresses`,
     address: (id: string) => `${base}/customers/me/addresses/${id}`,
   },
@@ -175,6 +185,15 @@ export const ROUTES = {
   /** Inscrição na newsletter (pública, footer/home da loja). */
   newsletter: {
     subscribe: `${base}/newsletter/subscribe`,
+    /**
+     * Descadastro pelo link do rodapé do e-mail. Pública e SEM login: quem
+     * assinou pelo footer não tem conta, e exigir uma para sair transformaria
+     * "descadastrar" em "marcar como spam" — que custa a reputação do domínio.
+     *
+     * POST e não GET: um GET que muda estado é disparado pelo pré-carregador de
+     * links do Outlook e de antivírus, sem ninguém clicar em nada.
+     */
+    unsubscribe: `${base}/newsletter/unsubscribe`,
   },
 
   /** Métricas do painel (staff). */

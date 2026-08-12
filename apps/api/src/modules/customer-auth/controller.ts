@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import type {
+  ConfirmEmailChangeInput,
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
@@ -7,38 +8,12 @@ import type {
   ResetPasswordInput,
   VerifyEmailInput,
 } from '@ecommerce/shared/contracts'
-import { ROUTES } from '@ecommerce/shared/constants'
-import { env, isProduction } from '../../config/env.js'
 import { ok, created } from '../../shared/http.js'
 import { unauthorized } from '../../shared/errors.js'
+import { sessionContext } from '../../shared/session-context.js'
+import { confirmEmailChange } from '../customer-profile/credentials.js'
+import { CUSTOMER_REFRESH_COOKIE, cookieOptions, respondWithSession as respond } from './cookies.js'
 import * as service from './service.js'
-
-/**
- * Cookie de CLIENTE — nome distinto do de staff. Um mesmo navegador pode ter as
- * duas sessões (o dono da loja comprando na própria loja), e elas não se cruzam.
- */
-const CUSTOMER_REFRESH_COOKIE = 'customer_refresh_token'
-
-const cookieOptions = () =>
-  ({
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax' as const,
-    domain: env.COOKIE_DOMAIN,
-    // Restrito ao endpoint de refresh de cliente: nem é enviado nas outras rotas.
-    path: ROUTES.auth.refresh,
-    maxAge: env.REFRESH_TOKEN_TTL_DAYS * 86400 * 1000,
-  }) as const
-
-const sessionContext = (req: Request) => ({ ip: req.ip, userAgent: req.get('user-agent') })
-
-const respond = (res: Response, result: service.CustomerSession) => {
-  res.cookie(CUSTOMER_REFRESH_COOKIE, result.refreshToken, cookieOptions())
-  ok(res, {
-    customer: result.customer,
-    tokens: { accessToken: result.accessToken, expiresIn: result.expiresIn },
-  })
-}
 
 /**
  * Cadastro não devolve sessão nem cookie: a conta só entra depois da confirmação
@@ -95,6 +70,20 @@ export const logoutController = async (req: Request, res: Response): Promise<voi
   const { maxAge: _maxAge, ...clearOptions } = cookieOptions()
   res.clearCookie(CUSTOMER_REFRESH_COOKIE, clearOptions)
   ok(res, { success: true })
+}
+
+/**
+ * Efetiva a troca de e-mail. Não emite sessão: a troca acabou de revogar todas
+ * as sessões do cliente, e quem clica costuma estar noutro navegador. Ele entra
+ * de novo, com o e-mail NOVO.
+ *
+ * A lógica vive em `customer-profile/credentials.ts`, junto do pedido da troca —
+ * só a porta pública é aqui, onde moram as outras rotas de link.
+ */
+export const confirmEmailChangeController = async (req: Request, res: Response): Promise<void> => {
+  const { token } = req.body as ConfirmEmailChangeInput
+  await confirmEmailChange(token, sessionContext(req))
+  ok(res, { changed: true })
 }
 
 export const meController = async (req: Request, res: Response): Promise<void> => {

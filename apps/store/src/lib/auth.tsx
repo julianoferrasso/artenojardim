@@ -16,17 +16,7 @@ import { clientFetch as call, setAccessToken } from './client'
  * SESSÃO — quem está logado, como entra e como sai.
  */
 
-/**
- * Re-export: `cart.tsx`, `addresses.ts` e `checkout.ts` ainda têm o próprio
- * `call()` e importam o token daqui.
- *
- * PENDÊNCIA: enquanto não migrarem para `./client`, esses três NÃO ganham a
- * renovação silenciosa — o carrinho volta a falhar com 401 numa aba aberta há
- * mais de 15 minutos. É trocar três blocos de ~20 linhas por um import.
- */
-export { getAccessToken } from './client'
-
-type SessionResp = { customer: AuthCustomer; tokens: { accessToken: string } }
+export type SessionResp = { customer: AuthCustomer; tokens: { accessToken: string } }
 
 /**
  * `register` NÃO está aqui: o cadastro não cria sessão — o cliente precisa
@@ -44,6 +34,17 @@ type AuthState = {
    * voltar ao estado antigo no render seguinte.
    */
   applyProfile: (customer: AuthCustomer) => void
+  /**
+   * Aplica uma SESSÃO inteira: token novo + perfil. A troca de senha e o
+   * "encerrar as outras sessões" devolvem uma, porque as duas revogam tudo e
+   * reemitem para esta aba.
+   *
+   * Sem isto a aba seguiria com um access token REVOGADO até o próximo 401 — que,
+   * sendo TOKEN_INVALID e não TOKEN_EXPIRED, o clientFetch corretamente não
+   * renova. O cliente seria deslogado dois cliques depois de trocar a senha, sem
+   * relação aparente com o que fez.
+   */
+  applySession: (data: SessionResp) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -97,7 +98,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ customer, loading, login, logout, applyProfile: setCustomer }}>
+    <AuthContext.Provider
+      value={{ customer, loading, login, logout, applyProfile: setCustomer, applySession: apply }}
+    >
       {children}
     </AuthContext.Provider>
   )
@@ -109,6 +112,13 @@ export const useAuth = (): AuthState => {
   return ctx
 }
 
+/**
+ * Mensagem padrão por `code`. As telas de conta tratam alguns códigos ANTES de
+ * cair aqui: logado, "E-mail ou senha inválidos" para um INVALID_CREDENTIALS é
+ * ambíguo (a senha atual é que estava errada), e o "Faça login" do
+ * EMAIL_ALREADY_EXISTS não faz sentido para quem já está dentro. O texto certo
+ * depende do contexto; o code, não.
+ */
 export const authErrorMessage = (err: unknown): string => {
   if (!(err instanceof ApiError)) return 'Não foi possível conectar. Tente novamente.'
   switch (err.code) {

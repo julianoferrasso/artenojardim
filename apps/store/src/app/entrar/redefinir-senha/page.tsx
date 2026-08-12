@@ -9,8 +9,7 @@ import { z } from 'zod'
 import { resetPasswordSchema } from '@ecommerce/shared/contracts'
 import { resetPassword } from '@/lib/account'
 import { authErrorMessage } from '@/lib/auth'
-import { useBrandLogo } from '@/components/brand-logo-provider'
-import { StoreLogo } from '@/components/store-logo'
+import { AuthShell as Shell } from '@/components/auth-shell'
 import { fieldClass, submitButtonClass } from '@/lib/utils'
 
 /**
@@ -153,16 +152,3 @@ function RedefinirSenha() {
   )
 }
 
-function Shell({ title, children }: { title: string; children?: React.ReactNode }) {
-  const logoUrl = useBrandLogo()
-
-  return (
-    <main className="mx-auto max-w-sm px-4 py-12">
-      <div className="mb-6 flex flex-col items-center gap-2 text-center">
-        <StoreLogo src={logoUrl} alt="" size={64} className="size-16" />
-        <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
-      </div>
-      <div className="rounded-xl border border-border bg-card p-6 shadow-soft">{children}</div>
-    </main>
-  )
-}

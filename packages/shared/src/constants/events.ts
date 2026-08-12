@@ -50,6 +50,19 @@ export const EVENTS = {
     emailVerified: 'customer.email_verified',
     /** Senha trocada PELO CLIENTE via link de e-mail. Derruba todas as sessões. */
     passwordReset: 'customer.password_reset',
+    /** Senha trocada na área da conta, PROVANDO a senha atual. Separado de
+     *  `passwordReset`: quem investiga um incidente precisa distinguir "trocou
+     *  sabendo a senha" de "trocou por link de e-mail". */
+    passwordChanged: 'customer.password_changed',
+    /** Troca de e-mail SOLICITADA. Fica na auditoria mesmo que nunca se conclua:
+     *  o pedido que não virou troca é o rastro de uma tentativa de tomada. */
+    emailChangeRequested: 'customer.email_change_requested',
+    /** Link clicado: o e-mail mudou de fato. As sessões caíram junto. */
+    emailChanged: 'customer.email_changed',
+    /** O cliente encerrou as outras sessões da própria conta. */
+    sessionsRevoked: 'customer.sessions_revoked',
+    /** LGPD pela porta do cliente. Mesmo efeito de `anonymized`, origem outra. */
+    selfDeleted: 'customer.self_deleted',
     /** Staff corrigiu dado cadastral (telefone errado, e-mail com typo). */
     updated: 'customer.updated',
     /** LGPD: dado pessoal destruído, pedidos preservados. Irreversível. */

@@ -185,6 +185,12 @@ model Customer {
   /// saber um endereço, e sobrescrever `name` na hora deixaria qualquer um mudar
   /// o nome que aparece nos pedidos já feitos por aquele cliente.
   pendingName      String?
+  /// E-mail novo aguardando confirmação. Só substitui `email` quando o link
+  /// enviado PARA ELE for clicado. Sem @@unique de propósito: dois clientes podem
+  /// pedir o mesmo endereço e quem confirmar primeiro leva. Um índice único aqui
+  /// transformaria "pedir" em "reservar", e reservar o e-mail alheio antes que o
+  /// dono se cadastre é negação de serviço de graça.
+  pendingEmail     String?
   acceptsMarketing Boolean   @default(false)
   deletedAt        DateTime?
 
@@ -209,6 +215,10 @@ model Customer {
 enum CustomerTokenPurpose {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  /// Troca de e-mail pedida pelo cliente logado. O endereço NOVO não mora aqui e
+  /// sim em `Customer.pendingEmail` — mesmo motivo de `pendingName`: o valor é do
+  /// cadastro, o token é só a prova de posse da caixa.
+  EMAIL_CHANGE
 }
 
 /// Token opaco de uso único que viaja por e-mail. Guardamos o HASH, nunca o token

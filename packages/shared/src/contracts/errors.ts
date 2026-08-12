@@ -32,6 +32,10 @@ export const ERROR_CODES = {
   /// code oferecendo o reenvio — sem ele, o cliente lê "senha inválida" e não
   /// tem para onde ir.
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  /// CPF/CNPJ que já viajou para um pedido. A partir do primeiro pedido o
+  /// documento é dado fiscal, não cadastro — corrigir depois reescreveria a
+  /// identidade de uma venda já emitida.
+  DOCUMENT_LOCKED: 'DOCUMENT_LOCKED',
 
   // Catálogo
   SLUG_ALREADY_EXISTS: 'SLUG_ALREADY_EXISTS',

@@ -70,6 +70,17 @@ export const authCustomerSchema = z.object({
   /// Vem junto da sessão para a tela de preferências abrir já no estado certo,
   /// sem um segundo request só para ler um booleano.
   acceptsMarketing: z.boolean(),
+  /// Idem: `/conta/dados` abre com o telefone preenchido sem um GET extra. Um
+  /// endpoint de perfil à parte criaria duas fontes de "quem é o cliente", e
+  /// elas divergem no primeiro dia em que uma for atualizada e a outra não.
+  phone: z.string().nullable(),
+  /// E-mail aguardando confirmação, ou null. A tela precisa saber se há troca em
+  /// curso para mostrar "aguardando" em vez do formulário.
+  pendingEmail: z.string().nullable(),
+  document: z.string().nullable(),
+  /// `true` quando já existe pedido: o CPF virou dado fiscal e congelou. Vem
+  /// derivado porque o front não pode decidir isso — quem sabe é o banco.
+  documentLocked: z.boolean(),
 })
 
 export const adminLoginResponseSchema = z.object({

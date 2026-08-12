@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import {
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
@@ -10,6 +11,7 @@ import {
 import { validate } from '../../middlewares/validate.js'
 import { authenticateCustomer } from '../../middlewares/authenticate.js'
 import {
+  confirmEmailChangeLimiter,
   forgotPasswordLimiter,
   loginLimiter,
   refreshLimiter,
@@ -41,3 +43,7 @@ customerAuthRoutes.post('/verify-email', verifyEmailLimiter, validate({ body: ve
 customerAuthRoutes.post('/resend-verification', resendVerificationLimiter, validate({ body: resendVerificationSchema }), controller.resendVerificationController)
 customerAuthRoutes.post('/forgot-password', forgotPasswordLimiter, validate({ body: forgotPasswordSchema }), controller.forgotPasswordController)
 customerAuthRoutes.post('/reset-password', resetPasswordLimiter, validate({ body: resetPasswordSchema }), controller.resetPasswordController)
+/** Troca de e-mail: o PEDIDO exige sessão e senha (/customers/me/email), mas o
+ *  CONSUMO do link é público como os demais — quem clica abriu o e-mail no
+ *  celular e quase nunca está logado ali. */
+customerAuthRoutes.post('/confirm-email-change', confirmEmailChangeLimiter, validate({ body: confirmEmailChangeSchema }), controller.confirmEmailChangeController)

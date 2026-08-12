@@ -47,13 +47,21 @@ export type CustomerSession = {
 }
 
 /** Campos mínimos de todo `select` de customer. Esquecer um deles aqui faz o Zod
- *  do front rejeitar a resposta inteira, sem mensagem útil. */
-const AUTH_SELECT = {
+ *  do front rejeitar a resposta inteira, sem mensagem útil.
+ *
+ *  O `_count` de pedidos não é vaidade: é o que decide `documentLocked`. A partir
+ *  do primeiro pedido o CPF virou dado fiscal e a tela precisa saber disso sem
+ *  um segundo request. */
+export const AUTH_SELECT = {
   id: true,
   name: true,
   email: true,
   emailVerifiedAt: true,
   acceptsMarketing: true,
+  phone: true,
+  pendingEmail: true,
+  document: true,
+  _count: { select: { orders: true } },
 } as const
 
 const issueAccess = (customerId: string): Promise<string> =>
@@ -69,13 +77,52 @@ export const toAuthCustomer = (c: {
   email: string
   emailVerifiedAt: Date | null
   acceptsMarketing: boolean
+  phone: string | null
+  pendingEmail: string | null
+  document: string | null
+  _count: { orders: number }
 }): AuthCustomer => ({
   id: c.id,
   name: c.name,
   email: c.email,
   emailVerified: c.emailVerifiedAt !== null,
   acceptsMarketing: c.acceptsMarketing,
+  phone: c.phone,
+  pendingEmail: c.pendingEmail,
+  document: c.document,
+  // Derivado, não guardado: um booleano no banco poderia divergir do fato.
+  documentLocked: c._count.orders > 0,
 })
+
+/**
+ * Emite access + refresh e monta a resposta de sessão.
+ *
+ * Exportada porque a troca de senha também emite uma sessão nova — ela revoga
+ * tudo e devolve uma para a aba atual sobreviver. Duplicar a montagem é como o
+ * `expiresIn` de um dos dois caminhos fica para trás numa mudança de TTL.
+ */
+export const issueCustomerSession = async (
+  customerId: string,
+  ctx: SessionContext,
+): Promise<CustomerSession> => {
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, storeId: getActiveStoreId(), deletedAt: null },
+    select: AUTH_SELECT,
+  })
+  if (!customer) throw appError(ERROR_CODES.ACCOUNT_DISABLED, 'Conta indisponível.', 403)
+
+  const [accessToken, refreshToken] = await Promise.all([
+    issueAccess(customer.id),
+    issueRefreshToken({ kind: 'customer', id: customer.id }, ctx),
+  ])
+
+  return {
+    customer: toAuthCustomer(customer),
+    accessToken,
+    expiresIn: ttlToSeconds(env.ACCESS_TOKEN_TTL),
+    refreshToken,
+  }
+}
 
 const verificationTtlMs = (): number => env.EMAIL_VERIFICATION_TTL_HOURS * 3600 * 1000
 const resetTtlMs = (): number => env.PASSWORD_RESET_TTL_MINUTES * 60 * 1000
