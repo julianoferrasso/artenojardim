@@ -302,10 +302,19 @@ export const deriveButtonVars = (
  * testes e pela prévia do admin, e não deve inchar para quem só quer as bases.
  * O texto sobre a faixa nunca é escolhido — sai de `contrastForeground`.
  */
-export const deriveTertiaryVars = (tertiary: Oklch): Record<string, string> => ({
-  '--tertiary': oklchToCss(tertiary),
-  '--tertiary-foreground': oklchToCss(contrastForeground(tertiary)),
-})
+export const deriveTertiaryVars = (tertiary?: Oklch): Record<string, string> => {
+  /*
+   * `tertiary` é opcional porque loja e API sobem em momentos diferentes: uma
+   * resposta antiga em cache (de antes do 5º slot) não tem a chave e derrubava
+   * o SSR inteiro — aconteceu no deploy. Mesmo racional do `buttons` opcional
+   * em deriveButtonVars. O fallback espelha o DEFAULT_STORE_THEME.tertiary.
+   */
+  const color = tertiary ?? { l: 0.54, c: 0.045, h: 135 }
+  return {
+    '--tertiary': oklchToCss(color),
+    '--tertiary-foreground': oklchToCss(contrastForeground(color)),
+  }
+}
 
 /**
  * Faixa de fundo em que NENHUMA tinta atinge 4.5:1 sobre as superfícies
