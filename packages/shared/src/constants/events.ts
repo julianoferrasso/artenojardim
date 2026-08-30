@@ -114,6 +114,12 @@ export const EVENTS = {
     /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */
     themeUpdated: 'store.theme_updated',
   },
+  /** Banners do carrossel da home. Só auditoria — nenhum consumidor de fila. */
+  banner: {
+    created: 'banner.created',
+    updated: 'banner.updated',
+    deleted: 'banner.deleted',
+  },
 } as const
 
 /**

@@ -295,6 +295,19 @@ export const deriveButtonVars = (
 }
 
 /**
+ * As variáveis CSS da cor das FAIXAS (--tertiary): barra de anúncio e rodapé.
+ *
+ * Função própria em vez de um campo a mais em `deriveThemeVars` pelo mesmo
+ * motivo de `deriveButtonVars`: aquela assinatura é consumida pela bateria de
+ * testes e pela prévia do admin, e não deve inchar para quem só quer as bases.
+ * O texto sobre a faixa nunca é escolhido — sai de `contrastForeground`.
+ */
+export const deriveTertiaryVars = (tertiary: Oklch): Record<string, string> => ({
+  '--tertiary': oklchToCss(tertiary),
+  '--tertiary-foreground': oklchToCss(contrastForeground(tertiary)),
+})
+
+/**
  * Faixa de fundo em que NENHUMA tinta atinge 4.5:1 sobre as superfícies
  * derivadas — nem preto, nem branco. É limite físico do par de luminosidades,
  * não da fórmula: o fundo fica a meio caminho dos dois extremos.

@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Star } from 'lucide-react'
 import type { Product, ProductImage, Variant } from '@ecommerce/shared/contracts'
 import {
   useProduct,
@@ -38,6 +39,14 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
     setError(null)
     update.mutate(
       { id, input: { status } },
+      { onError: (e) => setError(e instanceof ApiError ? e.message : 'Falha ao salvar.') },
+    )
+  }
+
+  const toggleFeatured = () => {
+    setError(null)
+    update.mutate(
+      { id, input: { isFeatured: !product.isFeatured } },
       { onError: (e) => setError(e instanceof ApiError ? e.message : 'Falha ao salvar.') },
     )
   }
@@ -81,7 +90,26 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
               </button>
             )}
             {/* Ao lado de Publicar/Despublicar porque é a mesma pergunta —
-                "este produto está no ar?" — e aqui o produto já está carregado. */}
+                "este produto aparece onde?" — e aqui o produto já está carregado. */}
+            <button
+              onClick={toggleFeatured}
+              disabled={update.isPending}
+              aria-pressed={product.isFeatured}
+              title={
+                product.isFeatured
+                  ? 'Remover da seção Destaques da loja'
+                  : 'Mostrar na seção Destaques da loja'
+              }
+              className={cn(
+                'flex items-center gap-1.5 rounded-md border px-4 py-2 text-sm disabled:opacity-50',
+                product.isFeatured
+                  ? 'border-primary bg-accent'
+                  : 'border-border hover:bg-accent',
+              )}
+            >
+              <Star className={cn('size-4', product.isFeatured && 'fill-current')} />
+              {product.isFeatured ? 'Em destaque' : 'Destacar'}
+            </button>
             <ProductCampaignDialog product={product} />
           </div>
         </section>

@@ -180,6 +180,7 @@ export const ROUTES = {
   cms: {
     pages: `${base}/cms/pages`,
     banners: `${base}/cms/banners`,
+    banner: (id: string) => `${base}/cms/banners/${id}`,
     menus: `${base}/cms/menus`,
     menu: (handle: string) => `${base}/cms/menus/${handle}`,
   },

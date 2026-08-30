@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Star } from 'lucide-react'
 import { useProducts } from '@/lib/products'
 import { formatBRL, formatDate, cn } from '@/lib/utils'
 
@@ -113,7 +114,15 @@ export default function ProductsPage() {
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{p.name}</p>
+                    <p className="flex items-center gap-1.5 font-medium">
+                      <span className="truncate">{p.name}</span>
+                      {p.isFeatured && (
+                        <Star
+                          aria-label="Em destaque na loja"
+                          className="size-3.5 shrink-0 fill-warning text-warning"
+                        />
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {p.variantCount} variaç{p.variantCount === 1 ? 'ão' : 'ões'} ·{' '}
                       {formatDate(p.updatedAt)}

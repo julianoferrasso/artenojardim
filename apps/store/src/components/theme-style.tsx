@@ -1,6 +1,6 @@
 import type { PublicTheme } from '@ecommerce/shared/contracts'
 import { THEME_RADIUS_REM } from '@ecommerce/shared/contracts'
-import { deriveThemeVars, deriveButtonVars } from '@ecommerce/shared/utils'
+import { deriveThemeVars, deriveButtonVars, deriveTertiaryVars } from '@ecommerce/shared/utils'
 
 /**
  * Sobrescreve os tokens do globals.css com o tema configurado no painel.
@@ -23,6 +23,7 @@ export const buildThemeVars = (theme: PublicTheme): Record<string, string> => ({
   '--radius': THEME_RADIUS_REM[theme.radius],
   ...deriveThemeVars(theme),
   ...deriveButtonVars(theme, theme.buttons),
+  ...deriveTertiaryVars(theme.tertiary),
 })
 
 export const ThemeStyle = ({ theme }: { theme: PublicTheme }) => {

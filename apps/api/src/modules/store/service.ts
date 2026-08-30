@@ -73,6 +73,7 @@ export const getAdminTheme = async (): Promise<AdminTheme> => {
     secondary: oklchToHex(theme.secondary),
     accent: oklchToHex(theme.accent),
     background: oklchToHex(theme.background),
+    tertiary: oklchToHex(theme.tertiary),
     radius: theme.radius,
     badgeStyle: theme.badgeStyle,
     buttons: {
@@ -112,6 +113,7 @@ export const updateTheme = async (
     secondary: hexToOklch(input.secondary),
     accent: hexToOklch(input.accent),
     background: hexToOklch(input.background),
+    tertiary: hexToOklch(input.tertiary),
     radius: input.radius,
     badgeStyle: input.badgeStyle,
     buttons: {
@@ -158,6 +160,7 @@ const flatten = (theme: StoreTheme): Record<string, unknown> => ({
   secondary: oklchToHex(theme.secondary),
   accent: oklchToHex(theme.accent),
   background: oklchToHex(theme.background),
+  tertiary: oklchToHex(theme.tertiary),
   radius: theme.radius,
   badgeStyle: theme.badgeStyle,
   // Serializado: o diff da auditoria compara valor a valor, e dois objetos

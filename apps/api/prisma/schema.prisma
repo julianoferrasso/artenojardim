@@ -122,6 +122,7 @@ model Store {
   orders                Order[]
   newsletterSubscribers NewsletterSubscriber[]
   emailCampaigns        EmailCampaign[]
+  banners               Banner[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -404,8 +405,13 @@ model Product {
   tags             String[]      @default([])
   seoTitle         String?
   seoDescription   String?
-  publishedAt      DateTime?
-  deletedAt        DateTime?
+
+  /// Aparece na seção "Destaques" da home. Escolha editorial do lojista, não
+  /// derivada de vendas ou data — por isso é flag, não query.
+  isFeatured Boolean @default(false)
+
+  publishedAt DateTime?
+  deletedAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -421,6 +427,7 @@ model Product {
 
   @@unique([storeId, slug])
   @@index([storeId, status])
+  @@index([storeId, isFeatured])
 }
 
 /// Contador de visitas por produto, agregado por DIA (rollup). Não guardamos cada
@@ -672,6 +679,33 @@ model Category {
   @@index([storeId, parentId])
 }
 
+/// Banner do carrossel da home. Gerenciável no admin; mínimo de propósito —
+/// sem agendamento e sem segmentação até um pedido real do lojista. Hard
+/// delete: banner não é documento histórico.
+model Banner {
+  id          String  @id @default(cuid())
+  storeId     String
+  title       String
+  subtitle    String?
+  buttonLabel String?
+  /// Caminho relativo ("/categorias/velas") ou URL. Sem ele o slide não tem CTA.
+  linkUrl     String?
+  imageId     String?
+
+  /// Ordem no carrossel. O front ordena por isto, não por data.
+  position Int     @default(0)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  /// SetNull como o logo: apagar o upload não derruba o slide — cai no placeholder.
+  image Upload? @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  @@index([storeId, position])
+}
+
 /// Contador do rate limit. Vive no BANCO, não em memória: com `pm2 cluster` de 4
 /// instâncias, um contador em memória por processo faz o limite real virar 4x o
 /// configurado — e quem faz brute force cai na instância que ainda tem folga.
@@ -711,6 +745,7 @@ model Upload {
   /// Upload que ainda ilustra um produto — a imagem quebrada apareceria na loja.
   categories    Category[]
   productImages ProductImage[]
+  banners       Banner[]
 
   @@index([storeId, createdAt])
 }

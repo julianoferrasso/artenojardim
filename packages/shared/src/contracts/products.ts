@@ -192,6 +192,8 @@ export const createProductSchema = z.object({
   images: z.array(productImageInputSchema).default([]),
   seoTitle: z.string().max(200).optional(),
   seoDescription: z.string().max(400).optional(),
+  /** Aparece na seção "Destaques" da home — escolha editorial do lojista. */
+  isFeatured: z.boolean().default(false),
   /**
    * Toda criação manda ao menos uma variante. Um produto sem opções manda uma
    * variante com `options: []` — que o service materializa como "Default Title".
@@ -220,6 +222,7 @@ export const productSchema = z.object({
   tags: z.array(z.string()),
   seoTitle: z.string().nullable(),
   seoDescription: z.string().nullable(),
+  isFeatured: z.boolean(),
   publishedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -242,6 +245,7 @@ export const productListItemSchema = z.object({
   thumbnailUrl: z.string().nullable(),
   priceRange: z.object({ min: z.number().int(), max: z.number().int() }),
   variantCount: z.number().int(),
+  isFeatured: z.boolean(),
   updatedAt: z.string(),
 })
 
@@ -255,6 +259,11 @@ export const productListQuerySchema = z.object({
   categoryId: z.string().optional(),
   q: z.string().max(120).optional(),
   sort: z.string().optional(),
+  /*
+   * Enum de string, NUNCA `z.coerce.boolean()`: query string chega como texto e
+   * coerce transformaria "false" em true (string não-vazia é truthy).
+   */
+  featured: z.enum(['true', 'false']).optional(),
 })
 
 export type ProductListQuery = z.infer<typeof productListQuerySchema>

@@ -167,6 +167,7 @@ export const createProduct = async (
         tags: input.tags,
         seoTitle: input.seoTitle ?? null,
         seoDescription: input.seoDescription ?? null,
+        isFeatured: input.isFeatured,
         publishedAt: input.status === 'ACTIVE' ? new Date() : null,
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         images: {
@@ -270,6 +271,9 @@ export const listProducts = async (
     ...(query.categoryId ? { categories: { some: { categoryId: query.categoryId } } } : {}),
     // unaccent + ILIKE simples: FTS entra na Fase 2 se o catálogo crescer.
     ...(query.q ? { name: { contains: query.q, mode: 'insensitive' } } : {}),
+    // A seção "Destaques" da home. Comparação com a STRING 'true': query param
+    // chega como texto (ver o comentário no contrato).
+    ...(query.featured === 'true' ? { isFeatured: true } : {}),
   }
 
   const [rows, total] = await Promise.all([
@@ -313,6 +317,7 @@ export const updateProduct = async (
       name: true,
       slug: true,
       status: true,
+      isFeatured: true,
       _count: { select: { images: true } },
       variants: {
         select: { isActive: true, price: true, weight: true, length: true, width: true, height: true },
@@ -350,6 +355,7 @@ export const updateProduct = async (
   if (input.tags !== undefined) data.tags = input.tags
   if (input.seoTitle !== undefined) data.seoTitle = input.seoTitle
   if (input.seoDescription !== undefined) data.seoDescription = input.seoDescription
+  if (input.isFeatured !== undefined) data.isFeatured = input.isFeatured
   if (input.status !== undefined) {
     data.status = input.status
     // Marca publishedAt na primeira vez que vira ACTIVE; não reescreve depois.
@@ -368,8 +374,8 @@ export const updateProduct = async (
   })
 
   const changes = diff(
-    { name: current.name, slug: current.slug, status: current.status },
-    { name: updated.name, slug: updated.slug, status: updated.status },
+    { name: current.name, slug: current.slug, status: current.status, isFeatured: current.isFeatured },
+    { name: updated.name, slug: updated.slug, status: updated.status, isFeatured: updated.isFeatured },
   )
   if (Object.keys(changes).length > 0) {
     await audit({

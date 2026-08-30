@@ -1,133 +1,53 @@
-import Link from 'next/link'
-import { HeartHandshake, ShieldCheck, Truck } from 'lucide-react'
-import { listProducts, getCategoryTree, getStore } from '@/lib/catalog'
-import { ProductCard } from '@/components/product-card'
-import { IconBadge } from '@/components/icon-badge'
-import { StoreLogo } from '@/components/store-logo'
-import { SectionHeading } from '@/components/section-heading'
-import { buttonVariants } from '@/components/ui/button'
-
-// Sem selo de prazo de troca: um prazo escrito na vitrine vira expectativa do
-// cliente e argumento numa reclamação. A página institucional de trocas continua
-// no rodapé — o que não anunciamos é a promessa, não a política.
-const BENEFITS = [
-  { icon: Truck, title: 'Enviamos para todo o Brasil', text: 'Frete calculado direto no produto.' },
-  { icon: HeartHandshake, title: 'Feito à mão, um a um', text: 'Cada peça é única, produzida com carinho.' },
-  // "Com criptografia" não diz nada a quem não é técnico. O medo real é "esta
-  // loja vai ficar com meu cartão?" — e a resposta é um fato: o cartão nunca
-  // passa pela nossa API, quem recebe é o Stripe.
-  {
-    icon: ShieldCheck,
-    title: 'Seus dados protegidos',
-    text: 'O pagamento acontece no ambiente do Stripe. Não guardamos seu cartão.',
-  },
-]
+import {
+  getBanners,
+  getCategoryTree,
+  getStore,
+  listFeaturedProducts,
+  listProducts,
+} from '@/lib/catalog'
+import { HeroCarousel } from '@/components/home/hero-carousel'
+import { BenefitsStrip } from '@/components/home/benefits-strip'
+import { CategoryShowcase } from '@/components/home/category-showcase'
+import { PromoBanner } from '@/components/home/promo-banner'
+import { TrustBar } from '@/components/home/trust-bar'
+import { FeaturedProducts } from '@/components/home/featured-products'
+import { InstagramStrip } from '@/components/home/instagram-strip'
 
 /**
- * Home. Server Component com ISR (o revalidate vem do catalog). É a vitrine: o
- * hero e, logo abaixo, as novidades. A navegação por categoria NÃO se repete
- * aqui — ela vive na barra do header, que está em todas as páginas. SEO
+ * Home. Server Component com ISR (o revalidate vem do catalog). É a vitrine no
+ * desenho do layout da cliente: hero (banners do admin) → benefícios →
+ * categorias → banner institucional → confiança → destaques → Instagram.
+ * A navegação por categoria NÃO se repete aqui — ela vive no header. SEO
  * renderizado no servidor — o Google vê o HTML completo, não um shell vazio.
  */
 export default async function HomePage() {
   // getStore() também roda no layout; o cache de request do Next deduplica.
-  const [{ data: products }, categories, store] = await Promise.all([
-    listProducts({}),
+  const [banners, { data: featured }, categories, store] = await Promise.all([
+    getBanners().catch(() => []),
+    listFeaturedProducts().catch(() => ({ data: [] })),
     getCategoryTree(),
     getStore().catch(() => null),
   ])
 
-  // Única categoria que a home usa: o CTA secundário do hero.
+  // Sem nenhum produto estrelado, a seção mostra os mais recentes — ela nunca
+  // some enquanto o lojista não marcar os destaques no admin.
+  const highlight =
+    featured.length > 0
+      ? featured
+      : await listProducts({}).then((r) => r.data.slice(0, 8)).catch(() => [])
+
   const firstCategory = categories.find((c) => c.isActive)
   const badgeStyle = store?.theme?.badgeStyle ?? 'filled'
 
   return (
     <main>
-      {/*
-        Hero: composição CSS ecoando os círculos do logo — não há fotografia
-        profissional de produto ainda; quando houver, ela entra aqui.
-      */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-secondary via-background to-background">
-        <div aria-hidden className="pointer-events-none absolute inset-0">
-          <span className="absolute -left-24 -top-24 size-72 rounded-full bg-primary/10" />
-          <span className="absolute -right-16 top-1/3 size-56 rounded-full bg-accent/70" />
-          <span className="absolute bottom-[-6rem] left-1/3 size-64 rounded-full bg-primary/5" />
-        </div>
-
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 pb-12 pt-10 sm:pb-14 sm:pt-12 md:grid-cols-[3fr_2fr] lg:pb-16 lg:pt-16">
-          <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-700 md:text-left">
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-primary-ink">
-              Feito à mão · com carinho
-            </p>
-            <h1 className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-              Velas artesanais e cosmética natural
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground md:mx-0">
-              Rituais de autocuidado e bem estar. Produtos feitos com alma.
-            </p>
-            <div className="mt-6 flex flex-wrap justify-center gap-3 md:justify-start">
-              <Link href="#novidades" className={buttonVariants({ size: 'lg' })}>
-                Ver novidades
-              </Link>
-              {firstCategory && (
-                <Link
-                  href={`/categorias/${firstCategory.slug}`}
-                  className={buttonVariants({ variant: 'secondary', emphasis: 'quiet', size: 'lg' })}
-                >
-                  {firstCategory.name}
-                </Link>
-              )}
-            </div>
-          </div>
-
-          <div className="hidden justify-center md:flex animate-in fade-in zoom-in-95 duration-1000">
-            <StoreLogo
-              src={store?.theme?.logoUrl ?? null}
-              alt=""
-              size={320}
-              priority
-              className="size-64 opacity-90 drop-shadow-sm lg:size-80"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section id="novidades" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-10">
-        <SectionHeading
-          title="Novidades"
-          subtitle="As últimas peças que saíram do ateliê."
-        />
-        {products.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">
-            Em breve, novos produtos.
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {products.slice(0, 8).map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 py-10">
-        <div className="grid gap-8 rounded-2xl bg-muted px-6 py-10 sm:grid-cols-2 lg:grid-cols-3">
-          {BENEFITS.map(({ icon: Icon, title, text }) => (
-            <div key={title} className="flex flex-col items-center gap-3 text-center">
-              {/* Sem hover: o selo não é clicável, e reagir ao mouse prometeria
-                  uma ação que não existe. */}
-              <IconBadge style={badgeStyle} className="size-12 shadow-soft">
-                <Icon className="size-5" strokeWidth={1.8} />
-              </IconBadge>
-              <div>
-                <h3 className="text-sm font-semibold">{title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{text}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
+      <HeroCarousel banners={banners} logoUrl={store?.theme?.logoUrl ?? null} />
+      <BenefitsStrip badgeStyle={badgeStyle} />
+      <CategoryShowcase categories={categories} />
+      <PromoBanner ctaHref={firstCategory ? `/categorias/${firstCategory.slug}` : '/'} />
+      <TrustBar />
+      <FeaturedProducts products={highlight} />
+      <InstagramStrip />
       {/* Sem bloco de newsletter aqui: o footer já tem um, em todas as páginas. */}
     </main>
   )

@@ -80,13 +80,14 @@ export const SiteHeader = ({
       {topLevel.length > 0 && (
         <nav aria-label="Categorias" className="hidden border-t border-border/60 md:block">
           <ul className="mx-auto flex max-w-6xl items-center justify-center gap-1 px-4">
-            {/* A home É a vitrine completa — não existe /produtos separado. */}
+            {/* "Início" e não "Loja": a home É a vitrine completa — não existe
+                /produtos separado. */}
             <li>
               <Link
                 href="/"
                 className="flex items-center px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
               >
-                Todos os produtos
+                Início
               </Link>
             </li>
 
@@ -124,6 +125,17 @@ export const SiteHeader = ({
                 </li>
               )
             })}
+
+            {/* Âncora no bloco Atendimento do footer, presente em toda página.
+                "Sobre" fica de fora até existir texto institucional da cliente. */}
+            <li>
+              <Link
+                href="#contato"
+                className="flex items-center px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Contato
+              </Link>
+            </li>
           </ul>
         </nav>
       )}

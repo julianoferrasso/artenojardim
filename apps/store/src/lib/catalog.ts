@@ -4,6 +4,7 @@ import type {
   Product,
   ProductListItem,
   CategoryTreeNode,
+  PublicBanner,
   PublicStore,
   PaginationMeta,
 } from '@ecommerce/shared/contracts'
@@ -50,3 +51,14 @@ export const listProducts = (params: {
 
 export const getProduct = (slug: string): Promise<Product> =>
   apiFetch<Product>(ROUTES.products.detail(slug), { revalidate: REVALIDATE, tags: [`product:${slug}`] })
+
+/** Banners do carrossel da home — a API já devolve só os ativos, ordenados. */
+export const getBanners = (): Promise<PublicBanner[]> =>
+  apiFetch<PublicBanner[]>(ROUTES.cms.banners, { revalidate: REVALIDATE, tags: ['banners'] })
+
+/** Os produtos que o lojista marcou como destaque (seção "Destaques" da home). */
+export const listFeaturedProducts = (): Promise<{ data: ProductListItem[]; meta: PaginationMeta }> =>
+  apiFetchPaginated<ProductListItem>(
+    `${ROUTES.products.list}?featured=true&perPage=12`,
+    { revalidate: REVALIDATE, tags: ['products'] },
+  )

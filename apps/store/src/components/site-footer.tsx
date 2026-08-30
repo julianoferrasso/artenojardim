@@ -1,29 +1,21 @@
 import Link from 'next/link'
-import { CreditCard, Mail, Phone, QrCode, ShieldCheck } from 'lucide-react'
+import { ChevronDown, Mail, Phone, ShieldCheck } from 'lucide-react'
 import type { PublicStore } from '@ecommerce/shared/contracts'
 import { NewsletterForm } from './newsletter-form'
-import { IconBadge } from './icon-badge'
 import { StoreLogo } from './store-logo'
-
-// Ícones de marca saíram do lucide (deprecados) — SVG inline com o mesmo traço.
-const InstagramIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
-    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
-  </svg>
-)
-
-const FacebookIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
-  </svg>
-)
+import { PaymentMethods } from './payment-icons'
+import {
+  FacebookIcon,
+  InstagramIcon,
+  WhatsAppIcon,
+  FACEBOOK_PROFILE,
+  INSTAGRAM_PROFILE,
+} from './brand-icons'
 
 // Fase 4 (temas/settings): estes links passam a vir da API junto com o themeJson.
 const SOCIAL_LINKS = [
-  { label: 'Instagram', href: 'https://instagram.com/arte_no_jardim', icon: InstagramIcon },
-  { label: 'Facebook', href: 'https://facebook.com/artenojardim', icon: FacebookIcon },
+  { label: 'Instagram', href: INSTAGRAM_PROFILE.url, icon: InstagramIcon },
+  { label: 'Facebook', href: FACEBOOK_PROFILE.url, icon: FacebookIcon },
 ]
 
 const INSTITUTIONAL_LINKS = [
@@ -31,20 +23,58 @@ const INSTITUTIONAL_LINKS = [
   { label: 'Favoritos', href: '/favoritos' },
   { label: 'Minha conta', href: '/conta' },
   { label: 'Meus pedidos', href: '/conta/pedidos' },
-]
-
-// Páginas institucionais ainda não existem (CMS é fase futura); os links já
-// ocupam o lugar definitivo e passam a apontar para as páginas quando nascerem.
-const HELP_LINKS = [
-  { label: 'Como comprar', href: '/' },
-  { label: 'Entregas e frete', href: '/' },
+  // Páginas institucionais ainda não existem (CMS é fase futura); os links já
+  // ocupam o lugar definitivo e passam a apontar para elas quando nascerem.
   { label: 'Trocas e devoluções', href: '/' },
   { label: 'Política de privacidade', href: '/' },
 ]
 
 /**
- * Rodapé da loja. Server Component: tudo aqui é estático por request — a única
- * ilha client é o formulário de newsletter.
+ * Uma coluna do rodapé: título fixo no desktop, acordeão no mobile.
+ *
+ * Renderização DUPLA do mesmo conteúdo de propósito (details para mobile, div
+ * para desktop): CSS puro não força um <details> fechado a exibir o conteúdo no
+ * desktop de forma confiável, e duplicar uma lista de links custa nada — zero
+ * JS novo (o cursor do summary já vem do globals.css).
+ */
+const FooterSection = ({
+  title,
+  id,
+  children,
+}: {
+  title: string
+  id?: string
+  children: React.ReactNode
+}) => (
+  <div id={id} className="scroll-mt-24">
+    <details className="group border-b border-border py-3 md:hidden">
+      <summary className="flex list-none items-center justify-between text-sm font-semibold uppercase tracking-wider [&::-webkit-details-marker]:hidden">
+        {title}
+        <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
+      </summary>
+      <div className="pt-3">{children}</div>
+    </details>
+
+    <div className="hidden md:block">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">{title}</h3>
+      <div className="mt-4">{children}</div>
+    </div>
+  </div>
+)
+
+const FooterLink = ({ label, href }: { label: string; href: string }) => (
+  <Link
+    href={href}
+    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+  >
+    {label}
+  </Link>
+)
+
+/**
+ * Rodapé da loja no desenho do layout da cliente: newsletter + colunas
+ * (acordeões no mobile) + formas de pagamento + faixa inferior na cor das
+ * faixas (--tertiary). Server Component: a única ilha client é a newsletter.
  */
 export const SiteFooter = ({
   store,
@@ -54,94 +84,38 @@ export const SiteFooter = ({
   logoUrl: string | null
 }) => {
   const storeName = store?.name ?? 'Arte no Jardim'
-  const badgeStyle = store?.theme?.badgeStyle ?? 'filled'
   const year = new Date().getFullYear()
+  const whatsappHref = store?.phone ? `https://wa.me/55${store.phone.replace(/\D/g, '')}` : null
 
   return (
-    <footer className="border-t border-border bg-secondary/40">
-      {/* Newsletter */}
-      <div className="border-b border-border">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-10 md:flex-row md:justify-between">
-          <div className="text-center md:text-left">
-            <h2 className="font-display text-2xl font-semibold tracking-tight">
-              Receba novidades com carinho
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Lançamentos, promoções e inspirações para a sua casa — sem spam.
-            </p>
-          </div>
-          <NewsletterForm className="max-w-md" />
-        </div>
-      </div>
-
-      {/* Colunas */}
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <StoreLogo
-              src={logoUrl}
-              alt={`Logo ${storeName}`}
-              size={56}
-              className="size-14 rounded-full"
-            />
-            <div>
-              <p className="font-display text-xl font-semibold tracking-tight">{storeName}</p>
-              <p className="text-sm text-muted-foreground">feito à mão</p>
-            </div>
-          </div>
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            Velas e peças artesanais feitas uma a uma, para deixar a sua casa mais acolhedora.
+    <footer className="border-t border-border bg-background">
+      <div className="mx-auto grid max-w-6xl gap-x-10 gap-y-8 px-4 py-10 md:grid-cols-[1.3fr_1fr_1fr] md:py-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        {/* Newsletter — sempre aberta, até no mobile: é a coluna que converte. */}
+        <div className="md:pr-6 lg:col-span-1">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
+            Receba novidades e inspirações
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Cadastre-se e fique por dentro das novidades e lançamentos exclusivos.
           </p>
-          <div className="mt-4 flex gap-2">
-            {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
-              <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}>
-                <IconBadge style={badgeStyle} interactive className="size-9">
-                  <Icon className="size-4" />
-                </IconBadge>
-              </a>
-            ))}
-          </div>
+          <NewsletterForm className="mt-4 max-w-md" />
         </div>
 
-        <nav aria-label="Institucional">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-            Institucional
-          </h3>
-          <ul className="mt-4 flex flex-col gap-2.5">
-            {INSTITUTIONAL_LINKS.map(({ label, href }) => (
-              <li key={label}>
-                <Link
-                  href={href}
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        <FooterSection title="Atendimento" id="contato">
+          <ul className="flex flex-col gap-2.5">
+            {whatsappHref && (
+              <li>
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {label}
-                </Link>
+                  <WhatsAppIcon className="size-4 shrink-0" />
+                  WhatsApp
+                </a>
               </li>
-            ))}
-          </ul>
-        </nav>
-
-        <nav aria-label="Ajuda">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">Ajuda</h3>
-          <ul className="mt-4 flex flex-col gap-2.5">
-            {HELP_LINKS.map(({ label, href }) => (
-              <li key={label}>
-                <Link
-                  href={href}
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-            Atendimento
-          </h3>
-          <ul className="mt-4 flex flex-col gap-2.5">
+            )}
             {store?.email && (
               <li>
                 <a
@@ -165,38 +139,52 @@ export const SiteFooter = ({
               </li>
             )}
           </ul>
+        </FooterSection>
 
-          <h3 className="mt-6 text-sm font-semibold uppercase tracking-wider text-foreground">
-            Pagamento
-          </h3>
-          <ul className="mt-3 flex flex-col gap-2">
-            <li className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CreditCard className="size-4 shrink-0" />
-              Cartão de crédito
-            </li>
-            <li className="flex items-center gap-2 text-sm text-muted-foreground">
-              <QrCode className="size-4 shrink-0" />
-              Pix
-            </li>
+        <FooterSection title="Institucional">
+          <ul className="flex flex-col gap-2.5">
+            {INSTITUTIONAL_LINKS.map((link) => (
+              <li key={link.label}>
+                <FooterLink {...link} />
+              </li>
+            ))}
           </ul>
-        </div>
+        </FooterSection>
+
+        <FooterSection title="Formas de pagamento">
+          <PaymentMethods />
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <ShieldCheck className="size-4 shrink-0 text-success" aria-hidden />
+            Compra segura · pagamento processado pela Stripe
+          </p>
+        </FooterSection>
       </div>
 
-      {/* Selos + copyright */}
-      <div className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-center md:flex-row md:text-left">
-          <p className="text-xs text-muted-foreground">
+      {/* Faixa inferior — a cor das faixas (--tertiary), como a barra de aviso. */}
+      <div className="bg-tertiary text-tertiary-foreground">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-4 text-center md:flex-row md:text-left">
+          <div className="flex items-center gap-2.5">
+            <StoreLogo src={logoUrl} alt="" size={32} className="size-8 rounded-full bg-card/90 p-0.5" />
+            <span className="font-display text-lg font-semibold tracking-tight">{storeName}</span>
+          </div>
+
+          <p className="text-xs opacity-90">
             © {year} {storeName} · feito à mão · todos os direitos reservados
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ShieldCheck className="size-4 text-success" />
-              Compra segura · SSL
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <ShieldCheck className="size-4 text-success" />
-              Pagamento processado pela Stripe
-            </span>
+
+          <div className="flex items-center gap-3">
+            {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+                className="transition-opacity hover:opacity-75"
+              >
+                <Icon className="size-4.5" />
+              </a>
+            ))}
           </div>
         </div>
       </div>

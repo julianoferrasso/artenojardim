@@ -47,6 +47,8 @@ export default function NewProductPage() {
       tags: [],
       seoTitle: seoTitle || undefined,
       seoDescription: seoDescription || undefined,
+      // Produto nasce fora dos Destaques; a estrela mora na tela de edição.
+      isFeatured: false,
     }
 
     create.mutate(input, {

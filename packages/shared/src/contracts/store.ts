@@ -141,6 +141,15 @@ export const storeThemeSchema = z.object({
   secondary: oklchSchema,
   accent: oklchSchema,
   background: oklchSchema,
+  /*
+   * A cor das FAIXAS (barra de anúncio no topo e rodapé inferior) — o quinto
+   * slot que o redesign trouxe: o verde-sálvia do layout não cabe em nenhuma
+   * das quatro cores acima sem contaminar botões ou fundos.
+   *
+   * `.default()` obrigatório em campo novo: o tema vive como JSON em Setting e
+   * os já gravados não têm esta chave (ver `badgeStyle` abaixo).
+   */
+  tertiary: oklchSchema.default({ l: 0.54, c: 0.045, h: 135 }),
   radius: themeRadiusSchema,
   /*
    * `.default()` no OBJETO inteiro, não campo a campo: os temas já gravados não
@@ -160,15 +169,23 @@ export const storeThemeSchema = z.object({
 export type StoreTheme = z.infer<typeof storeThemeSchema>
 
 /**
- * Exatamente os valores que hoje estão fixos no globals.css da loja. Enquanto
- * ninguém configurar nada, a loja renderiza idêntica ao que já está no ar —
- * é o que torna esta feature segura de subir.
+ * Exatamente os valores que estão fixos no globals.css da loja — as duas fontes
+ * andam JUNTAS: mudou aqui, mude lá. Enquanto ninguém configurar nada, a loja
+ * renderiza idêntica ao default.
+ *
+ * Paleta do redesign (mockup da cliente): creme, rosé, blush e sálvia. O rosé e
+ * o sálvia do mockup (#C08A8A / #98A084) reprovam AA com texto branco — os
+ * valores abaixo são um degrau mais escuros para `contrastForeground` derivar
+ * texto claro, como no layout. Não clareie de volta.
  */
 export const DEFAULT_STORE_THEME: StoreTheme = {
-  primary: { l: 0.56, c: 0.11, h: 30 },
-  secondary: { l: 0.945, c: 0.025, h: 35 },
-  accent: { l: 0.93, c: 0.032, h: 55 },
-  background: { l: 0.985, c: 0.008, h: 75 },
+  primary: { l: 0.55, c: 0.09, h: 20 },
+  secondary: { l: 0.93, c: 0.022, h: 30 },
+  accent: { l: 0.9, c: 0.035, h: 25 },
+  background: { l: 0.965, c: 0.012, h: 90 },
+  // 0.54 e não o ~0.70 do mockup: é o L mais claro em que o texto BRANCO da
+  // faixa ainda atinge 4.5:1 (em 0.56 a derivação já vira texto preto).
+  tertiary: { l: 0.54, c: 0.045, h: 135 },
   // 'medium' = 0.75rem = o valor que já estava no globals.css. NÃO troque para
   // 'large' achando que é "o mais bonito": o default existe para não mudar nada.
   radius: 'medium',
@@ -204,6 +221,7 @@ export const updateStoreThemeSchema = z.object({
   secondary: hexColorSchema,
   accent: hexColorSchema,
   background: hexColorSchema,
+  tertiary: hexColorSchema,
   radius: themeRadiusSchema,
   /*
    * Sem `.default()` aqui, ao contrário do storeThemeSchema: o formulário SEMPRE

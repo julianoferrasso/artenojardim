@@ -22,6 +22,7 @@ import {
 import {
   contrastRatio,
   deriveButtonVars,
+  deriveTertiaryVars,
   deriveThemeVars,
   hexToOklch,
   isDeadZone,
@@ -42,9 +43,10 @@ import { cn } from '@/lib/utils'
 
 const COLOR_FIELDS = [
   { name: 'primary', label: 'Cor principal', hint: 'Botões, links e destaques.' },
-  { name: 'secondary', label: 'Cor secundária', hint: 'Faixas e áreas de apoio.' },
-  { name: 'accent', label: 'Cor de realce', hint: 'Hover de menu e detalhes.' },
+  { name: 'secondary', label: 'Cor secundária', hint: 'Fundo do banner principal e áreas de apoio.' },
+  { name: 'accent', label: 'Cor de realce', hint: 'Faixas promocionais e detalhes.' },
   { name: 'background', label: 'Fundo', hint: 'O fundo das páginas.' },
+  { name: 'tertiary', label: 'Cor das faixas', hint: 'Barra de aviso no topo e rodapé da loja.' },
 ] as const
 
 const RADIUS_LABEL: Record<ThemeRadius, string> = {
@@ -284,6 +286,7 @@ const previewVars = (values: UpdateStoreThemeInput): CSSProperties => {
       primary: toOklch(values.buttons.primary),
       secondary: toOklch(values.buttons.secondary),
     }),
+    ...deriveTertiaryVars(hexToOklch(values.tertiary)),
   } as CSSProperties
 }
 
@@ -336,6 +339,7 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
       secondary: initial.secondary,
       accent: initial.accent,
       background: initial.background,
+      tertiary: initial.tertiary,
       radius: initial.radius,
       badgeStyle: initial.badgeStyle,
       buttons: initial.buttons,
@@ -553,6 +557,14 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
           style={previewVars(values)}
           className="overflow-hidden rounded-lg border border-border bg-background text-foreground"
         >
+          {/* A faixa (--tertiary) via var inline: o Tailwind do ADMIN não mapeia
+              o token da loja, e a prévia precisa mostrar a cor de qualquer forma. */}
+          <div
+            style={{ background: 'var(--tertiary)', color: 'var(--tertiary-foreground)' }}
+            className="px-4 py-1.5 text-center text-xs"
+          >
+            Embalagens para presente com carinho
+          </div>
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element

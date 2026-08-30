@@ -25,6 +25,7 @@ export const PRODUCT_SELECT = {
   tags: true,
   seoTitle: true,
   seoDescription: true,
+  isFeatured: true,
   publishedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -121,6 +122,7 @@ export const toProductDTO = (row: ProductRow): Product => {
     tags: row.tags,
     seoTitle: row.seoTitle,
     seoDescription: row.seoDescription,
+    isFeatured: row.isFeatured,
     publishedAt: row.publishedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -138,6 +140,7 @@ export const LIST_SELECT = {
   name: true,
   slug: true,
   status: true,
+  isFeatured: true,
   updatedAt: true,
   // Capa do catálogo: a foto do PRODUTO (variantId null) vem primeiro. Sem o
   // desempate por variantId, a capa poderia virar a foto de uma variação
@@ -168,6 +171,7 @@ export const toListItem = (row: ListRow): ProductListItem => {
       max: prices.length ? Math.max(...prices) : 0,
     },
     variantCount: row.variants.length,
+    isFeatured: row.isFeatured,
     updatedAt: row.updatedAt.toISOString(),
   }
 }

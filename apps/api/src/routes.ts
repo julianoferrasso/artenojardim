@@ -21,6 +21,7 @@ import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
 import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
 import { newsletterRoutes } from './modules/newsletter/routes.js'
+import { bannerRoutes } from './modules/banners/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -64,5 +65,7 @@ apiRoutes.use('/product-views', productViewRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
 apiRoutes.use('/store', storeRoutes)
 apiRoutes.use('/newsletter', newsletterRoutes)
+// Banners do carrossel da home. Leitura pública; escrita de staff.
+apiRoutes.use('/cms/banners', bannerRoutes)
 
 export const API_PREFIX = `/api/${API_VERSION}`
