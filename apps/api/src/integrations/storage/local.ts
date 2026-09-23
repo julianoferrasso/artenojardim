@@ -77,6 +77,8 @@ export const createLocalStorage = (): StorageProvider => ({
     }
   },
 
+  putObject: async (key: string, body: Buffer): Promise<void> => writeLocalFile(key, body),
+
   getPublicUrl: (key: string): string => `${env.API_URL}/uploads/${key}`,
 
   delete: async (key: string): Promise<void> => {

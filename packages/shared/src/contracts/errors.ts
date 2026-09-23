@@ -80,6 +80,9 @@ export const ERROR_CODES = {
 
   // Integrações
   EXTERNAL_SERVICE_ERROR: 'EXTERNAL_SERVICE_ERROR',
+  /// O Instagram não entregou a imagem do post (privado, removido, bloqueio de
+  /// IP ou HTML mudou). O admin reage oferecendo o envio manual da imagem.
+  INSTAGRAM_POST_UNAVAILABLE: 'INSTAGRAM_POST_UNAVAILABLE',
 } as const
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]

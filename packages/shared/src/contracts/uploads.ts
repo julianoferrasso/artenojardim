@@ -13,7 +13,14 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
  * `branding` guarda o logo da loja. SVG continua fora de ALLOWED_IMAGE_TYPES de
  * propósito: SVG é XML executável, e um servido do nosso domínio é XSS armazenado.
  */
-export const UPLOAD_FOLDERS = ['products', 'categories', 'banners', 'pages', 'branding'] as const
+export const UPLOAD_FOLDERS = [
+  'products',
+  'categories',
+  'banners',
+  'pages',
+  'branding',
+  'instagram',
+] as const
 export const uploadFolderSchema = z.enum(UPLOAD_FOLDERS)
 export type UploadFolder = z.infer<typeof uploadFolderSchema>
 

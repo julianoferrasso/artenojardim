@@ -300,7 +300,130 @@ roda quando o driver é `local` (desenvolvimento).
 > `pnpm build` nos apps Next — editar o `.env` e dar `pm2 restart` **não** surte efeito.
 > É o erro mais provável do próximo deploy que mexer nisso.
 
+## Incidente: 9 dias fora do ar (20–29/08/2026)
+
+A loja e o admin ficaram inacessíveis de **20/08 06:05 até 29/08 20:41**. Os apps estavam
+todos de pé o tempo inteiro (store 3010 e admin 3011 devolvendo 200 no `localhost`). Quem
+tinha morrido era o **Nginx**, e nada em 80/443.
+
+A causa foi **corrupção silenciosa de arquivos do sistema base em disco**. Oito arquivos
+ficaram com o cabeçalho ELF intacto mas o miolo podre — o `file` não reclamava, e o crash
+acontecia dentro do próprio `ld.so` (`segfault at 8 in ld-linux-x86-64.so.2`). Entre eles,
+os dois que importam:
+
+- **`libpcre.so.3.13.3`** — o `/usr/sbin/nginx` linka essa lib, então **toda** invocação do
+  nginx segfaltava, até `nginx -v`. O binário do nginx estava íntegro.
+- **`/bin/dash`**, que é o `/bin/sh`.
+
+A queda em si: o `unattended-upgrade` atualizou o nginx (`14.18` → `14.20`), o `postinst`
+rodou `nginx -t`, aquilo segfaltou, o dpkg abortou — e o nginx parou sem nunca mais subir.
+Caíram junto os outros dois sites da VPS.
+
+### O diagnóstico que encurta o caminho
+
+**`dpkg -V`** confere o md5 de todo arquivo empacotado do sistema. Saída vazia = tudo íntegro;
+linhas com `??5??????` são arquivos que divergem do pacote. Foi o comando que fechou o caso
+em um passo, depois de o `nginx -v`, o `grep` e o `ldconfig -p` estarem todos segfaltando.
+Quando **binários sem relação entre si** começam a segfaltar, não procure o bug em cada um:
+procure a **biblioteca compartilhada** entre eles (`ldd`), ou rode `dpkg -V` direto.
+
+### A armadilha do reparo
+
+> ⚠️ **Com o `/bin/sh` quebrado, `apt-get install --reinstall` não conserta nada** — todo
+> `postinst` do dpkg roda sob `/bin/sh`. Pior: naquele estado o **próprio `apt-get`
+> segfaltava**, então nem `apt-get download` funcionava.
+
+O caminho que funciona, sem depender de shell nenhum:
+
+1. Resolver a URL e o SHA256 dos `.deb` lendo `/var/lib/apt/lists/*_Packages` (com `python3`
+   ou `awk` — o `grep` estava morto), baixar com `curl`, conferir com `sha256sum -c`.
+2. Extrair com `dpkg-deb -x` (usa tar, não shell).
+3. Trocar cada arquivo com **rename atômico** (`os.replace`), **nunca `cp` por cima**: `cp`
+   trunca o inode e derruba todo processo que tenha a `.so` mapeada. Bibliotecas primeiro,
+   depois o `dash`. Rodar `ldconfig` no fim.
+4. Só então `dpkg --configure -a` e `apt-get install --reinstall` para o dpkg voltar a
+   concordar com o disco.
+
+Cuidado ao montar a lista de alvos: `/bin` e `/lib` são symlinks para `/usr/bin` e `/usr/lib`
+(merged-`/usr`), e o pacote traz **o symlink e o arquivo versionado**. Troque só o arquivo
+real (`libpcre.so.3.13.3`), nunca o symlink (`libpcre.so.3`).
+
+Um `linux-image` também tinha ficado meio-configurado (`iF`) desde 21/08 — ou seja,
+**initramfs e grub estavam desatualizados e a VPS não podia reiniciar em segurança**.
+O `dpkg --configure -a` resolveu junto. Vale sempre conferir o `dpkg --audit` antes de
+qualquer reboot.
+
+### A vítima silenciosa: o backup parou junto
+
+**O cron executa tudo via `/bin/sh`.** Com o dash quebrado, morreu todo job agendado — e o
+mais caro foi o `/etc/cron.d/artenojardim-backup`: o último dump é de **21/08**, oito dias
+sem backup, e ninguém soube. O log em `/var/log/artenojardim-backup.log` termina no dia 21
+sem nenhuma linha de erro, porque o job nem chegou a começar.
+
+Lição: **`/bin/sh` quebrado não derruba só o que você vê**. Depois de consertar, rode os jobs
+de cron na mão para conferir que voltaram, em vez de esperar o próximo horário.
+
+### Patches aplicados no mesmo dia (29/08/2026)
+
+Com o dpkg destravado, os 26 pacotes represados desde 20/08 foram aplicados. Uma distinção
+que vale guardar — **o `unattended-upgrades` só cobre origens Ubuntu**:
+
+```
+"${distro_id}:${distro_codename}";  "${distro_id}:${distro_codename}-security";
+"${distro_id}ESMApps:...";          "${distro_id}ESM:...";
+```
+
+Ou seja: **pgdg (Postgres) e nodesource (Node) nunca são atualizados sozinhos** — e
+`jammy-updates` também não está na lista. Não conte com o automático para eles.
+
+Resultado: Postgres 16.14 → **16.15**, Node 24.18 → **24.19**, mais os patches de segurança.
+Antes de tocar no Postgres, dump `-Fc` dos **dois** bancos do cluster (o restart afeta o
+`rag_sefaz` do outro projeto também) em `/var/backups/prepatch/`, cada um verificado com
+`pg_restore --list`.
+
+> ⚠️ **`NEEDRESTART_MODE=a` reinicia o `pm2-root.service`.** Setar isso para o `needrestart`
+> não travar num prompt custou ~1 minuto de 502 em **todos** os apps da VPS, os do outro
+> projeto inclusive. Se a queda importar, use `NEEDRESTART_MODE=l` (só lista) e reinicie o
+> que você escolher, na hora que você escolher.
+
+O reboot para o kernel `5.15.0-190` foi feito no mesmo dia. **Tudo voltou sozinho**, e vale
+saber disso antes do próximo:
+
+- `systemctl reboot` (ou `reboot`, ou `shutdown -r now` — no systemd é a mesma coisa). Para o
+  comando retornar antes de a conexão cair:
+  `systemd-run --on-active=3 systemctl reboot`.
+- Todos os serviços estão `enabled`: nginx, postgresql, rabbitmq-server, ssh, cron.
+- O PM2 sobe pelo `pm2-root.service`, com `ExecStart=pm2 resurrect`, que lê
+  `/root/.pm2/dump.pm2`. **Confira o dump antes de reiniciar** — é ele, e não o estado atual,
+  que define o que volta. O `insightia` está gravado como `stopped` e continua parado, que é
+  o correto. Não rode `pm2 save` sem querer: ele sobrescreve o dump com o estado do momento.
+- O `artenojardim-worker` reinicia **uma vez** no boot (↺ 1) e estabiliza: ele nasce antes do
+  RabbitMQ estar pronto e se recupera sozinho. Não é defeito.
+- A VPS levou menos de 30 segundos para aceitar SSH de novo.
+
+Checagem antes de qualquer reboot: `dpkg --audit` vazio, o `initrd.img` do kernel novo
+existindo em `/boot`, e `GRUB_DEFAULT=0` com a primeira entrada do menu apontando para ele.
+
+### O que ficou de proteção
+
+- `/etc/systemd/system/nginx.service.d/restart.conf` com `Restart=on-failure` e
+  `RestartSec=10s`. Não cobre falha de config (o `-t` do `ExecStartPre` aborta antes), mas
+  cobre crash em runtime e OOM.
+- Backups dos arquivos corrompidos e os `.deb` originais em `/root/repair/`.
+
+O disco foi lido inteiro depois (`dd if=/dev/vda1 of=/dev/null`, 43 GB a 1,2 GB/s) sem um
+único erro de I/O, e o filesystem estava `clean`. Nada aponta para hardware — foi evento
+pontual, provavelmente do lado do host.
+
+**A lição real não é técnica.** Nove dias fora do ar porque ninguém percebeu. Falta um
+monitor externo batendo em `https://artenojardim.com.br/` e em
+`https://api.artenojardim.com.br/api/v1/health` — é o item que teria transformado nove dias
+em nove minutos.
+
 ## Pendências
+
+**Monitor externo de uptime.** Ver o incidente de 20–29/08 acima. Enquanto não existir,
+a loja pode cair de novo e só descobrirmos por acaso.
 
 **A senha do banco é fraca.** `@rteNoJardim!` é o nome da marca com leetspeak — cai em
 ataque de dicionário. Enquanto a 5432 estava aberta isso era urgente; com ela fechada, o

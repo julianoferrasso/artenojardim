@@ -11,6 +11,11 @@
  *
  * Com getUploadUrl, o browser faz PUT direto e o arquivo NUNCA toca a API.
  *
+ * `putObject` existe para o outro caso: arquivo que o PRÓPRIO servidor busca
+ * (a imagem de um post do Instagram). Aí não há browser para fazer o PUT, e o
+ * tamanho já foi limitado a MAX_UPLOAD_BYTES por quem baixou. Arquivo que vem
+ * do cliente continua indo pela URL assinada.
+ *
  * ── Por que a interface se justifica ─────────────────────────────────────────
  * Não é pelo swap futuro — é porque `local.ts` é a implementação de
  * DESENVOLVIMENTO: clone o repo, `pnpm dev`, e suba sem credencial de nuvem.
@@ -33,6 +38,9 @@ export type StorageProvider = {
   readonly id: 'local' | 'r2' | 's3'
 
   getUploadUrl: (key: string, mimeType: string) => Promise<UploadTarget>
+
+  /** Gravação server-side. Ver o cabeçalho: nunca para arquivo vindo do cliente. */
+  putObject: (key: string, body: Buffer, mimeType: string) => Promise<void>
 
   /** Derivada, nunca persistida. É o que mantém o dado independente do provedor. */
   getPublicUrl: (key: string) => string

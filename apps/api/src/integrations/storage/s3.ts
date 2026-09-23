@@ -82,6 +82,16 @@ export const createS3Storage = (): StorageProvider => {
       }
     },
 
+    putObject: async (key: string, body: Buffer, mimeType: string): Promise<void> => {
+      try {
+        await s3.send(
+          new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: mimeType }),
+        )
+      } catch (err) {
+        throw externalServiceError('S3', err)
+      }
+    },
+
     getPublicUrl: (key: string): string => `${publicUrl}/${key}`,
 
     delete: async (key: string): Promise<void> => {

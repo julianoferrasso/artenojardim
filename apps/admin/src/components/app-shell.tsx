@@ -10,6 +10,7 @@ import {
   Boxes,
   Images,
   GalleryHorizontalEnd,
+  Camera,
   Mail,
   Palette,
   UserRound,
@@ -38,6 +39,8 @@ const NAV: NavItem[] = [
   { href: '/uploads', label: 'Biblioteca de mídia', icon: Images },
   // Conteúdo da vitrine, não identidade visual: staff comum edita (Aparência não).
   { href: '/banners', label: 'Banners', icon: GalleryHorizontalEnd },
+  // lucide 1.x não traz ícones de marca — a câmera é o "Instagram" do menu.
+  { href: '/instagram', label: 'Instagram', icon: Camera },
   // O disparo mora na tela do produto; aqui fica só o histórico do que saiu.
   { href: '/campanhas', label: 'Campanhas', icon: Mail },
   // Mexe na cara da loja inteira: mesmo piso de cargo da gestão de usuários.

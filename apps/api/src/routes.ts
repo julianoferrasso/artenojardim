@@ -22,6 +22,7 @@ import { dashboardRoutes } from './modules/dashboard/routes.js'
 import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
 import { newsletterRoutes } from './modules/newsletter/routes.js'
 import { bannerRoutes } from './modules/banners/routes.js'
+import { instagramPostRoutes } from './modules/instagram/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -67,5 +68,7 @@ apiRoutes.use('/store', storeRoutes)
 apiRoutes.use('/newsletter', newsletterRoutes)
 // Banners do carrossel da home. Leitura pública; escrita de staff.
 apiRoutes.use('/cms/banners', bannerRoutes)
+// Posts da seção "No Instagram" da home. Mesmo desenho de banners.
+apiRoutes.use('/cms/instagram-posts', instagramPostRoutes)
 
 export const API_PREFIX = `/api/${API_VERSION}`

@@ -123,6 +123,7 @@ model Store {
   newsletterSubscribers NewsletterSubscriber[]
   emailCampaigns        EmailCampaign[]
   banners               Banner[]
+  instagramPosts        InstagramPost[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -706,6 +707,32 @@ model Banner {
   @@index([storeId, position])
 }
 
+/// Post do Instagram na seção "No Instagram" da home. A imagem é baixada do post
+/// e re-hospedada como Upload (a URL da CDN do Instagram expira). Hard delete.
+model InstagramPost {
+  id        String  @id @default(cuid())
+  storeId   String
+  /// O código do post (instagram.com/p/{shortcode}/). Único por loja.
+  shortcode String
+  permalink String
+  /// Legenda/título lida do post; vira o alt da imagem na loja.
+  caption   String?
+  imageId   String
+
+  /// Ordem na grade. O admin reordena arrastando; a posição é o índice.
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  /// Cascade: post sem foto não tem o que exibir — apagar a mídia derruba o post.
+  image Upload @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, shortcode])
+  @@index([storeId, position])
+}
+
 /// Contador do rate limit. Vive no BANCO, não em memória: com `pm2 cluster` de 4
 /// instâncias, um contador em memória por processo faz o limite real virar 4x o
 /// configurado — e quem faz brute force cai na instância que ainda tem folga.
@@ -743,9 +770,10 @@ model Upload {
 
   /// Lados inversos. onDelete: Restrict no ProductImage.upload impede apagar um
   /// Upload que ainda ilustra um produto — a imagem quebrada apareceria na loja.
-  categories    Category[]
-  productImages ProductImage[]
-  banners       Banner[]
+  categories     Category[]
+  productImages  ProductImage[]
+  banners        Banner[]
+  instagramPosts InstagramPost[]
 
   @@index([storeId, createdAt])
 }

@@ -1,6 +1,7 @@
 import {
   getBanners,
   getCategoryTree,
+  getInstagramPosts,
   getStore,
   listFeaturedProducts,
   listProducts,
@@ -22,11 +23,12 @@ import { InstagramStrip } from '@/components/home/instagram-strip'
  */
 export default async function HomePage() {
   // getStore() também roda no layout; o cache de request do Next deduplica.
-  const [banners, { data: featured }, categories, store] = await Promise.all([
+  const [banners, { data: featured }, categories, store, instagramPosts] = await Promise.all([
     getBanners().catch(() => []),
     listFeaturedProducts().catch(() => ({ data: [] })),
     getCategoryTree(),
     getStore().catch(() => null),
+    getInstagramPosts().catch(() => []),
   ])
 
   // Sem nenhum produto estrelado, a seção mostra os mais recentes — ela nunca
@@ -47,7 +49,7 @@ export default async function HomePage() {
       <PromoBanner ctaHref={firstCategory ? `/categorias/${firstCategory.slug}` : '/'} />
       <TrustBar />
       <FeaturedProducts products={highlight} />
-      <InstagramStrip />
+      <InstagramStrip posts={instagramPosts} />
       {/* Sem bloco de newsletter aqui: o footer já tem um, em todas as páginas. */}
     </main>
   )

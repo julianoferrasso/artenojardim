@@ -57,6 +57,16 @@ export const createR2Storage = (): StorageProvider => {
       }
     },
 
+    putObject: async (key: string, body: Buffer, mimeType: string): Promise<void> => {
+      try {
+        await s3.send(
+          new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: mimeType }),
+        )
+      } catch (err) {
+        throw externalServiceError('R2', err)
+      }
+    },
+
     getPublicUrl: (key: string): string => `${publicUrl}/${key}`,
 
     delete: async (key: string): Promise<void> => {
