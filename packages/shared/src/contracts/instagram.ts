@@ -92,8 +92,12 @@ export const updateInstagramPostSchema = z
   .object({
     isActive: z.boolean().optional(),
     displayMode: instagramDisplayModeSchema.optional(),
+    captioned: z.boolean().optional(),
   })
-  .refine((v) => v.isActive !== undefined || v.displayMode !== undefined, 'Nada para alterar')
+  .refine(
+    (v) => v.isActive !== undefined || v.displayMode !== undefined || v.captioned !== undefined,
+    'Nada para alterar',
+  )
 
 export type UpdateInstagramPostInput = z.infer<typeof updateInstagramPostSchema>
 
@@ -111,7 +115,10 @@ export const instagramPostSchema = z.object({
   permalink: z.string(),
   caption: z.string().nullable(),
   displayMode: instagramDisplayModeSchema,
-  /** Só vale para EMBED: o iframe mostra a legenda embaixo da mídia. */
+  /**
+   * Só vale para EMBED: a loja mostra a legenda expansível embaixo do post. O
+   * iframe é sempre o compacto — a legenda dele não encolhe (cross-origin).
+   */
   captioned: z.boolean(),
   isActive: z.boolean(),
   imageId: z.string().nullable(),

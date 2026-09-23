@@ -247,6 +247,7 @@ export const updateInstagramPost = async (
   const data: Prisma.InstagramPostUpdateInput = {}
   if (input.displayMode !== undefined) data.displayMode = input.displayMode
   if (input.isActive !== undefined) data.isActive = input.isActive
+  if (input.captioned !== undefined) data.captioned = input.captioned
 
   // Virar foto exige a foto. Post que entrou como EMBED pode não ter imagem:
   // tenta buscar agora, e a falha chega ao admin como INSTAGRAM_POST_UNAVAILABLE.
@@ -279,8 +280,13 @@ export const updateInstagramPost = async (
   }
 
   const changes = diff(
-    { displayMode: current.displayMode, isActive: current.isActive, imageId: current.imageId },
-    { displayMode: row.displayMode, isActive: row.isActive, imageId: row.imageId },
+    {
+      displayMode: current.displayMode,
+      isActive: current.isActive,
+      captioned: current.captioned,
+      imageId: current.imageId,
+    },
+    { displayMode: row.displayMode, isActive: row.isActive, captioned: row.captioned, imageId: row.imageId },
   )
   if (Object.keys(changes).length > 0) {
     await audit({

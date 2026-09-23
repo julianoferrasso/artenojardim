@@ -29,6 +29,7 @@ import {
   LoaderCircle,
   MoreHorizontal,
   Pause,
+  Text,
   Play,
   Trash2,
 } from 'lucide-react'
@@ -164,6 +165,13 @@ export default function InstagramPage() {
               : errorMessage(e, 'Não foi possível alterar o post.'),
           ),
       },
+    )
+  }
+
+  const onToggleCaption = (post: InstagramPost) => {
+    update.mutate(
+      { id: post.id, input: { captioned: !post.captioned } },
+      { onError: (e) => alert(errorMessage(e, 'Não foi possível alterar o post.')) },
     )
   }
 
@@ -343,6 +351,7 @@ export default function InstagramPage() {
                   }
                   onToggleActive={() => onToggleActive(post)}
                   onChangeMode={(m) => onChangeMode(post, m)}
+                  onToggleCaption={() => onToggleCaption(post)}
                   onDelete={() => onDelete(post)}
                 />
               ))}
@@ -368,10 +377,19 @@ type TileProps = {
   busy: boolean
   onToggleActive: () => void
   onChangeMode: (mode: InstagramDisplayMode) => void
+  onToggleCaption: () => void
   onDelete: () => void
 }
 
-const SortableTile = ({ post, index, busy, onToggleActive, onChangeMode, onDelete }: TileProps) => {
+const SortableTile = ({
+  post,
+  index,
+  busy,
+  onToggleActive,
+  onChangeMode,
+  onToggleCaption,
+  onDelete,
+}: TileProps) => {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
     useSortable({ id: post.id })
 
@@ -468,6 +486,13 @@ const SortableTile = ({ post, index, busy, onToggleActive, onChangeMode, onDelet
               {embed ? <ImageIcon aria-hidden /> : <Code aria-hidden />}
               {embed ? 'Exibir como foto' : 'Exibir incorporado'}
             </DropdownMenuItem>
+            {/* Legenda só existe no incorporado: a foto não mostra texto na loja. */}
+            {embed && (
+              <DropdownMenuItem onSelect={onToggleCaption}>
+                <Text aria-hidden />
+                {post.captioned ? 'Ocultar legenda' : 'Mostrar legenda'}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onDelete}>
               <Trash2 aria-hidden />

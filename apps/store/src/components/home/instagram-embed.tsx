@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Script from 'next/script'
 import { Camera } from 'lucide-react'
+import { ExpandableCaption } from '@/components/home/expandable-caption'
 import { cn } from '@/lib/utils'
 
 declare global {
@@ -63,7 +64,8 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
     quote.className = 'instagram-media'
     quote.setAttribute('data-instgrm-permalink', `${permalink}?utm_source=ig_embed&utm_campaign=loading`)
     quote.setAttribute('data-instgrm-version', '14')
-    if (captioned) quote.setAttribute('data-instgrm-captioned', '')
+    // Nunca `data-instgrm-captioned`: a legenda do iframe não encolhe. Quem a
+    // mostra é o ExpandableCaption, embaixo.
     // O embed.js COPIA este cssText para o iframe (`style = blockquote.cssText`):
     // qualquer coisa posta aqui para esconder o blockquote esconde o post junto.
     // Por isso só o estilo do código oficial, e quem esconde é o host.
@@ -88,7 +90,7 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
     window.instgrm?.Embeds.process()
 
     return () => watcher.disconnect()
-  }, [near, shortcode, captioned])
+  }, [near, shortcode])
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -125,6 +127,8 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
       )}
 
       <div ref={hostRef} className={cn(!mounted && 'invisible absolute inset-x-0 top-0')} />
+
+      {captioned && caption && <ExpandableCaption text={caption} />}
     </div>
   )
 }

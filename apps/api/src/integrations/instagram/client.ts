@@ -54,15 +54,24 @@ const metaContent = (html: string, property: string): string | null => {
   return value ? decodeEntities(value) : null
 }
 
+/** O teto do próprio Instagram para uma legenda. */
+const MAX_CAPTION = 2200
+
 /**
- * O og:title de um post vem como `Fulano on Instagram: "legenda…"`. Só a
- * legenda interessa — é o alt da imagem na loja.
+ * O og:title de um post vem como `Fulano no Instagram: "legenda…"`, com a
+ * legenda INTEIRA e as quebras de linha. Só a legenda interessa: é o alt da
+ * imagem e o texto expansível da loja. As quebras ficam — a loja as mostra.
  */
-const extractCaption = (html: string): string | null => {
+export const extractCaption = (html: string): string | null => {
   const title = metaContent(html, 'og:title')
   const quoted = title && /:\s*"([\s\S]+)"\s*$/.exec(title)?.[1]
-  const caption = (quoted || title || '').replace(/\s+/g, ' ').trim()
-  return caption ? caption.slice(0, 300) : null
+  const caption = (quoted || title || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return caption ? caption.slice(0, MAX_CAPTION) : null
 }
 
 const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Response> => {
@@ -73,7 +82,10 @@ const fetchWithTimeout = async (url: string, init: RequestInit = {}): Promise<Re
   }
 }
 
-export const fetchPostImage = async (permalink: string): Promise<InstagramPostImage> => {
+export type InstagramPostMeta = { imageUrl: string; caption: string | null }
+
+/** Só lê a página do post: a URL da imagem na CDN e a legenda. */
+export const fetchPostMeta = async (permalink: string): Promise<InstagramPostMeta> => {
   const page = await fetchWithTimeout(permalink, {
     headers: { 'User-Agent': CRAWLER_UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
   })
@@ -85,6 +97,12 @@ export const fetchPostImage = async (permalink: string): Promise<InstagramPostIm
   const html = await page.text()
   const imageUrl = metaContent(html, 'og:image')
   if (!imageUrl) throw unavailable('sem og:image', { permalink })
+
+  return { imageUrl, caption: extractCaption(html) }
+}
+
+export const fetchPostImage = async (permalink: string): Promise<InstagramPostImage> => {
+  const { imageUrl, caption } = await fetchPostMeta(permalink)
 
   const image = await fetchWithTimeout(imageUrl)
   if (!image.ok) throw unavailable('imagem', { permalink, status: image.status })
@@ -105,6 +123,6 @@ export const fetchPostImage = async (permalink: string): Promise<InstagramPostIm
   return {
     body,
     mimeType: mimeType as InstagramPostImage['mimeType'],
-    caption: extractCaption(html),
+    caption,
   }
 }

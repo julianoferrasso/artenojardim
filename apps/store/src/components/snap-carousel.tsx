@@ -76,6 +76,9 @@ export const SnapCarousel = ({
       // Foco dentro do trilho também pausa: clicar num iframe (vídeo de um post
       // incorporado do Instagram) não dispara pointer/focus no documento pai.
       if (el.contains(document.activeElement)) return
+      // Algo aberto no trilho (a legenda expansível de um post) também pausa:
+      // no Safari o clique nem dá foco ao botão, então o foco não basta.
+      if (el.querySelector('[aria-expanded="true"]')) return
       // Com vários slides por vista, o scroll bate na borda antes de o índice
       // chegar a count-1 — sem este teste o autoplay parava no fim para sempre.
       const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
