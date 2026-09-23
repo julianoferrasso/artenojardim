@@ -11,6 +11,7 @@ import {
   SHIPMENT_STATUSES,
   EMAIL_CAMPAIGN_KINDS,
   EMAIL_CAMPAIGN_STATUSES,
+  INSTAGRAM_DISPLAY_MODES,
 } from '@ecommerce/shared/constants'
 
 /**
@@ -46,6 +47,11 @@ describe('enums: shared/constants vs schema.prisma', () => {
       'EmailCampaignStatus',
       ($Enums as Record<string, never>)['EmailCampaignStatus'],
       EMAIL_CAMPAIGN_STATUSES,
+    ],
+    [
+      'InstagramDisplayMode',
+      ($Enums as Record<string, never>)['InstagramDisplayMode'],
+      INSTAGRAM_DISPLAY_MODES,
     ],
   ]
 

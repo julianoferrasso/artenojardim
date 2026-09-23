@@ -87,6 +87,12 @@ enum EmailCampaignStatus {
   FAILED
 }
 
+/// Como o post do Instagram aparece na loja. Espelha INSTAGRAM_DISPLAY_MODES.
+enum InstagramDisplayMode {
+  IMAGE
+  EMBED
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -717,17 +723,27 @@ model InstagramPost {
   permalink String
   /// Legenda/título lida do post; vira o alt da imagem na loja.
   caption   String?
-  imageId   String
 
-  /// Ordem na grade. O admin reordena arrastando; a posição é o índice.
+  displayMode InstagramDisplayMode @default(IMAGE)
+  /// Só vale para EMBED: o iframe mostra a legenda. Vem do código "Incorporar".
+  captioned   Boolean              @default(false)
+  /// Pausado sai da loja mas fica no admin. Ativos têm teto (INSTAGRAM_MAX_ACTIVE_POSTS).
+  isActive    Boolean              @default(true)
+
+  /// Obrigatória em IMAGE (é o que a loja pinta); em EMBED é só a miniatura do
+  /// admin, buscada por melhor esforço. A regra vive no service.
+  imageId String?
+
+  /// Ordem no carrossel. O admin reordena arrastando; a posição é o índice.
   position Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  /// Cascade: post sem foto não tem o que exibir — apagar a mídia derruba o post.
-  image Upload @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  store Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  /// SetNull: apagar a mídia não derruba um post incorporado. Um IMAGE sem
+  /// imagem só sai da lista pública.
+  image Upload? @relation(fields: [imageId], references: [id], onDelete: SetNull)
 
   @@unique([storeId, shortcode])
   @@index([storeId, position])

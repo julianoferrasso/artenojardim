@@ -92,3 +92,12 @@ export type EmailCampaignKind = z.infer<typeof emailCampaignKindSchema>
 export const EMAIL_CAMPAIGN_STATUSES = ['PENDING', 'SENDING', 'SENT', 'FAILED'] as const
 export const emailCampaignStatusSchema = z.enum(EMAIL_CAMPAIGN_STATUSES)
 export type EmailCampaignStatus = z.infer<typeof emailCampaignStatusSchema>
+
+/**
+ * Como um post do Instagram aparece na loja. IMAGE = a foto re-hospedada no
+ * nosso storage, no visual da loja. EMBED = o iframe oficial do Instagram
+ * (vídeo, carrossel, curtidas), montado a partir do código "Incorporar".
+ */
+export const INSTAGRAM_DISPLAY_MODES = ['IMAGE', 'EMBED'] as const
+export const instagramDisplayModeSchema = z.enum(INSTAGRAM_DISPLAY_MODES)
+export type InstagramDisplayMode = z.infer<typeof instagramDisplayModeSchema>

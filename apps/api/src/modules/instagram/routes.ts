@@ -2,6 +2,7 @@ import { Router } from 'express'
 import {
   createInstagramPostSchema,
   reorderInstagramPostsSchema,
+  updateInstagramPostSchema,
 } from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticate, requireStaff, optionalAuthenticate } from '../../middlewares/authenticate.js'
@@ -24,5 +25,12 @@ instagramPostRoutes.put(
   requireStaff,
   validate({ body: reorderInstagramPostsSchema }),
   controller.reorderController,
+)
+instagramPostRoutes.patch(
+  '/:id',
+  authenticate,
+  requireStaff,
+  validate({ body: updateInstagramPostSchema }),
+  controller.updateController,
 )
 instagramPostRoutes.delete('/:id', authenticate, requireStaff, controller.deleteController)

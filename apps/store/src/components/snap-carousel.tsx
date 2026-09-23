@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils'
  * (ex.: `w-full shrink-0 snap-center` no hero; `w-full sm:w-1/2 lg:w-1/4
  * shrink-0 snap-start` nos destaques).
  *
- * Autoplay só onde faz sentido (o hero): 4 banners que ninguém gira são 3
- * banners mortos. Pausa em hover/toque/aba oculta e respeita
+ * Autoplay só onde faz sentido (o hero e o Instagram): 4 banners que ninguém
+ * gira são 3 banners mortos. Pausa em hover/toque/foco/aba oculta e respeita
  * prefers-reduced-motion — animação forçada é pior que nenhuma.
  */
 
@@ -71,8 +71,15 @@ export const SnapCarousel = ({
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const timer = setInterval(() => {
-      if (pausedRef.current || document.hidden) return
-      goTo((indexRef.current + 1) % count)
+      const el = trackRef.current
+      if (!el || pausedRef.current || document.hidden) return
+      // Foco dentro do trilho também pausa: clicar num iframe (vídeo de um post
+      // incorporado do Instagram) não dispara pointer/focus no documento pai.
+      if (el.contains(document.activeElement)) return
+      // Com vários slides por vista, o scroll bate na borda antes de o índice
+      // chegar a count-1 — sem este teste o autoplay parava no fim para sempre.
+      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
+      goTo(atEnd ? 0 : (indexRef.current + 1) % count)
     }, autoAdvanceMs)
     return () => clearInterval(timer)
   }, [autoAdvanceMs, count, goTo])

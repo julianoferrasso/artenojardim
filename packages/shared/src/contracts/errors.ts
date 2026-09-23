@@ -83,6 +83,8 @@ export const ERROR_CODES = {
   /// O Instagram não entregou a imagem do post (privado, removido, bloqueio de
   /// IP ou HTML mudou). O admin reage oferecendo o envio manual da imagem.
   INSTAGRAM_POST_UNAVAILABLE: 'INSTAGRAM_POST_UNAVAILABLE',
+  /// Ativar mais um post passaria de INSTAGRAM_MAX_ACTIVE_POSTS na vitrine.
+  INSTAGRAM_ACTIVE_LIMIT_REACHED: 'INSTAGRAM_ACTIVE_LIMIT_REACHED',
 } as const
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]

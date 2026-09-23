@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ROUTES } from '@ecommerce/shared/constants'
-import type { CreateInstagramPostInput, InstagramPost } from '@ecommerce/shared/contracts'
+import type {
+  CreateInstagramPostInput,
+  InstagramPost,
+  UpdateInstagramPostInput,
+} from '@ecommerce/shared/contracts'
 import { apiFetch } from './api'
 
 const KEY = ['instagram-posts']
@@ -42,6 +46,30 @@ export const useReorderInstagramPosts = () => {
       return { previous }
     },
     onError: (_err, _posts, context) => {
+      if (context?.previous) qc.setQueryData(KEY, context.previous)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
+/** Pausar/ativar e trocar o modo. Otimista: o tile muda na hora do clique. */
+export const useUpdateInstagramPost = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateInstagramPostInput }) =>
+      apiFetch<InstagramPost>(ROUTES.cms.instagramPost(id), {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      }),
+    onMutate: async ({ id, input }) => {
+      await qc.cancelQueries({ queryKey: KEY })
+      const previous = qc.getQueryData<InstagramPost[]>(KEY)
+      qc.setQueryData<InstagramPost[]>(KEY, (posts) =>
+        posts?.map((p) => (p.id === id ? { ...p, ...input } : p)),
+      )
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
       if (context?.previous) qc.setQueryData(KEY, context.previous)
     },
     onSettled: () => qc.invalidateQueries({ queryKey: KEY }),

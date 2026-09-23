@@ -123,6 +123,7 @@ export const EVENTS = {
   /** Posts da seção "No Instagram" da home. Só auditoria — nenhum consumidor de fila. */
   instagramPost: {
     created: 'instagram_post.created',
+    updated: 'instagram_post.updated',
     deleted: 'instagram_post.deleted',
     reordered: 'instagram_post.reordered',
   },

@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import type {
   CreateInstagramPostInput,
   ReorderInstagramPostsInput,
+  UpdateInstagramPostInput,
 } from '@ecommerce/shared/contracts'
 import { ok, created, noContent } from '../../shared/http.js'
 import * as service from './service.js'
@@ -21,6 +22,17 @@ export const createController = async (req: Request, res: Response): Promise<voi
   created(
     res,
     await service.createInstagramPost(req.body as CreateInstagramPostInput, auditContext(req)),
+  )
+}
+
+export const updateController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await service.updateInstagramPost(
+      req.params['id'] as string,
+      req.body as UpdateInstagramPostInput,
+      auditContext(req),
+    ),
   )
 }
 

@@ -23,8 +23,9 @@ A API pensa que o banco está em `127.0.0.1:5433`, mas cada query viaja pelo tú
 ## Deploy (VPS `/var/www/artenojardim`)
 
 Fluxo padrão: `git pull` → `pnpm install --frozen-lockfile` → `build:shared` →
-`pnpm -r build` → `prisma migrate deploy` → recarregar os processos. Passo a passo, portas,
-PM2 e armadilhas de Nginx: [docs/infra-vps.md](docs/infra-vps.md). O que **não** pode esquecer:
+`pnpm -r build` → `prisma migrate deploy` → recarregar os processos. Passo a passo com os
+comandos: [README.md](README.md#deploy). Histórico e armadilhas da VPS: [docs/infra-vps.md](docs/infra-vps.md).
+O que **não** pode esquecer:
 
 - **Apps Next (`store`/`admin`) precisam de `pm2 restart`, não `reload`.** `next start` lê o
   `.next` uma vez no boot; `reload` serve o build antigo (rota nova dá 404). A **API** (Express) pode `reload`.

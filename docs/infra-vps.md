@@ -12,16 +12,11 @@
 
 ## Deploy
 
-```bash
-ssh root@23.29.114.96
-cd /var/www/artenojardim
-git pull
-pnpm install --frozen-lockfile        # frozen: produção usa o que foi testado
-pnpm --filter @ecommerce/shared build # primeiro: os outros resolvem tipos pelo dist/
-pnpm -r build
-cd apps/api && pnpm exec prisma migrate deploy && cd -   # deploy, NUNCA dev
-pm2 reload ecosystem.config.cjs       # reload, não restart: sem downtime
-```
+O passo a passo vive no [README](../README.md#deploy). Este bloco tinha
+`pm2 reload ecosystem.config.cjs`, o que está **errado**:
+- o `reload` serve o `.next` antigo nos apps Next e não troca o código do worker (ver abaixo);
+- o `reload` sem nome de processo atinge o ecosystem inteiro, quando cada processo pede um
+  comando diferente.
 
 ### Topologia
 
