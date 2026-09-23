@@ -180,20 +180,34 @@ export const pickVariantImage = <T extends ImageLike>(
 
 // ── Produto ───────────────────────────────────────────────────────────────────
 
-export const createProductSchema = z.object({
+/*
+ * Campos SEM `.default()`, base do create e do update. No Zod 4, `.partial()`
+ * NÃO anula default: um update montado sobre o create transformava todo PATCH
+ * parcial em `status: 'DRAFT'`, `categoryIds: []`, `tags: []`, `isFeatured:
+ * false` — "Publicar" apagava as categorias e "Salvar informações" despublicava.
+ */
+const productFields = z.object({
   name: z.string().min(1, 'Informe o nome').max(200).trim(),
   slug: optionalSlugSchema,
   description: z.string().max(20000).optional(),
   shortDescription: z.string().max(500).optional(),
-  status: productStatusSchema.default('DRAFT'),
+  status: productStatusSchema,
   brand: z.string().max(120).optional(),
-  tags: z.array(z.string().max(60)).max(30).default([]),
-  categoryIds: z.array(z.string()).default([]),
-  images: z.array(productImageInputSchema).default([]),
+  tags: z.array(z.string().max(60)).max(30),
+  categoryIds: z.array(z.string()),
+  images: z.array(productImageInputSchema),
   seoTitle: z.string().max(200).optional(),
   seoDescription: z.string().max(400).optional(),
   /** Aparece na seção "Destaques" da home — escolha editorial do lojista. */
-  isFeatured: z.boolean().default(false),
+  isFeatured: z.boolean(),
+})
+
+export const createProductSchema = productFields.extend({
+  status: productStatusSchema.default('DRAFT'),
+  tags: productFields.shape.tags.default([]),
+  categoryIds: productFields.shape.categoryIds.default([]),
+  images: productFields.shape.images.default([]),
+  isFeatured: productFields.shape.isFeatured.default(false),
   /**
    * Toda criação manda ao menos uma variante. Um produto sem opções manda uma
    * variante com `options: []` — que o service materializa como "Default Title".
@@ -204,10 +218,9 @@ export const createProductSchema = z.object({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>
 
-// No update tudo é opcional; variantes têm fluxo próprio (ver updateProductSchema).
-export const updateProductSchema = createProductSchema
-  .omit({ variants: true })
-  .partial()
+// No update tudo é opcional e ausente fica ausente; variantes têm fluxo próprio
+// (ver updateVariantSchema).
+export const updateProductSchema = productFields.partial()
 
 export type UpdateProductInput = z.infer<typeof updateProductSchema>
 
