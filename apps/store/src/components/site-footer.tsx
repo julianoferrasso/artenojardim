@@ -25,8 +25,8 @@ const INSTITUTIONAL_LINKS = [
   { label: 'Meus pedidos', href: '/conta/pedidos' },
   // Páginas institucionais ainda não existem (CMS é fase futura); os links já
   // ocupam o lugar definitivo e passam a apontar para elas quando nascerem.
-  { label: 'Trocas e devoluções', href: '/' },
-  { label: 'Política de privacidade', href: '/' },
+  //{ label: 'Trocas e devoluções', href: '/' },
+  //{ label: 'Política de privacidade', href: '/' },
 ]
 
 /**
