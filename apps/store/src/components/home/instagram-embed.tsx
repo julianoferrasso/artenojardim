@@ -36,7 +36,7 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
   const wrapperRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
   const [near, setNear] = useState(false)
-  const [loaded, setLoaded] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     const el = wrapperRef.current
@@ -64,19 +64,23 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
     quote.setAttribute('data-instgrm-permalink', `${permalink}?utm_source=ig_embed&utm_campaign=loading`)
     quote.setAttribute('data-instgrm-version', '14')
     if (captioned) quote.setAttribute('data-instgrm-captioned', '')
-    // Invisível até virar iframe: o placeholder é quem aparece enquanto isso.
-    quote.style.opacity = '0'
-    quote.style.margin = '0'
+    // O embed.js COPIA este cssText para o iframe (`style = blockquote.cssText`):
+    // qualquer coisa posta aqui para esconder o blockquote esconde o post junto.
+    // Por isso só o estilo do código oficial, e quem esconde é o host.
+    quote.style.cssText =
+      'background:#FFF;border:0;border-radius:3px;margin:0;max-width:540px;min-width:326px;padding:0;width:100%'
     const link = document.createElement('a')
     link.href = permalink
     link.textContent = 'Ver este post no Instagram'
     quote.appendChild(link)
     host.replaceChildren(quote)
 
-    // O iframe chegou = o embed.js terminou; aí o placeholder sai.
+    // Montado = o blockquote SAIU. O embed.js insere o iframe ao lado dele com
+    // altura 0 e só remove o blockquote quando o iframe avisa MOUNTED (conteúdo
+    // pronto, altura medida). Antes disso, trocar o placeholder deixaria um buraco.
     const watcher = new MutationObserver(() => {
-      if (host.querySelector('iframe')) {
-        setLoaded(true)
+      if (host.querySelector('iframe') && !host.querySelector('blockquote')) {
+        setMounted(true)
         watcher.disconnect()
       }
     })
@@ -94,8 +98,16 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
         <Script id="instagram-embed-js" src={EMBED_SCRIPT} onReady={() => window.instgrm?.Embeds.process()} />
       )}
 
-      {!loaded && (
-        <div className="relative aspect-4/5 overflow-hidden rounded-xl bg-secondary">
+      {/* Link e não div: se o embed nunca montar (bloqueador de rastreio, conta
+          com Incorporações desligada), a foto continua levando ao post. */}
+      {!mounted && (
+        <a
+          href={`https://www.instagram.com/p/${shortcode}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Ver este post no Instagram"
+          className="relative block aspect-4/5 overflow-hidden rounded-xl bg-secondary"
+        >
           {imageUrl ? (
             <Image
               src={imageUrl}
@@ -109,10 +121,10 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
               <Camera className="size-8 text-primary-ink/50" strokeWidth={1.2} />
             </span>
           )}
-        </div>
+        </a>
       )}
 
-      <div ref={hostRef} className={cn(!loaded && 'absolute inset-x-0 top-0')} />
+      <div ref={hostRef} className={cn(!mounted && 'invisible absolute inset-x-0 top-0')} />
     </div>
   )
 }

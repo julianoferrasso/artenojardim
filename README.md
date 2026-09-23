@@ -84,6 +84,8 @@ cd apps/api && pnpm exec prisma migrate deploy && cd -   # deploy, NUNCA dev
 pm2 reload  artenojardim-api
 pm2 restart artenojardim-worker
 pm2 restart artenojardim-store artenojardim-admin
+
+pm2 restart artenojardim-api artenojardim-worker artenojardim-store artenojardim-admin
 ```
 
 **Se algum build falhar, pare antes dos comandos `pm2`.** Os processos continuam servindo o
