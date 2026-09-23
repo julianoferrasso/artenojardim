@@ -19,8 +19,19 @@ export default function CategoriesPage() {
   const [editing, setEditing] = useState<Editing>(null)
 
   const onDelete = (node: CategoryTreeNode) => {
-    if (!confirm(`Excluir "${node.name}"?`)) return
+    if (node.children.length > 0) {
+      alert(`"${node.name}" tem subcategorias. Mova ou exclua as subcategorias primeiro.`)
+      return
+    }
+    const products =
+      node.productCount > 0
+        ? `\n\n${node.productCount} produto${node.productCount === 1 ? '' : 's'} vai sair desta categoria (os produtos não são excluídos).`
+        : ''
+    if (!confirm(`Excluir a categoria "${node.name}"?${products}`)) return
     del.mutate(node.id, {
+      onSuccess: () => {
+        if (editing?.mode === 'edit' && editing.node.id === node.id) setEditing(null)
+      },
       onError: (e) =>
         alert(e instanceof ApiError ? e.message : 'Não foi possível excluir a categoria.'),
     })
@@ -77,6 +88,8 @@ export default function CategoriesPage() {
               initial={editing.mode === 'edit' ? editing.node : undefined}
               onDone={() => setEditing(null)}
               onCancel={() => setEditing(null)}
+              onDelete={editing.mode === 'edit' ? () => onDelete(editing.node) : undefined}
+              deleting={del.isPending}
             />
           ) : (
             <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
@@ -105,7 +118,7 @@ function CategoryRow({
   return (
     <>
       <li
-        className="group flex items-center justify-between rounded-md border border-border bg-card px-3 py-2"
+        className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2"
         style={{ marginLeft: depth * 20 }}
       >
         <span className="flex items-center gap-2 text-sm">
@@ -122,7 +135,7 @@ function CategoryRow({
           )}
           <span className="text-xs text-muted-foreground">/{node.slug}</span>
         </span>
-        <span className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="flex shrink-0 gap-1">
           <button
             onClick={() => onEdit(node)}
             className="rounded px-2 py-1 text-xs hover:bg-accent"

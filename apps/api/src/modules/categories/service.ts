@@ -186,9 +186,23 @@ export const updateCategory = async (
     }
   }
 
-  // O slug NÃO muda na edição: mudá-lo quebraria links já indexados pelo Google.
-  // Ele foi gerado na criação e é imutável pela UI.
   const data: Prisma.CategoryUpdateInput = {}
+  if (input.slug !== undefined) {
+    const slug = slugify(input.slug)
+    if (!slug) {
+      throw appError(ERROR_CODES.VALIDATION_ERROR, 'O endereço precisa ter letras ou números', 422)
+    }
+    if (slug !== current.slug) {
+      const taken = await prisma.category.findFirst({
+        where: { storeId, slug, id: { not: id } },
+        select: { id: true },
+      })
+      if (taken) {
+        throw conflict(`Já existe uma categoria com o endereço /${slug}`, ERROR_CODES.SLUG_ALREADY_EXISTS)
+      }
+      data.slug = slug
+    }
+  }
   if (input.name !== undefined) data.name = input.name
   if (input.description !== undefined) data.description = input.description
   if (input.parentId !== undefined) data.parent = input.parentId
@@ -207,12 +221,14 @@ export const updateCategory = async (
   const changes = diff(
     {
       name: current.name,
+      slug: current.slug,
       parentId: current.parentId,
       isActive: current.isActive,
       position: current.position,
     },
     {
       name: row.name,
+      slug: row.slug,
       parentId: row.parentId,
       isActive: row.isActive,
       position: row.position,

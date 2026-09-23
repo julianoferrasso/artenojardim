@@ -14,16 +14,21 @@ type Props = {
   initial?: Category
   onDone: () => void
   onCancel: () => void
+  onDelete?: () => void
+  deleting?: boolean
 }
 
 /**
  * Formulário de criar/editar categoria. O MESMO createCategorySchema que a API
  * usa valida aqui — mudar um campo quebra o build no mesmo commit.
  */
-export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props) => {
+export const CategoryForm = ({ parentOptions, initial, onDone, onCancel, onDelete, deleting }: Props) => {
   const create = useCreateCategory()
   const update = useUpdateCategory()
   const [formError, setFormError] = useState<string | null>(null)
+  // Fora do RHF: o resolver é o createCategorySchema, que não tem slug (só a
+  // edição o aceita). Vai no PATCH só se mudou.
+  const [slug, setSlug] = useState(initial?.slug ?? '')
 
   const {
     register,
@@ -32,8 +37,6 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
     formState: { errors },
   } = useForm<CreateCategoryInput>({
     resolver: zodResolver(createCategorySchema),
-    // Sem `slug`: ele é 100% do backend (gera do nome, valida, garante único).
-    // O usuário nunca o define nem edita — não há campo, e não enviamos o valor.
     defaultValues: initial
       ? {
           name: initial.name,
@@ -71,7 +74,15 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
       setFormError(e instanceof ApiError ? e.message : 'Não foi possível salvar.')
 
     if (initial) {
-      update.mutate({ id: initial.id, input }, { onSuccess: onDone, onError })
+      const nextSlug = slug.trim()
+      if (!nextSlug) {
+        setFormError('Informe o endereço.')
+        return
+      }
+      update.mutate(
+        { id: initial.id, input: nextSlug !== initial.slug ? { ...input, slug: nextSlug } : input },
+        { onSuccess: onDone, onError },
+      )
     } else {
       create.mutate(input, { onSuccess: onDone, onError })
     }
@@ -93,13 +104,24 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
         {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
       </div>
 
-      {/* Sem campo de slug: o backend gera do nome, valida e garante único. Na
-          edição o slug NÃO muda (mudá-lo quebraria links já indexados). O
-          endereço atual é mostrado apenas como referência, em leitura. */}
+      {/* Na criação o endereço nasce do nome, no backend. */}
       {initial && (
-        <p className="text-xs text-muted-foreground">
-          Endereço: <code className="rounded bg-muted px-1">/{initial.slug}</code>
-        </p>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="slug" className="text-sm font-medium">Endereço</label>
+          <div className="flex items-center rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
+            <span className="pl-3 text-sm text-muted-foreground">/categorias/</span>
+            <input
+              id="slug"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              className="h-10 min-w-0 flex-1 bg-transparent pr-3 text-sm outline-none"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Acentos e espaços viram hífen ao salvar. Mudar o endereço quebra links antigos
+            (Google, banners, redes sociais) que apontam para ele.
+          </p>
+        </div>
       )}
 
       <div className="flex flex-col gap-1.5">
@@ -195,6 +217,17 @@ export const CategoryForm = ({ parentOptions, initial, onDone, onCancel }: Props
           Cancelar
         </button>
       </div>
+
+      {initial && onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={busy || deleting}
+          className="h-10 rounded-md border border-destructive/40 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+        >
+          {deleting ? 'Excluindo…' : 'Excluir categoria'}
+        </button>
+      )}
     </form>
   )
 }

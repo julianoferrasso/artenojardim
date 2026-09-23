@@ -7,9 +7,7 @@ import { z } from 'zod'
 
 export const createCategorySchema = z.object({
   name: z.string().min(1, 'Informe o nome').max(120).trim(),
-  // Sem `slug` no contrato: ele é 100% do backend — gerado do nome, validado e
-  // com unicidade garantida. O cliente não define nem edita, e um request
-  // forjado com slug é simplesmente ignorado (o campo não existe aqui).
+  // Sem `slug` na criação: nasce do nome, no backend. Só a edição aceita trocá-lo.
   description: z.string().max(2000).optional(),
   parentId: z.string().nullable().optional(),
   imageId: z.string().nullable().optional(),
@@ -23,7 +21,11 @@ export type CreateCategoryInput = z.infer<typeof createCategorySchema>
 
 // partial(): no update todo campo é opcional, mas quando presente segue a mesma
 // regra do create. Reusa a validação em vez de reescrevê-la.
-export const updateCategorySchema = createCategorySchema.partial()
+// `slug` aqui é o texto que o lojista digitou; o backend normaliza (slugify) e
+// recusa colisão em vez de sufixar — quem escolheu o endereço quer ESSE endereço.
+export const updateCategorySchema = createCategorySchema.partial().extend({
+  slug: z.string().trim().min(1, 'Informe o endereço').max(160).optional(),
+})
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>
 
 /** Uma categoria, sem os filhos. */
