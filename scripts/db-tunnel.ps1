@@ -15,8 +15,8 @@
 # banco fora do ar. Reconectar sozinho evita esse diagnóstico errado.
 
 param(
-    [string]$KeyPath    = "C:\Users\2cta\Documents\placeadmin_vps.ppk",
-    [string]$RemoteHost = "23.29.114.96",
+    [string]$KeyPath    = "C:\Users\2cta\.ssh\ed_25519-hostinger.ppk",
+    [string]$RemoteHost = "179.199.150.80",
     [string]$RemoteUser = "root",
     [int]$LocalPort     = 5433,
     [int]$RemotePort    = 5432

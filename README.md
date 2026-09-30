@@ -16,7 +16,7 @@ Histórico, decisões e incidentes da VPS: [docs/infra-vps.md](docs/infra-vps.md
 
 # Deploy
 
-Não há CI/CD: o deploy é manual, por SSH, na VPS `23.29.114.96`, no diretório
+Não há CI/CD: o deploy é manual, por SSH, na VPS `179.199.150.80`, no diretório
 `/var/www/artenojardim`. Leva uns 5 minutos.
 
 ## Antes de tudo: o que é diferente nesta VPS
@@ -65,7 +65,7 @@ Se o deploy tiver migration nova, ela **já foi aplicada** no banco quando você
 Entrar:
 
 ```powershell
-plink -i C:\Users\2cta\Documents\placeadmin_vps.ppk root@23.29.114.96
+plink -i C:\Users\2cta\.ssh\ed_25519-hostinger.ppk root@179.199.150.80
 ```
 
 Rodar, **na ordem**:

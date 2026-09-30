@@ -4,9 +4,26 @@
  * .cjs e não .js: o package.json da raiz declara "type": "module", e o PM2 lê
  * este arquivo com require().
  *
- * Prefixo `artenojardim-` em TODO nome: esta VPS é compartilhada com outro
- * projeto, que já usa `api`, `web` e `ai-service` no PM2. Um `pm2 restart api`
- * distraído derrubaria a produção alheia.
+ * Prefixo `artenojardim-` em TODO nome: esta VPS (179.199.150.80) é
+ * compartilhada com o PLACEADMIN (produção crítica) e o financee. Cada app tem
+ * usuário e PM2 próprios (units systemd separadas), então na prática os
+ * processos nem se enxergam — mas o prefixo continua, porque um `pm2 restart
+ * api` no daemon errado derrubaria a produção alheia.
+ *
+ * Este ecosystem roda no PM2 do usuário `artenojardim`
+ * (unit `pm2-artenojardim.service`). Comandos pelo atalho `aj`, como root:
+ *   aj pm2 ls
+ *   aj "cd /var/www/artenojardim && pm2 restart artenojardim-store"
+ *
+ * ── PORTAS: store 3010 · admin 3011 · api 4020 ──────────────────────────────
+ * O mapa real da VPS:
+ *   3000/3001/3002 Next do placeadmin · 3333 API dele · 4000 GRAFANA
+ *   3020/4010 financee · 3010/3011/4020 nossas
+ * A API usava 4000 na VPS ANTIGA; aqui isso derrubaria o Grafana. Por isso o
+ * PORT vai explícito no env abaixo — o default do código ainda é 4000.
+ * Antes de mudar qualquer porta, confira o dono:
+ *   ss -lptnH "sport = :<porta>"  e  ls -l /proc/<pid>/cwd
+ * O cwd é o que identifica o projeto: `next-server` é idêntico entre eles.
  *
  * ── DEPLOY: `restart`, não `reload`, para os apps Next ──────────────────────
  * O `next start` lê o diretório `.next` UMA vez, no boot. `pm2 reload` faz um
@@ -55,7 +72,9 @@ module.exports = {
       // um dia o ambiente vier do PM2, a ausência do arquivo não derruba o boot.
       node_args: '--env-file-if-exists=.env',
 
-      env: { TZ: 'UTC' },
+      // PORT explicito: o default do codigo e 4000, que NESTA VPS e o Grafana
+      // do placeadmin. Mudar porta exige `pm2 restart --update-env`.
+      env: { TZ: 'UTC', PORT: '4020' },
 
       max_memory_restart: '400M',
       autorestart: true,
@@ -64,8 +83,8 @@ module.exports = {
       min_uptime: '20s',
       restart_delay: 2000,
 
-      error_file: '/var/www/artenojardim/logs/api-error.log',
-      out_file: '/var/www/artenojardim/logs/api-out.log',
+      error_file: '/var/log/artenojardim/api-error.log',
+      out_file: '/var/log/artenojardim/api-out.log',
       time: true,
     },
     {
@@ -96,8 +115,8 @@ module.exports = {
       // enche o log. O backoff da reconexão já cobre a janela curta.
       restart_delay: 5000,
 
-      error_file: '/var/www/artenojardim/logs/worker-error.log',
-      out_file: '/var/www/artenojardim/logs/worker-out.log',
+      error_file: '/var/log/artenojardim/worker-error.log',
+      out_file: '/var/log/artenojardim/worker-out.log',
       time: true,
     },
     {
@@ -123,8 +142,8 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '20s',
 
-      error_file: '/var/www/artenojardim/logs/store-error.log',
-      out_file: '/var/www/artenojardim/logs/store-out.log',
+      error_file: '/var/log/artenojardim/store-error.log',
+      out_file: '/var/log/artenojardim/store-out.log',
       time: true,
     },
     {
@@ -147,8 +166,8 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '20s',
 
-      error_file: '/var/www/artenojardim/logs/admin-error.log',
-      out_file: '/var/www/artenojardim/logs/admin-out.log',
+      error_file: '/var/log/artenojardim/admin-error.log',
+      out_file: '/var/log/artenojardim/admin-out.log',
       time: true,
     },
   ],

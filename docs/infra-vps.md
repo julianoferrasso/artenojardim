@@ -1,14 +1,101 @@
 # VPS — estado e decisões de infraestrutura
 
-**Host:** `23.29.114.96` · Ubuntu 22.04.5 LTS · PostgreSQL 16.14 · Node 24.18 · nginx 1.18
-**Acesso:** `root` por chave (`placeadmin_vps.ppk`, formato PuTTY)
-**Código:** `/var/www/artenojardim` · **Logs:** `/var/www/artenojardim/logs/`
+**Host:** `179.199.150.80` · Debian 13 (trixie) · PostgreSQL 16.15 · Node 24.21 · nginx 1.26
+**Acesso:** `root` por chave (`C:\Users\2cta\.ssh\ed_25519-hostinger.ppk`, formato PuTTY)
+**Código:** `/var/www/artenojardim` · **Logs:** `/var/log/artenojardim/`
+**Usuário de serviço:** `artenojardim` (uid 1002) · **PM2:** `pm2-artenojardim.service`
 
-> Esta VPS é **compartilhada** com outro projeto (`rag_sefaz` + apps `api`/`web`/`ai-service`
-> no PM2, e `insightia`, parado). Toda mudança aqui foi feita com `reload` em vez de
-> `restart` justamente para não derrubar as conexões deles. **Continue nesse cuidado.**
+> Migrado da VPS antiga (`23.29.114.96`, Ubuntu 22.04) em **30/09/2026**. A antiga segue de pé
+> com código e banco intactos, processos parados, como rollback.
+
+> Esta VPS é **compartilhada** com o **placeadmin** (a produção crítica da máquina) e o
+> **financee**. O isolamento é por usuário: cada app tem seu usuário de sistema, seu PM2
+> (unit systemd própria), sua deploy key do GitHub e seu role no Postgres. **Nunca** rode
+> `pm2` sem o atalho do usuário certo, e **sempre** `nginx -t` antes de qualquer reload.
+
+## Atalhos de root
+
+| Atalho | Roda como | Exemplo |
+|---|---|---|
+| `aj` | `artenojardim` | `aj pm2 ls` · `aj 'cd /var/www/artenojardim && git pull'` |
+| `pa` | `placeadmin` | (do outro projeto — não use) |
+| `fa` | `financee` | (do outro projeto — não use) |
+
+Os três carregam o Node do NVM do usuário. `aj` e `fa` rodam com `nice -n 10`: a VPS é do
+placeadmin e os convidados cedem CPU.
+
+## Mapa de portas (confira antes de mudar qualquer porta)
+
+| Porta | Dono |
+|---|---|
+| 3000 / 3001 / 3002 | Next do **placeadmin** |
+| 3333 | API do **placeadmin** |
+| **4000** | **Grafana** — era a porta da nossa API na VPS antiga |
+| 3020 / 4010 | web / api do **financee** |
+| **3010 / 3011 / 4020** | **nossos**: store / admin / api |
+| 5432 · 5672 · 6379 · 9090 · 9100 · 9113 · 9187 · 9428 · 15672 | Postgres, Rabbit, Redis, monitoramento |
+
+> **A API mudou de 4000 para 4020 na migração.** Subir na 4000 derruba o Grafana do
+> placeadmin. A porta vai explícita no `ecosystem.config.cjs` (`env: { PORT: '4020' }`),
+> porque o default do código ainda é 4000. Dono de uma porta:
+> `ss -lptnH "sport = :<porta>"` e `ls -l /proc/<pid>/cwd` — o `cwd` é o que distingue
+> projetos, já que `next-server` é idêntico entre eles.
+
+## Deploy key do GitHub
+
+O root **não** tem chave do GitHub — de propósito. Cada app usa a sua, com um alias de host:
+
+```
+Host github-artenojardim
+    HostName github.com
+    User git
+    IdentityFile /home/artenojardim/.ssh/artenojardim_deploy
+    IdentitiesOnly yes
+```
+
+O remote é `git@github-artenojardim:julianoferrasso/artenojardim.git` — **não** `git@github.com:`.
+Um `git clone git@github.com:...` como root dá `Permission denied (publickey)`, e a causa não é a
+chave do seu perfil: é que o root não tem chave privada nenhuma. A chave é uma **Deploy Key do
+repositório**, somente leitura.
+
+`IdentitiesOnly yes` importa: sem isso o SSH oferece todas as chaves do agente e o GitHub
+autentica pela primeira que reconhecer — possivelmente a do app errado.
+
+## Isolamento no Postgres
+
+Em 30/09/2026 o `CONNECT` herdado do `PUBLIC` foi revogado nos bancos `placeadmin` e `finance`
+(eles nasceram com ACL default, então **qualquer** role do cluster conectava em **qualquer**
+banco — inclusive `finance_app` no `placeadmin` e vice-versa). Os acessos legítimos foram
+concedidos explicitamente **antes** do revoke, na mesma transação:
+
+| Banco | Roles com CONNECT |
+|---|---|
+| `placeadmin` | `api_user` (dono), `backup_user`, `exporter` |
+| `finance` | `finance_app` (dono), `backup_user`, `exporter` |
+| `artenojardim` / `artenojardim_shadow` | `artenojardim` |
+
+`backup_user` conecta por **TCP com senha** (`/root/.pgpass`) e precisa do CONNECT explícito —
+sem ele o backup diário do placeadmin para em silêncio. O `pg_restore_check` usa
+`sudo -u postgres` (superuser, imune a ACL) e não entra na lista.
+
+Teste de isolamento (esperado `f`):
+
+```bash
+sudo -u postgres psql -tAc "SELECT has_database_privilege('artenojardim','placeadmin','CONNECT');"
+```
+
+## Backup
+
+Systemd timer (não cron, como na VPS antiga): `artenojardim-backup.timer`, 06:30 UTC —
+fora do `pg-backup` (~03:13) e do `pg-restore-check` (~04:39) do placeadmin e do
+`financee-backup` (05:30), para não disputar disco. Script:
+`/usr/local/bin/artenojardim_backup.sh`, retenção 14 dias em `/var/backups/artenojardim`.
+Valida o próprio dump (tamanho mínimo + `pg_restore --list`) e falha de verdade.
+
+> **Pendência:** os dumps ficam na mesma VPS do banco. Falta cópia off-site.
 
 ---
+
 
 ## Deploy
 
@@ -32,7 +119,8 @@ Os três escutam **só em `127.0.0.1`** — quem fala com eles é o Nginx, na me
 > **Nomes com prefixo `artenojardim-`**: o outro projeto já usa `api`, `web` e `ai-service`
 > no PM2. Um `pm2 restart api` distraído derrubaria a produção alheia.
 >
-> **Porta 3000 é do `rag_sefaz/web`.** Não use.
+> **Porta 3000 é do placeadmin** nesta VPS (era do `rag_sefaz` na antiga). Não use.
+> Veja o mapa de portas no topo deste documento.
 
 ### Armadilhas que custaram tempo (não repita)
 
@@ -50,7 +138,11 @@ inteiro. O global tem `gzip on` com todos os `gzip_types` **comentados** (só co
 declarar os tipos no `http` consertaria isso para o outro projeto também — daí a repetição
 por `server`.
 
-**`http2 on;` não existe no nginx 1.18** (veio no 1.25.1). Aqui é `listen 443 ssl http2;`.
+**HTTP/2 — atenção, a regra INVERTEU na VPS nova.** Na antiga (nginx 1.18) era
+`listen 443 ssl http2;`. Aqui (1.26) o parâmetro `http2` no `listen` liga o HTTP/2 **no
+socket** — ou seja, em TODOS os sites da 443, inclusive os do placeadmin, que rodam
+HTTP/1.1. O vhost usa `listen 443 ssl;` **sem `http2`**, e sem `http2 on;` também.
+Mudar a versão do protocolo da produção alheia não é efeito colateral que se cause de passagem.
 
 > Nas três vezes em que a config quebrou, o `nginx -t` pegou **antes** do reload e o script
 > reverteu sozinho. Os sites do outro projeto nunca saíram do ar. **Sempre valide antes de
@@ -244,7 +336,9 @@ user    artenojardim        senha aleatória, permissões só nos dois vhosts ac
   `/etc/rabbitmq/rabbitmq.conf`). O default é `0.0.0.0`, e depender só do UFW seria uma camada
   única — a mesma razão pela qual a 5432 foi fechada na auditoria de 16/07. **Não abra 5672
   nem 15672 no UFW**; o painel vai por túnel SSH:
-  `plink -i chave.ppk -L 15672:127.0.0.1:15672 root@23.29.114.96` → `http://localhost:15672`.
+  `plink -i C:\Users\2cta\.ssh\ed_25519-hostinger.ppk -L 15672:127.0.0.1:15672 root@179.199.150.80`
+  → `http://localhost:15672`. **O RabbitMQ é compartilhado:** nosso vhost é `artenojardim`;
+  o vhost `/` é do placeadmin.
 - **`vm_memory_high_watermark.relative = 0.2`** e não o default de 0.4. Com 3.9 GB, o default
   deixaria o broker se achar dono de 1.6 GB numa VPS compartilhada.
 - **O usuário `guest` foi removido.** Ele entra sem senha pelo loopback e teria acesso a tudo.

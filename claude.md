@@ -29,9 +29,11 @@ O que **não** pode esquecer:
 
 - **Apps Next (`store`/`admin`) precisam de `pm2 restart`, não `reload`.** `next start` lê o
   `.next` uma vez no boot; `reload` serve o build antigo (rota nova dá 404). A **API** (Express) pode `reload`.
-- A VPS é **compartilhada** com outro projeto (`rag_sefaz` + apps `api`/`web`/`ai-service` no
-  PM2). Nossos processos têm prefixo `artenojardim-`. Nunca toque nos deles nem no banco `rag_sefaz`.
-- SSH por `plink -i C:\Users\2cta\Documents\placeadmin_vps.ppk root@23.29.114.96`. Scripts longos
+- A VPS é **compartilhada** com o **placeadmin** (producao critica) e o **financee**. Cada app tem
+  usuario, PM2 e banco proprios. Nossos processos tem prefixo `artenojardim-` e rodam no PM2 do
+  usuario `artenojardim`. Nunca toque nos deles. **A API escuta na 4020, nao na 4000 — 4000 e o Grafana.**
+- SSH por `plink -i C:\Users\2cta\.ssh\ed_25519-hostinger.ppk root@179.199.150.80`. Como root; os
+  comandos da aplicacao vao pelo atalho `aj` (roda como o usuario `artenojardim`). Scripts longos
   vão base64 (`echo <b64> | base64 -d | bash`) para o PowerShell não mastigar as aspas.
 
 ## Estado atual do projeto (onde olhar num contexto novo)
