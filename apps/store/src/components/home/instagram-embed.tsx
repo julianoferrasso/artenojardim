@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Script from 'next/script'
 import { Camera } from 'lucide-react'
+import { INSTAGRAM_PROFILE } from '@/components/brand-icons'
 import { ExpandableCaption } from '@/components/home/expandable-caption'
 import { cn } from '@/lib/utils'
 
@@ -77,16 +78,33 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
     quote.appendChild(link)
     host.replaceChildren(quote)
 
-    // Montado = o blockquote SAIU. O embed.js insere o iframe ao lado dele com
-    // altura 0 e só remove o blockquote quando o iframe avisa MOUNTED (conteúdo
-    // pronto, altura medida). Antes disso, trocar o placeholder deixaria um buraco.
+    // O embed.js insere o iframe com altura 0. A ordem medida no Chrome é MEASURE
+    // (altura real no iframe) e, logo depois, MOUNTED, que remove o blockquote e
+    // SOBRESCREVE a altura com `blockquote.clientHeight`. O nosso só tem o link
+    // (~18px), e outro MEASURE não é garantido: o post virava uma tira. Por isso a
+    // medida é guardada e devolvida, e só se revela com ela no iframe.
+    let measured: string | null = null
+    let afterMount = false
     const watcher = new MutationObserver(() => {
-      if (host.querySelector('iframe') && !host.querySelector('blockquote')) {
-        setMounted(true)
-        watcher.disconnect()
+      const frame = host.querySelector('iframe')
+      if (!frame) return
+      const height = frame.getAttribute('height')
+      if (host.querySelector('blockquote')) {
+        if (height !== '0') measured = height
+        return
       }
+      // A remoção e a altura do MOUNTED saem do mesmo handler: o primeiro
+      // callback sem blockquote é sempre o dele. Sem medida ainda, quem chama
+      // de novo é o próximo MEASURE.
+      if (!afterMount) {
+        afterMount = true
+        if (measured) frame.setAttribute('height', measured)
+        return
+      }
+      setMounted(true)
+      watcher.disconnect()
     })
-    watcher.observe(host, { childList: true, subtree: true })
+    watcher.observe(host, { childList: true, subtree: true, attributes: true, attributeFilter: ['height'] })
     window.instgrm?.Embeds.process()
 
     return () => watcher.disconnect()
@@ -101,32 +119,52 @@ export const InstagramEmbed = ({ shortcode, captioned, imageUrl, caption }: Prop
       )}
 
       {/* Link e não div: se o embed nunca montar (bloqueador de rastreio, conta
-          com Incorporações desligada), a foto continua levando ao post. */}
+          com Incorporações desligada), a foto continua levando ao post.
+          A geometria espelha o cartão do iframe (máx. 540px, cabeçalho, foto
+          quadrada, rodapé de ações) para a troca não empurrar a página. A foto
+          é quadrada porque a og:image que o Instagram entrega já vem cortada
+          em 1:1: num 4:5 ela era cortada de novo e parecia ampliada. */}
       {!mounted && (
         <a
           href={`https://www.instagram.com/p/${shortcode}/`}
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Ver este post no Instagram"
-          className="relative block aspect-4/5 overflow-hidden rounded-xl bg-secondary"
+          className="block max-w-135 overflow-hidden rounded-sm border border-border bg-card"
         >
-          {imageUrl ? (
-            <Image
-              src={imageUrl}
-              alt={caption ?? ''}
-              fill
-              sizes="(max-width: 640px) 100vw, 33vw"
-              className="object-cover"
-            />
-          ) : (
-            <span aria-hidden className="flex size-full items-center justify-center">
-              <Camera className="size-8 text-primary-ink/50" strokeWidth={1.2} />
+          <span className="flex h-14 items-center gap-2.5 px-3">
+            <span aria-hidden className="size-8 shrink-0 rounded-full bg-muted" />
+            <span className="truncate text-sm font-semibold text-card-foreground">
+              {INSTAGRAM_PROFILE.handle.replace(/^@/, '')}
             </span>
-          )}
+          </span>
+          <span className="relative block aspect-square bg-secondary">
+            {imageUrl ? (
+              <Image
+                src={imageUrl}
+                alt={caption ?? ''}
+                fill
+                sizes="(max-width: 640px) 100vw, 33vw"
+                className="object-cover"
+              />
+            ) : (
+              <span aria-hidden className="flex size-full items-center justify-center">
+                <Camera className="size-8 text-primary-ink/50" strokeWidth={1.2} />
+              </span>
+            )}
+          </span>
+          <span aria-hidden className="flex h-38 flex-col justify-center gap-3 px-3">
+            <span className="h-3 w-32 rounded-sm bg-muted" />
+            <span className="h-3 w-20 rounded-sm bg-muted" />
+            <span className="h-3 w-40 rounded-sm bg-muted" />
+          </span>
         </a>
       )}
 
-      <div ref={hostRef} className={cn(!mounted && 'invisible absolute inset-x-0 top-0')} />
+      <div
+        ref={hostRef}
+        className={cn(mounted ? 'animate-in fade-in duration-300' : 'invisible absolute inset-x-0 top-0')}
+      />
 
       {captioned && caption && <ExpandableCaption text={caption} />}
     </div>
