@@ -8,7 +8,7 @@ import { requestContext } from './middlewares/request-context.js'
 import { errorHandler, notFoundHandler } from './middlewares/error-handler.js'
 import { globalLimiter } from './middlewares/rate-limit.js'
 import { apiRoutes, API_PREFIX } from './routes.js'
-import { stripeWebhookRoutes } from './modules/webhooks/routes.js'
+import { stripeWebhookRoutes, mercadoPagoWebhookRoutes } from './modules/webhooks/routes.js'
 
 export const createApp = (): Express => {
   const app = express()
@@ -38,6 +38,9 @@ export const createApp = (): Express => {
   // confere e todo webhook falha. Também fica FORA do prefixo com rate-limit: o
   // Stripe não pode ser barrado por cota.
   app.use(ROUTES.webhooks.stripe, express.raw({ type: 'application/json' }), stripeWebhookRoutes)
+  // O Mercado Pago assina query + headers, não o corpo: JSON comum serve. O
+  // parser é o da própria rota porque o global só roda depois deste bloco.
+  app.use(ROUTES.webhooks.mercadopago, express.json({ limit: '100kb' }), mercadoPagoWebhookRoutes)
 
   app.use(express.json({ limit: '1mb' }))
   app.use(express.urlencoded({ extended: true, limit: '1mb' }))

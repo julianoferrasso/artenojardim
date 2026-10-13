@@ -1,37 +1,47 @@
 'use client'
 
-import { use, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Elements } from '@stripe/react-stripe-js'
-import type { Order, OrderPayment } from '@ecommerce/shared/contracts'
+import type { CustomerOrder, OrderPayment } from '@ecommerce/shared/contracts'
 import { PAYMENT_STATUS_LABEL as PAYMENT_LABEL } from '@ecommerce/shared/constants'
 import { useAuth } from '@/lib/auth'
+import { ApiError } from '@/lib/api'
 import { getOrder, getOrderPayment, getOrderStatus } from '@/lib/checkout'
-import { getStripePromise } from '@/lib/stripe'
 import { OrderItemList, OrderDeliveryCard, OrderTotals } from '@/components/order-summary'
-import { PaymentForm } from './payment-form'
+import { StripePayment } from './stripe-payment'
+import { MercadoPagoPayment } from './mercadopago-payment'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 /**
  * Tela do pedido — o FUNIL DE PAGAMENTO, não um recibo. O pedido nasce PENDING
- * (Fase 1.11) e é aqui que ele é pago: renderiza o Payment Element, e depois do
- * confirmPayment o Stripe redireciona de volta para cá. O polling do status
- * espera o webhook confirmar (PENDING→PAID); a tela nunca decide o pagamento.
+ * (Fase 1.11) e é aqui que ele é pago, pelo provedor ativo na API: Mercado Pago
+ * (Pix + cartão, o padrão) ou Stripe (standby). A tela nunca decide o pagamento:
+ * o cartão aprovado volta PAID da própria API; Pix e análises esperam o webhook,
+ * observado por polling do status.
  *
  * O histórico do pedido vive em /conta/pedidos/[id]. Esta tela morre quando o
  * pagamento termina; aquela é para sempre.
  */
 
-type Phase = 'loading' | 'pay' | 'confirming' | 'paid' | 'failed' | 'timeout' | 'notfound'
+type Phase =
+  | 'loading'
+  | 'pay'
+  | 'confirming'
+  | 'paid'
+  | 'failed'
+  | 'timeout'
+  | 'canceled'
+  | 'unavailable'
+  | 'notfound'
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const { customer, loading: authLoading } = useAuth()
   const router = useRouter()
 
-  const [order, setOrder] = useState<Order | null>(null)
+  const [order, setOrder] = useState<CustomerOrder | null>(null)
   const [payment, setPayment] = useState<OrderPayment | null>(null)
   const [phase, setPhase] = useState<Phase>('loading')
   const startedPolling = useRef(false)
@@ -46,7 +56,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     let cancelled = false
 
     void (async () => {
-      let ord: Order
+      let ord: CustomerOrder
       try {
         ord = await getOrder(id)
       } catch {
@@ -60,23 +70,28 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         setPhase('paid')
         return
       }
+      if (ord.canceledAt) {
+        setPhase('canceled')
+        return
+      }
 
-      // Voltando do redirect do Stripe (cartão/3DS/Pix) OU pagamento em
-      // processamento: não renderiza o Element de novo, só aguarda o webhook.
-      const returning = /payment_intent=|redirect_status=/.test(window.location.search)
-      if (returning || ord.paymentStatus === 'PROCESSING') {
+      // Voltando do redirect do Stripe (cartão/3DS): não renderiza o Element de
+      // novo, só aguarda o webhook.
+      if (/payment_intent=|redirect_status=/.test(window.location.search)) {
         setPhase('confirming')
         return
       }
 
-      // Ainda a pagar: cria/reusa o PaymentIntent e mostra o Payment Element.
       try {
         const pay = await getOrderPayment(id)
         if (cancelled) return
         setPayment(pay)
-        setPhase('pay')
-      } catch {
-        if (!cancelled) setPhase('timeout') // pagamento indisponível agora
+        // Cartão em análise no MP: não oferece outro pagamento, espera o veredito.
+        setPhase(pay.provider === 'MERCADO_PAGO' && pay.cardPending ? 'confirming' : 'pay')
+      } catch (err) {
+        if (cancelled) return
+        if (err instanceof ApiError && err.code === 'ORDER_NOT_PAYABLE') setPhase('canceled')
+        else setPhase('unavailable')
       }
     })()
 
@@ -85,7 +100,14 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     }
   }, [customer, id])
 
-  // Polling do status enquanto confirma (a verdade vem do webhook).
+  const markPaid = useCallback(() => {
+    setOrder((o) => (o ? { ...o, paymentStatus: 'PAID' } : o))
+    setPhase('paid')
+  }, [])
+
+  const waitConfirmation = useCallback(() => setPhase('confirming'), [])
+
+  // Polling do status enquanto confirma (cartão em análise, retorno do Stripe).
   useEffect(() => {
     if (phase !== 'confirming' || startedPolling.current) return
     startedPolling.current = true
@@ -97,8 +119,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           const s = await getOrderStatus(id)
           if (cancelled) return
           if (s.paymentStatus === 'PAID') {
-            setOrder((o) => (o ? { ...o, paymentStatus: 'PAID' } : o))
-            setPhase('paid')
+            markPaid()
             return
           }
           if (s.paymentStatus === 'FAILED') {
@@ -116,7 +137,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     return () => {
       cancelled = true
     }
-  }, [phase, id])
+  }, [phase, id, markPaid])
 
   if (authLoading || phase === 'loading') {
     return <main className="mx-auto max-w-2xl px-4 py-12 text-center text-muted-foreground">Carregando…</main>
@@ -146,27 +167,31 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           {paid ? `Pedido #${order.number} confirmado` : `Pedido #${order.number}`}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {PAYMENT_LABEL[paid ? 'PAID' : order.paymentStatus]}
+          {phase === 'canceled' ? 'Pedido cancelado' : PAYMENT_LABEL[paid ? 'PAID' : order.paymentStatus]}
         </p>
       </div>
 
       {/* Bloco de pagamento — o miolo do funil. */}
-      {phase === 'pay' && payment && payment.clientSecret && (
+      {phase === 'pay' && payment && (
         <section className="mb-4 rounded-xl border border-border bg-card p-5 shadow-soft">
           <h2 className="mb-4 font-medium">Pagamento</h2>
-          <Elements
-            stripe={getStripePromise(payment.publishableKey)}
-            options={{ clientSecret: payment.clientSecret, appearance: { theme: 'stripe' } }}
-          >
-            <PaymentForm returnUrl={returnUrl} />
-          </Elements>
+          {payment.provider === 'MERCADO_PAGO' ? (
+            <MercadoPagoPayment
+              orderId={id}
+              payment={payment}
+              onPaid={markPaid}
+              onProcessing={waitConfirmation}
+            />
+          ) : (
+            payment.clientSecret && <StripePayment payment={payment} returnUrl={returnUrl} />
+          )}
         </section>
       )}
 
       {phase === 'confirming' && (
         <section className="mb-4 rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
           <p className="animate-pulse">Confirmando seu pagamento…</p>
-          <p className="mt-1">Se você pagou via Pix, a confirmação chega em instantes.</p>
+          <p className="mt-1">Isso costuma levar poucos segundos. Você pode deixar esta página aberta.</p>
         </section>
       )}
 
@@ -178,7 +203,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               startedPolling.current = false
               setPhase('loading')
               router.replace(`/checkout/pedido/${id}`)
-              // Recarrega para reabrir o Payment Element com um novo intento.
+              // Recarrega para reabrir o pagamento do zero.
               setTimeout(() => window.location.reload(), 0)
             }}
             className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'mt-3')}
@@ -192,6 +217,19 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
         <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
           Ainda não recebemos a confirmação do pagamento. Assim que ele for aprovado, seu pedido
           será atualizado — você pode recarregar esta página para verificar.
+        </section>
+      )}
+
+      {phase === 'unavailable' && (
+        <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
+          O pagamento está indisponível no momento. Tente de novo em alguns minutos — seu pedido
+          continua reservado por enquanto.
+        </section>
+      )}
+
+      {phase === 'canceled' && (
+        <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
+          Este pedido foi cancelado e não pode mais ser pago.
         </section>
       )}
 

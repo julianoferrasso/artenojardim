@@ -1,7 +1,16 @@
 'use client'
 
 import { ROUTES } from '@ecommerce/shared/constants'
-import type { ConfirmCheckoutInput, Order, OrderPayment, OrderStatus } from '@ecommerce/shared/contracts'
+import type {
+  CardPaymentResult,
+  ConfirmCheckoutInput,
+  CreateCardPaymentInput,
+  CustomerOrder,
+  Order,
+  OrderPayment,
+  OrderStatus,
+  PixCharge,
+} from '@ecommerce/shared/contracts'
 import { clientFetch as call } from './client'
 
 /**
@@ -16,12 +25,23 @@ import { clientFetch as call } from './client'
 export const confirmCheckout = (input: ConfirmCheckoutInput): Promise<Order> =>
   call<Order>(ROUTES.checkout.confirm, { method: 'POST', body: JSON.stringify(input) })
 
-export const getOrder = (id: string): Promise<Order> => call<Order>(ROUTES.orders.detail(id))
+export const getOrder = (id: string): Promise<CustomerOrder> => call<CustomerOrder>(ROUTES.orders.detail(id))
 
-/** Cria/reusa o PaymentIntent do pedido e devolve clientSecret + publishable. */
+/**
+ * O que a tela de pagamento precisa, conforme o provedor ativo na API. No Stripe
+ * isto cria/reusa o PaymentIntent; no Mercado Pago só lê (nada é cobrado ao abrir).
+ */
 export const getOrderPayment = (id: string): Promise<OrderPayment> =>
   call<OrderPayment>(ROUTES.orders.payment(id))
 
-/** Status enxuto para o polling da tela de pagamento (a verdade é o webhook). */
+/** Gera o Pix — ou devolve o que ainda está em aberto. */
+export const createPixPayment = (id: string): Promise<PixCharge> =>
+  call<PixCharge>(ROUTES.orders.paymentPix(id), { method: 'POST' })
+
+/** Recusa vem como ApiError PAYMENT_DECLINED, com o motivo em details. */
+export const createCardPayment = (id: string, input: CreateCardPaymentInput): Promise<CardPaymentResult> =>
+  call<CardPaymentResult>(ROUTES.orders.paymentCard(id), { method: 'POST', body: JSON.stringify(input) })
+
+/** Status enxuto para o polling da tela de pagamento. */
 export const getOrderStatus = (id: string): Promise<OrderStatus> =>
   call<OrderStatus>(ROUTES.orders.status(id))

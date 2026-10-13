@@ -234,6 +234,18 @@ export const orderCancelLimiter = build({
   keyBy: byCustomer,
 })
 
+/**
+ * Gerar Pix e cobrar cartão. O teto existe contra o teste de cartões roubados —
+ * um bot usando o nosso checkout para descobrir quais cartões passam — e contra
+ * gerar cobranças em série. 15/h cobre com folga quem erra o cartão algumas vezes.
+ */
+export const paymentAttemptLimiter = build({
+  name: 'payment-attempt',
+  windowMs: 60 * 60_000,
+  max: 15,
+  keyBy: byCustomer,
+})
+
 /** Comprar de novo escreve no carrinho e lê estoque item a item. */
 export const orderReorderLimiter = build({
   name: 'order-reorder',

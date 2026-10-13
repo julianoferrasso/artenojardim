@@ -50,6 +50,10 @@ export const PAYMENT_METHODS = ['CARD', 'PIX', 'BOLETO'] as const
 export const paymentMethodSchema = z.enum(PAYMENT_METHODS)
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>
 
+export const PAYMENT_PROVIDERS = ['STRIPE', 'MERCADO_PAGO'] as const
+export const paymentProviderSchema = z.enum(PAYMENT_PROVIDERS)
+export type PaymentProvider = z.infer<typeof paymentProviderSchema>
+
 /**
  * Movimento de estoque. Sinal fica em `quantity`, não no tipo.
  * Reserva NÃO está aqui: reserva é intenção, movimento é fato físico.

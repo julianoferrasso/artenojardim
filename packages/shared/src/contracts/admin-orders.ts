@@ -3,6 +3,7 @@ import {
   paymentStatusSchema,
   fulfillmentStatusSchema,
   paymentMethodSchema,
+  paymentProviderSchema,
 } from '../constants/enums.js'
 import { EVENTS } from '../constants/events.js'
 import { moneySchema } from './common.js'
@@ -66,13 +67,16 @@ export const orderEventSchema = z.object({
 export type OrderEvent = z.infer<typeof orderEventSchema>
 
 /**
- * `dashboardUrl` é montada na API: só ela sabe se a chave é de teste ou live, e
- * o caminho do dashboard do Stripe muda entre os dois.
+ * `externalId` é o id no provedor (PaymentIntent do Stripe ou order do Mercado
+ * Pago) — o que o suporte procura no painel de lá. `dashboardUrl` é montada na
+ * API: só ela sabe se a chave do Stripe é de teste ou live; no Mercado Pago não
+ * há link direto estável, e vem null. `statusDetail` é o motivo cru da recusa.
  */
 export const orderPaymentDetailSchema = z.object({
   id: z.string(),
-  stripePaymentIntentId: z.string(),
-  stripeChargeId: z.string().nullable(),
+  provider: paymentProviderSchema,
+  externalId: z.string().nullable(),
+  statusDetail: z.string().nullable(),
   status: paymentStatusSchema,
   method: paymentMethodSchema.nullable(),
   amount: moneySchema,
@@ -156,9 +160,10 @@ export const adminOrderListQuerySchema = z.object({
 export type AdminOrderListQuery = z.infer<typeof adminOrderListQuerySchema>
 
 /**
- * NÃO existe `paymentStatus` aqui, e é deliberado: só o webhook do Stripe muda
- * pagamento (regra 6). Um campo opcional neste schema viraria, em algum
- * momento, um botão "marcar como pago" e a contabilidade deixaria de fechar.
+ * NÃO existe `paymentStatus` aqui, e é deliberado: só o estado que o provedor
+ * confirma ao servidor muda pagamento (regra 6). Um campo opcional neste schema
+ * viraria, em algum momento, um botão "marcar como pago" e a contabilidade
+ * deixaria de fechar.
  */
 export const updateFulfillmentSchema = z.object({
   fulfillmentStatus: fulfillmentStatusSchema,

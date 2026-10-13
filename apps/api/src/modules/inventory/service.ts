@@ -225,6 +225,22 @@ export const settleOrderReservations = async (
 }
 
 /**
+ * Uma reserva precisa sobreviver à cobrança que ela garante: o Pix gerado aos 50
+ * minutos de uma reserva de 60 venceria depois dela, e um pagamento chegando no
+ * fim estaria pagando estoque que a expiração já liberou. Só ESTENDE — uma
+ * reserva com prazo maior fica como está.
+ */
+export const extendOrderReservations = async (
+  orderId: string,
+  until: Date,
+): Promise<void> => {
+  await prisma.inventoryReservation.updateMany({
+    where: { orderId, releasedAt: null, expiresAt: { lt: until } },
+    data: { expiresAt: until },
+  })
+}
+
+/**
  * Cancelamento de pedido NÃO pago: as reservas morrem sem virar fato. Só
  * `reserved` diminui — nenhum movimento, porque nada saiu da prateleira.
  *

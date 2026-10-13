@@ -25,6 +25,10 @@ import { audit, type AuditContext } from '../../shared/audit.js'
 import { createRefund } from '../../integrations/stripe/index.js'
 import { releaseOrderReservations, restockCanceledOrder } from '../inventory/service.js'
 import {
+  cancelPendingMercadoPagoPayments,
+  refundMercadoPagoPayment,
+} from '../payments/service.js'
+import {
   ADMIN_LIST_SELECT,
   ADMIN_ORDER_SELECT,
   toAdminListItem,
@@ -38,9 +42,10 @@ import {
  * reembolsar e anotar.
  *
  * O que este módulo NÃO faz, e é o ponto: escrever `paymentStatus`. Nenhuma
- * função aqui toca nesse campo. Pagar é fato do Stripe, registrado pelo webhook
- * (regra 6). O reembolso é a exceção aparente — mas mesmo ele só PEDE ao Stripe;
- * quem grava o status é o `charge.refunded`.
+ * função aqui toca nesse campo. Pagar é fato do provedor, registrado pelo estado
+ * que ele confirma ao servidor (regra 6). O reembolso é a exceção aparente — mas
+ * mesmo ele só PEDE ao provedor; quem grava o status é o pagamento: o webhook
+ * `charge.refunded` no Stripe, a order devolvida pelo Mercado Pago no MP.
  */
 
 const FULFILLMENT_EVENT: Record<$Enums.FulfillmentStatus, string> = {
@@ -307,6 +312,10 @@ export const cancelOrderInternal = async (
       },
     })
   })
+
+  // Fora da transação (é chamada externa) e depois do commit: o Pix em aberto
+  // no Mercado Pago continuaria pagável para um pedido que não existe mais.
+  if (!wasPaid) await cancelPendingMercadoPagoPayments(id)
 }
 
 export const cancelOrder = async (
@@ -331,11 +340,12 @@ export const cancelOrder = async (
 // ── Reembolso ────────────────────────────────────────────────────────────────
 
 /**
- * Pede o reembolso ao Stripe e registra o PEDIDO na timeline — nada mais. O
- * status do pagamento (REFUNDED/PARTIALLY_REFUNDED) e o `refundedAmount` são
- * escritos pelo webhook `charge.refunded`, quando o dinheiro efetivamente sai.
+ * Pede o reembolso ao provedor do pagamento e registra o PEDIDO na timeline. O
+ * status do pagamento (REFUNDED/PARTIALLY_REFUNDED) e o `refundedAmount` vêm do
+ * provedor: no Stripe, pelo webhook `charge.refunded`; no Mercado Pago, pela
+ * order que ele devolve já reembolsada (e o webhook confirma).
  *
- * Gravar aqui seria mais rápido e estaria errado na hora em que o Stripe
+ * Gravar aqui por conta própria estaria errado na hora em que o provedor
  * recusasse: o pedido diria "reembolsado" com o dinheiro ainda no caixa.
  */
 export const refundOrder = async (
@@ -362,21 +372,40 @@ export const refundOrder = async (
     )
   }
 
-  const refund = await createRefund({
-    paymentIntentId: payment.stripePaymentIntentId,
-    amountCents: amount,
-    reason: input.reason,
-    // Inclui o já reembolsado: dois parciais iguais e legítimos precisam ser
-    // dois refunds, mas um clique duplo no mesmo estado precisa ser um só.
-    idempotencyKey: `refund_${id}_${payment.refundedAmount}_${amount}`,
-  })
+  // Inclui o já reembolsado: dois parciais iguais e legítimos precisam ser dois
+  // reembolsos, mas um clique duplo no mesmo estado precisa ser um só.
+  const idempotencyKey = `refund_${id}_${payment.refundedAmount}_${amount}`
+
+  let providerLabel: string
+  let refundMeta: Record<string, unknown>
+  if (payment.provider === 'MERCADO_PAGO') {
+    if (!payment.mpOrderId) throw conflict('Pagamento sem order do Mercado Pago para reembolsar.')
+    // Sem valor = "todo o saldo": o MP calcula o restante, sem arredondar do nosso lado.
+    await refundMercadoPagoPayment(
+      { mpOrderId: payment.mpOrderId, mpPaymentId: payment.mpPaymentId },
+      amount === refundable ? undefined : amount,
+      idempotencyKey,
+    )
+    providerLabel = 'Mercado Pago'
+    refundMeta = { mpOrderId: payment.mpOrderId }
+  } else {
+    if (!payment.stripePaymentIntentId) throw conflict('Pagamento sem PaymentIntent do Stripe para reembolsar.')
+    const refund = await createRefund({
+      paymentIntentId: payment.stripePaymentIntentId,
+      amountCents: amount,
+      reason: input.reason,
+      idempotencyKey,
+    })
+    providerLabel = 'Stripe'
+    refundMeta = { refundId: refund.id, status: refund.status }
+  }
 
   await prisma.orderEvent.create({
     data: {
       orderId: id,
       type: EVENTS.order.refundRequested,
-      description: `Reembolso de R$ ${(amount / 100).toFixed(2)} solicitado ao Stripe`,
-      metadataJson: { refundId: refund.id, amount, reason: input.reason, status: refund.status },
+      description: `Reembolso de R$ ${(amount / 100).toFixed(2)} solicitado ao ${providerLabel}`,
+      metadataJson: { ...refundMeta, amount, reason: input.reason },
       userId: ctx.userId ?? null,
     },
   })
@@ -389,7 +418,7 @@ export const refundOrder = async (
     context: ctx,
   })
 
-  logger.info({ orderId: id, refundId: refund.id, amount }, 'reembolso solicitado ao Stripe')
+  logger.info({ orderId: id, amount, provider: payment.provider, ...refundMeta }, 'reembolso solicitado')
 
   return reload(id)
 }

@@ -3,6 +3,7 @@ import {
   customerOrderListQuerySchema,
   customerCancelSchema,
   supportMessageSchema,
+  createCardPaymentSchema,
 } from '@ecommerce/shared/contracts'
 import { authenticateCustomer } from '../../middlewares/authenticate.js'
 import { validate } from '../../middlewares/validate.js'
@@ -10,6 +11,7 @@ import {
   orderCancelLimiter,
   orderSupportLimiter,
   orderReorderLimiter,
+  paymentAttemptLimiter,
 } from '../../middlewares/rate-limit.js'
 import * as controller from './controller.js'
 
@@ -30,6 +32,13 @@ orderRoutes.get('/', validate({ query: customerOrderListQuerySchema }), controll
 orderRoutes.get('/:id', controller.detailController)
 orderRoutes.get('/:id/status', controller.statusController)
 orderRoutes.get('/:id/payment', controller.paymentController)
+orderRoutes.post('/:id/payment/pix', paymentAttemptLimiter, controller.pixPaymentController)
+orderRoutes.post(
+  '/:id/payment/card',
+  paymentAttemptLimiter,
+  validate({ body: createCardPaymentSchema }),
+  controller.cardPaymentController,
+)
 
 orderRoutes.post(
   '/:id/cancel',

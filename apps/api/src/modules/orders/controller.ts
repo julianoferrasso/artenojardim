@@ -3,6 +3,7 @@ import type {
   CustomerOrderListQuery,
   CustomerCancelInput,
   SupportMessageInput,
+  CreateCardPaymentInput,
 } from '@ecommerce/shared/contracts'
 import { ok, paginated } from '../../shared/http.js'
 import * as service from './service.js'
@@ -22,14 +23,29 @@ export const detailController = async (req: Request, res: Response): Promise<voi
   ok(res, await service.getOrder(customerId(req), orderId(req)))
 }
 
-/** Polling da tela de confirmação (Pix/boleto na Fase 1.12). */
+/** Polling da tela de pagamento (Pix, cartão em análise). */
 export const statusController = async (req: Request, res: Response): Promise<void> => {
   ok(res, await service.getOrderStatus(customerId(req), orderId(req)))
 }
 
-/** Cria/reusa o PaymentIntent do pedido e devolve o clientSecret (Payment Element). */
+/** O que a tela de pagamento precisa, conforme o provedor ativo. */
 export const paymentController = async (req: Request, res: Response): Promise<void> => {
-  ok(res, await paymentsService.ensureOrderPayment(customerId(req), orderId(req)))
+  ok(res, await paymentsService.getOrderPayment(customerId(req), orderId(req)))
+}
+
+export const pixPaymentController = async (req: Request, res: Response): Promise<void> => {
+  ok(res, await paymentsService.createPixPayment(customerId(req), orderId(req)))
+}
+
+export const cardPaymentController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await paymentsService.createCardPayment(
+      customerId(req),
+      orderId(req),
+      req.body as CreateCardPaymentInput,
+    ),
+  )
 }
 
 /** Cancela de verdade ou registra a solicitação — o service decide qual. */

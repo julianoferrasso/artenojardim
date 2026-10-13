@@ -40,7 +40,8 @@ import { ApiError } from '@/lib/api'
  * servidor rejeitaria seria pior que ausente: o operador clica, vê erro e não
  * entende por quê.
  *
- * Não existe "marcar como pago": pagamento é escrito só pelo webhook do Stripe.
+ * Não existe "marcar como pago": pagamento é escrito só pelo estado que o
+ * provedor (Mercado Pago ou Stripe) confirma ao servidor.
  */
 export const OrderActions = ({ order }: { order: AdminOrder }) => {
   const [cancelOpen, setCancelOpen] = useState(false)
@@ -271,8 +272,8 @@ export const OrderActions = ({ order }: { order: AdminOrder }) => {
           <AlertDialogHeader>
             <AlertDialogTitle>Reembolsar o pedido #{order.number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Disponível para reembolso: {formatBRL(order.refundableAmount)}. O valor é enviado ao
-              Stripe agora; o status muda quando o Stripe confirmar.
+              Disponível para reembolso: {formatBRL(order.refundableAmount)}. O pedido de
+              estorno vai ao provedor do pagamento agora; o status muda quando ele confirmar.
             </AlertDialogDescription>
           </AlertDialogHeader>
 

@@ -209,6 +209,13 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
           </section>
 
           <div className="flex flex-col gap-2">
+            {/* Quem fechou a aba do Pix volta por aqui: o pagamento continua na tela do pedido. */}
+            {order.situation === 'AWAITING_PAYMENT' && (
+              <Link href={`/checkout/pedido/${order.id}`} className={cn(buttonVariants({ size: 'sm' }), 'w-full')}>
+                Pagar agora
+              </Link>
+            )}
+
             {reorderable && (
               <button
                 type="button"

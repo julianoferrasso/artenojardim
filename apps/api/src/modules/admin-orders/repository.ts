@@ -84,8 +84,11 @@ export const ADMIN_ORDER_SELECT = {
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
+      provider: true,
       stripePaymentIntentId: true,
-      stripeChargeId: true,
+      mpOrderId: true,
+      mpPaymentId: true,
+      statusDetail: true,
       status: true,
       method: true,
       amount: true,
@@ -117,7 +120,7 @@ export type DtoContext = {
    * funcionário que saiu). O nome vem de uma segunda query, no service.
    */
   userNames: Map<string, string>
-  /** Base do dashboard do Stripe já resolvida entre test e live. */
+  /** Base do dashboard do Stripe já resolvida entre test e live. Só vale para linhas do Stripe. */
   dashboardBase: string | null
 }
 
@@ -134,8 +137,9 @@ const toPaymentDTO = (
   dashboardBase: string | null,
 ): OrderPaymentDetail => ({
   id: p.id,
-  stripePaymentIntentId: p.stripePaymentIntentId,
-  stripeChargeId: p.stripeChargeId,
+  provider: p.provider,
+  externalId: p.provider === 'STRIPE' ? p.stripePaymentIntentId : p.mpOrderId,
+  statusDetail: p.statusDetail,
   status: p.status,
   method: p.method,
   amount: p.amount,
@@ -144,7 +148,10 @@ const toPaymentDTO = (
   paidAt: p.paidAt?.toISOString() ?? null,
   refundedAt: p.refundedAt?.toISOString() ?? null,
   createdAt: p.createdAt.toISOString(),
-  dashboardUrl: dashboardBase ? `${dashboardBase}/payments/${p.stripePaymentIntentId}` : null,
+  dashboardUrl:
+    p.provider === 'STRIPE' && dashboardBase && p.stripePaymentIntentId
+      ? `${dashboardBase}/payments/${p.stripePaymentIntentId}`
+      : null,
 })
 
 export const toAdminOrderDTO = (row: AdminOrderRow, ctx: DtoContext): AdminOrder => {

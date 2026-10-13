@@ -42,7 +42,9 @@ O que **não** pode esquecer:
   carregado automático) — ex.: frete Melhor Envio, checkout, dimensões provisórias das velas.
 - **O que aconteceu por último:** `git log --oneline -15`.
 - **Roadmap completo e decisões:** [docs/arquitetura.md](docs/arquitetura.md) (§21 Roadmap).
-- **Credenciais** (Stripe, Melhor Envio, DB) vivem em `apps/api/.env` — fora do git, nunca em log.
+- **Credenciais** (Mercado Pago, Stripe, Melhor Envio, DB) vivem em `apps/api/.env` — fora do git, nunca em log.
+- **Pagamentos:** Mercado Pago (Checkout Transparente, Orders API) é o provedor ativo; o Stripe está
+  em standby e volta com `PAYMENT_PROVIDER=stripe`. Detalhes em [docs/arquitetura.md](docs/arquitetura.md) §10.
 
 ## Stack
 
@@ -58,7 +60,9 @@ Ubuntu · Nginx · PM2 · Let's Encrypt. **Sem Docker. Sem Kubernetes.**
 3. **Toda query filtra por `storeId`.** Via `getActiveStoreId()`. É o que compra o multi-tenant da Fase 4.
 4. **Dinheiro é `Int` em centavos.** Nunca `Float`, nunca `Decimal`. Peso em gramas, dimensões em milímetros.
 5. **O front nunca decide valor.** Preço, frete, desconto e total são recalculados no backend, do banco.
-6. **Só o webhook do Stripe muda status de pagamento.**
+6. **Status de pagamento só muda pelo estado que o provedor confirma ao servidor** — webhook ou
+   resposta servidor-a-servidor — por uma função única (`applyMercadoPagoOrder` no MP; o handler de
+   webhook no Stripe). Nunca por dado vindo do front.
 7. **Estoque é ledger append-only.** Nunca `UPDATE` em `onHand`. Reserva **não** é movimento.
 8. **Nunca `nack(requeue: true)`.** Retry por TTL → DLQ.
 9. **Não publique evento sem consumidor.** Cadastrar produto não publica nada.
@@ -83,7 +87,7 @@ Um módulo importa o `service` de outro. **Nunca** o `repository` de outro.
 
 ## Fronteiras
 
-- **`integrations/`** — tudo que fala com serviço externo (Stripe, Melhor Envio, SMTP, storage, ViaCEP).
+- **`integrations/`** — tudo que fala com serviço externo (Mercado Pago, Stripe, Melhor Envio, SMTP, storage, ViaCEP).
   Sabe falar com o mundo lá fora, **não** sabe do nosso negócio. Traduz erro externo → `appError`.
   Um módulo **nunca** faz `fetch` para fora nem importa o SDK do Stripe direto.
 - **`modules/`** — sabe do negócio, **não** sabe como o mundo lá fora fala.

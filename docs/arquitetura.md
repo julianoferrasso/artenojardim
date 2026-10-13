@@ -16,7 +16,7 @@ Concretamente, aceitamos **três** coisas de "SaaS" desde já — a entidade `St
 
 | Tema | Decisão |
 |---|---|
-| Pagamentos | Cartão + Pix + Boleto, todos nativos do Stripe Brasil via Payment Element |
+| Pagamentos | Mercado Pago (Checkout Transparente, Orders API): Pix + cartão. Stripe em standby (`PAYMENT_PROVIDER`) — ver §10 |
 | Infraestrutura | Uma VPS Ubuntu com tudo: Nginx, PM2, Postgres, RabbitMQ |
 | Identidade | Tabelas separadas: `User` (staff/admin) e `Customer` (cliente da loja) |
 | Filas | RabbitMQ **apenas** para e-mail, etiqueta, rastreio e pós-pagamento — 4 filas |
@@ -851,7 +851,12 @@ Data, tipo, quantidade com sinal, saldo acumulado (`SUM() OVER (ORDER BY created
 
 ---
 
-## 10. Checkout — fluxo transparente com Stripe
+## 10. Checkout — fluxo transparente
+
+> **Provedor ativo: Mercado Pago** (desde 13/10/2026) — ver "Mercado Pago (Orders API)" no fim
+> desta seção. O fluxo Stripe descrito a seguir continua no código, em **standby**: volta com
+> `PAYMENT_PROVIDER=stripe` no `.env` da API + restart. A troca foi porque o Pix do Stripe não
+> estava disponível de cara no Brasil; o do Mercado Pago está.
 
 ```text
 1. CARRINHO      GET/POST /cart              valida disponibilidade
@@ -939,6 +944,54 @@ SLA diferente por método é a razão do TTL de reserva configurável.
 `jobs/reconcile-payments.ts`, a cada 15 min: busca pedidos `PENDING`/`PROCESSING` há mais de 1 hora e consulta a API do Stripe direto. Stripe diz `succeeded` e o banco diz `PENDING`? Um webhook se perdeu — o job aplica o mesmo caminho de processamento.
 
 ~30 linhas que cobrem o pior cenário do negócio (cliente pagou, sistema não viu) sem precisar de outbox transacional. **É o melhor retorno sobre esforço de todo o sistema.**
+
+### Mercado Pago (Orders API) — provedor ativo
+
+```text
+1-6. igual (carrinho → confirm: Order PENDING + reservas)
+7. PAGAMENTO   GET  /orders/:id/payment        public key + Pix em aberto (só lê, não cobra)
+               POST /orders/:id/payment/pix    cria a order Pix no MP (QR + copia-e-cola)
+               POST /orders/:id/payment/card   token do Card Payment Brick → order no MP
+8. ESTADO      applyMercadoPagoOrder(order)    ← A ÚNICA função que escreve status
+                 ↑ resposta da criação (cartão é síncrono), do cancelamento, do reembolso
+                 ↑ POST /webhooks/mercadopago  → relê GET /v1/orders/{id} → aplica
+9. PAGO        paymentStatus = PAID            SALE no ledger, publica order.paid
+```
+
+**Regra 6 no MP.** O cartão volta aprovado/recusado na própria chamada servidor→MP, então o
+estado devolvido ali é aplicado na hora — pela mesma função que o webhook usa. O webhook não
+carrega a verdade: é um "olhe de novo"; validada a assinatura, a order é **relida** no MP e
+aplicada. Por isso não há tabela de eventos: reentrega, duplicata e ordem trocada caem no mesmo
+estado relido, e as escritas são guardadas pelo status atual (`updateMany where status`).
+
+**Transições** (`payments/domain/mercadopago-transition.ts`, puro e testado): só para a frente.
+`processed/accredited` → PAID, **só se o valor pago ≥ o do pedido**; `failed`/`canceled`/`expired` →
+FAILED; `refunded` ou `processed/refunded` → REFUNDED; `processed/partially_refunded` →
+PARTIALLY_REFUNDED; `charged_back` não tem transição automática. FAILED e REFUNDED são finais.
+
+**Assinatura do webhook.** Manifest `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, HMAC-SHA256
+com a "assinatura secreta" do painel (`MP_WEBHOOK_SECRET`). O `data.id` vem da QUERY e entra em
+**minúsculas** (o SDK oficial não faz isso); par ausente sai do manifest. Responder em até 22 s.
+
+**Por que `fetch` e não o SDK `mercadopago`:** o SDK muta a config compartilhada a cada chamada (o
+`X-Idempotency-Key` vaza entre chamadas) e descarta o corpo do 402 — que é como o MP devolve um
+cartão recusado, **com a order criada dentro de `data`**.
+
+**Idempotência.** Pix: `pix-<pedido>-<nº da tentativa>` (clique duplo cai na mesma order) e reusa
+o Pix em aberto que ainda não vai vencer. Cartão: `card-<pedido>-<sha256(token)>` (o token é de
+uso único). `mpOrderId @unique` absorve a corrida. Order órfã (resposta perdida) é adotada pelo
+`external_reference` = id do pedido.
+
+**Casos de borda tratados:** Pix aberto é cancelado no MP antes de cobrar cartão e quando o pedido
+não pago é cancelado (cliente ou staff); pagamento que chega com o pedido já cancelado vira PAID
+sem baixar estoque nem mandar e-mail, com evento pedindo reembolso; pagamento em duplicidade gera
+nota para o staff. Validade do Pix = `reservation_ttl_minutes.PIX` (mín. 30 min) e a reserva é
+estendida até o vencimento.
+
+**Teste (credenciais de teste do app):** Pix com `payer.first_name = "APRO"` é aprovado sozinho em
+segundos — basta o cliente de teste se chamar "APRO …". Cartão: 5480 8328 0103 3311, 11/30, 123,
+titular `APRO` (aprova) ou `OTHE` (recusa), CPF 12345678909. `MP_TEST_PAYER_EMAIL=test@testuser.com`
+substitui o e-mail do pagador enquanto as credenciais forem de teste (remover em produção).
 
 ---
 

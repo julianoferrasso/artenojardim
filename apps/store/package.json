@@ -12,6 +12,7 @@
   "dependencies": {
     "@ecommerce/shared": "workspace:*",
     "@hookform/resolvers": "^5.4.0",
+    "@mercadopago/sdk-react": "1.0.7",
     "@stripe/react-stripe-js": "^6.8.0",
     "@stripe/stripe-js": "^9.10.0",
     "@tanstack/react-query": "^5.101.2",

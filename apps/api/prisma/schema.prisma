@@ -42,8 +42,8 @@ enum MovementType {
 }
 
 /// Dois eixos ortogonais em vez de um enum cartesiano (PAID_SHIPPED, ...):
-/// pagamento e logística evoluem independentemente. Só o webhook do Stripe muda
-/// o pagamento (Fase 1.13).
+/// pagamento e logística evoluem independentemente. Só o estado que o provedor
+/// confirma ao servidor (webhook ou resposta servidor-a-servidor) muda o pagamento.
 enum PaymentStatus {
   PENDING
   PROCESSING
@@ -68,6 +68,13 @@ enum PaymentMethod {
   CARD
   PIX
   BOLETO
+}
+
+/// Quem processou a tentativa. Pagamentos novos usam o de PAYMENT_PROVIDER (env);
+/// reembolso e cancelamento seguem o gravado aqui, não a env.
+enum PaymentProvider {
+  STRIPE
+  MERCADO_PAGO
 }
 
 /// O que originou a campanha. NEW_PRODUCT é disparado ao publicar e só pode
@@ -881,29 +888,45 @@ model OrderEvent {
   @@index([orderId])
 }
 
-/// Tentativa de pagamento de um pedido, espelhando um PaymentIntent do Stripe.
-/// O status é escrito SÓ pelo webhook (regra de ouro): nasce PROCESSING quando o
-/// PI é criado, vira PAID/FAILED pelo evento. `amount` em centavos, do total do
-/// pedido — o front nunca decide. Um pedido pode ter mais de uma tentativa.
+/// Tentativa de pagamento de um pedido: um PaymentIntent do Stripe ou uma order do
+/// Mercado Pago. O status só muda pelo estado que o provedor confirma ao servidor
+/// (regra de ouro): nasce PROCESSING, vira PAID/FAILED/REFUNDED pelo provedor.
+/// `amount` em centavos, do total do pedido — o front nunca decide. Um pedido pode
+/// ter mais de uma tentativa (cartão recusado, Pix vencido).
 model Payment {
-  id                    String         @id @default(cuid())
+  id                    String          @id @default(cuid())
   storeId               String
   orderId               String
+  /// O default existe só para o código antigo, ainda no ar enquanto a migration
+  /// já vale no banco compartilhado, continuar inserindo. O código novo sempre informa.
+  provider              PaymentProvider @default(STRIPE)
   /// Chave natural do Stripe: garante idempotência e liga o webhook ao pagamento.
-  stripePaymentIntentId String         @unique
+  stripePaymentIntentId String?         @unique
   stripeChargeId        String?
-  status                PaymentStatus  @default(PROCESSING)
+  /// Id da order no Mercado Pago ("ORD01…"): a chave natural que o webhook traz.
+  mpOrderId             String?         @unique
+  /// Id da transação dentro da order ("PAY01…"): o reembolso parcial exige.
+  mpPaymentId           String?
+  status                PaymentStatus   @default(PROCESSING)
+  /// status_detail cru do provedor: motivo da recusa, waiting_transfer, expired…
+  statusDetail          String?
   method                PaymentMethod?
   amount                Int
-  currency              String         @default("brl")
+  currency              String          @default("brl")
   paidAt                DateTime?
-  /// Soma dos reembolsos já confirmados pelo Stripe, em centavos. Responde
+  /// Vencimento do Pix. A tela usa para a contagem regressiva e para decidir
+  /// entre reaproveitar o QR e gerar outro.
+  expiresAt             DateTime?
+  /// Dados de exibição da tentativa: Pix {qrCode, qrCodeBase64, ticketUrl};
+  /// cartão {brand, installments}. Nada aqui decide estado.
+  metadataJson          Json?
+  /// Soma dos reembolsos já confirmados pelo provedor, em centavos. Responde
   /// "total ou parcial?" sem tabela Refund; o histórico por reembolso vive no
-  /// OrderEvent. Escrito SÓ pelo webhook charge.refunded, como o status.
-  refundedAmount        Int            @default(0)
+  /// OrderEvent. Escrito só pelo estado confirmado do provedor, como o status.
+  refundedAmount        Int             @default(0)
   refundedAt            DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

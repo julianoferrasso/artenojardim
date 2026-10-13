@@ -19,6 +19,7 @@ export {
   PAYMENT_STATUS_LABEL,
   FULFILLMENT_LABEL,
   PAYMENT_METHOD_LABEL,
+  PAYMENT_PROVIDER_LABEL,
 } from '@ecommerce/shared/constants'
 
 export const SITUATION_CLASS: Record<OrderSituation, string> = {

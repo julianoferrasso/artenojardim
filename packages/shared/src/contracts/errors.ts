@@ -60,8 +60,11 @@ export const ERROR_CODES = {
   ADDRESS_REQUIRED: 'ADDRESS_REQUIRED',
   PAYMENT_FAILED: 'PAYMENT_FAILED',
   /// Cartão recusado pelo emissor: erro de negócio (402), não falha de servidor.
+  /// No Mercado Pago o motivo cru vem em details[{ field: 'reason' }].
   PAYMENT_DECLINED: 'PAYMENT_DECLINED',
   ORDER_NOT_CANCELABLE: 'ORDER_NOT_CANCELABLE',
+  /// Pedido cancelado ou já pago: não há o que cobrar (409).
+  ORDER_NOT_PAYABLE: 'ORDER_NOT_PAYABLE',
 
   // Campanhas de e-mail
   /// Este produto já teve o e-mail de novidade disparado. Trava de índice

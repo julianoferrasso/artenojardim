@@ -80,6 +80,28 @@ const baseSchema = z.object({
   STRIPE_SECRET: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
+  // Provedor dos pagamentos NOVOS. O Stripe fica em standby: trocar para `stripe`
+  // (e reiniciar) reativa o fluxo dele. Reembolso e cancelamento seguem o
+  // provedor gravado em cada Payment, não esta chave.
+  PAYMENT_PROVIDER: z.enum(['mercadopago', 'stripe']).default('mercadopago'),
+
+  // Mercado Pago (Checkout Transparente, Orders API). Opcionais como as do Stripe:
+  // sem elas o pagamento responde 503, o boot não cai. Ir para produção = trocar
+  // os VALORES pelas credenciais de produção. A public key vai ao front pela API
+  // (não é segredo); o MP_WEBHOOK_SECRET é a "assinatura secreta" do painel.
+  MP_PUBLIC_KEY: z.string().optional(),
+  MP_ACCESS_TOKEN: z.string().optional(),
+  MP_WEBHOOK_SECRET: z.string().optional(),
+  /// Só enquanto as credenciais forem de TESTE: o MP só aceita o pagador
+  /// test@testuser.com em modo teste. Presente, substitui o e-mail do cliente no
+  /// que vai ao MP. Remover ao trocar para as credenciais de produção.
+  MP_TEST_PAYER_EMAIL: z
+    .string()
+    .email()
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
+
   // E-mail transacional via AWS SES (domínio artenojardim.com.br verificado).
   // Opcionais para o boot local, mas OBRIGATÓRIAS em produção (superRefine
   // abaixo): com a verificação de e-mail bloqueando o login, uma loja sem envio

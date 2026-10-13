@@ -1,4 +1,9 @@
-import type { PaymentStatus, FulfillmentStatus, PaymentMethod } from './enums.js'
+import type {
+  PaymentStatus,
+  FulfillmentStatus,
+  PaymentMethod,
+  PaymentProvider,
+} from './enums.js'
 // `import type` de propósito: contracts/ já importa de constants/, e um import
 // de valor aqui fecharia um ciclo em runtime. Tipo é apagado na compilação.
 import type { OrderSituation } from '../contracts/order-situation.js'
@@ -63,6 +68,11 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   CARD: 'Cartão de crédito',
   PIX: 'Pix',
   BOLETO: 'Boleto',
+}
+
+export const PAYMENT_PROVIDER_LABEL: Record<PaymentProvider, string> = {
+  STRIPE: 'Stripe',
+  MERCADO_PAGO: 'Mercado Pago',
 }
 
 export const PERIOD_LABEL: Record<OrderPeriod, string> = {

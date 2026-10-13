@@ -82,8 +82,15 @@ export const ROUTES = {
     list: `${base}/orders`,
     detail: (id: string) => `${base}/orders/${id}`,
     status: (id: string) => `${base}/orders/${id}/status`,
-    /** Cria/reusa o PaymentIntent e devolve o clientSecret (Payment Element). */
+    /**
+     * O que a tela de pagamento precisa, conforme o provedor ativo: Stripe cria/
+     * reusa o PaymentIntent; Mercado Pago só lê (public key, Pix em aberto).
+     */
     payment: (id: string) => `${base}/orders/${id}/payment`,
+    /** Gera (ou reaproveita, se ainda válido) o Pix do pedido no Mercado Pago. */
+    paymentPix: (id: string) => `${base}/orders/${id}/payment/pix`,
+    /** Paga com o token do Card Payment Brick. Valor e e-mail vêm do banco. */
+    paymentCard: (id: string) => `${base}/orders/${id}/payment/card`,
     /** Cancela de verdade ou registra a solicitação — quem decide é o service. */
     cancel: (id: string) => `${base}/orders/${id}/cancel`,
     support: (id: string) => `${base}/orders/${id}/support`,
@@ -216,5 +223,6 @@ export const ROUTES = {
 
   webhooks: {
     stripe: `${base}/webhooks/stripe`,
+    mercadopago: `${base}/webhooks/mercadopago`,
   },
 } as const

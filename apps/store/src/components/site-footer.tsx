@@ -155,7 +155,7 @@ export const SiteFooter = ({
           <PaymentMethods />
           <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
             <ShieldCheck className="size-4 shrink-0 text-success" aria-hidden />
-            Compra segura · pagamento processado pela Stripe
+            Compra segura · pagamento processado pelo Mercado Pago
           </p>
         </FooterSection>
       </div>

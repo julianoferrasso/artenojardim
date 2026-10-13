@@ -16,6 +16,7 @@ import { useOrder, useSetInternalNote } from '@/lib/orders'
 import {
   PAYMENT_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
+  PAYMENT_PROVIDER_LABEL,
   FULFILLMENT_LABEL,
   formatAddress,
   formatPhone,
@@ -274,19 +275,25 @@ const PaymentCard = ({ order }: { order: AdminOrder }) => {
             <Row label="Reembolsado" value={formatBRL(payment.refundedAmount)} />
           )}
           {payment.paidAt && <Row label="Pago em" value={formatDate(payment.paidAt)} />}
+          {/* O motivo cru do provedor: é o que o suporte procura quando o cliente liga. */}
+          {payment.status === 'FAILED' && payment.statusDetail && (
+            <Row label="Motivo" value={payment.statusDetail} />
+          )}
 
           <div className="mt-2 flex flex-col gap-1">
-            <dt className="text-xs text-muted-foreground">Transação</dt>
+            <dt className="text-xs text-muted-foreground">
+              Transação · {PAYMENT_PROVIDER_LABEL[payment.provider]}
+            </dt>
             <dd className="flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded bg-muted px-1.5 py-1 text-xs">
-                {payment.stripePaymentIntentId}
+                {payment.externalId ?? '—'}
               </code>
               {payment.dashboardUrl && (
                 <a
                   href={payment.dashboardUrl}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label="Abrir no Stripe"
+                  aria-label={`Abrir no ${PAYMENT_PROVIDER_LABEL[payment.provider]}`}
                   className="text-muted-foreground hover:text-foreground no-print"
                 >
                   <ExternalLink className="size-4" />
