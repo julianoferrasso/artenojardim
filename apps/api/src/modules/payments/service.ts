@@ -356,7 +356,9 @@ export const createPixPayment = async (customerId: string, orderId: string): Pro
 
   // Uma chave por "vaga" de tentativa: o clique duplo cai na mesma vaga, e o MP
   // devolve a mesma order às duas chamadas.
-  const attempt = await prisma.payment.count({ where: { orderId: order.id, provider: 'MERCADO_PAGO' } })
+  const attempt = await prisma.payment.count({
+    where: { orderId: order.id, storeId: getActiveStoreId(), provider: 'MERCADO_PAGO' },
+  })
   const ttl = Math.max(PIX_MIN_MINUTES, (await getSetting('reservation_ttl_minutes')).PIX)
 
   const items = buildItems(order)
@@ -408,7 +410,13 @@ export const createCardPayment = async (
   const order = await loadPayableOrder(customerId, orderId)
 
   const inReview = await prisma.payment.findFirst({
-    where: { orderId: order.id, provider: 'MERCADO_PAGO', method: 'CARD', status: 'PROCESSING' },
+    where: {
+      orderId: order.id,
+      storeId: getActiveStoreId(),
+      provider: 'MERCADO_PAGO',
+      method: 'CARD',
+      status: 'PROCESSING',
+    },
     select: { id: true },
   })
   if (inReview) {
@@ -460,7 +468,14 @@ const cancelAttempt = async (mpOrderId: string): Promise<boolean> => {
 
 const cancelOpenPix = async (orderId: string): Promise<boolean> => {
   const open = await prisma.payment.findMany({
-    where: { orderId, provider: 'MERCADO_PAGO', method: 'PIX', status: 'PROCESSING', mpOrderId: { not: null } },
+    where: {
+      orderId,
+      storeId: getActiveStoreId(),
+      provider: 'MERCADO_PAGO',
+      method: 'PIX',
+      status: 'PROCESSING',
+      mpOrderId: { not: null },
+    },
     select: { mpOrderId: true },
   })
   let paid = false
@@ -476,16 +491,26 @@ const cancelOpenPix = async (orderId: string): Promise<boolean> => {
  * avisa o staff para reembolsar.
  */
 export const cancelPendingMercadoPagoPayments = async (orderId: string): Promise<void> => {
-  const open = await prisma.payment.findMany({
-    where: { orderId, provider: 'MERCADO_PAGO', status: 'PROCESSING', mpOrderId: { not: null } },
-    select: { mpOrderId: true },
-  })
-  for (const p of open) {
-    try {
-      await cancelAttempt(p.mpOrderId!)
-    } catch (err) {
-      logger.error({ err, orderId, mpOrderId: p.mpOrderId }, 'Mercado Pago: falha ao cancelar cobrança em aberto')
+  try {
+    const open = await prisma.payment.findMany({
+      where: {
+        orderId,
+        storeId: getActiveStoreId(),
+        provider: 'MERCADO_PAGO',
+        status: 'PROCESSING',
+        mpOrderId: { not: null },
+      },
+      select: { mpOrderId: true },
+    })
+    for (const p of open) {
+      try {
+        await cancelAttempt(p.mpOrderId!)
+      } catch (err) {
+        logger.error({ err, orderId, mpOrderId: p.mpOrderId }, 'Mercado Pago: falha ao cancelar cobrança em aberto')
+      }
     }
+  } catch (err) {
+    logger.error({ err, orderId }, 'Mercado Pago: falha ao listar cobranças em aberto do pedido cancelado')
   }
 }
 

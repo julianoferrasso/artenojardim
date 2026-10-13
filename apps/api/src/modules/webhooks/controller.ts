@@ -76,7 +76,12 @@ export const mercadoPagoWebhookController = async (req: Request, res: Response):
     secret: env.MP_WEBHOOK_SECRET,
   })
   if (!valid) {
-    logger.warn({ requestId, dataId, type }, 'webhook Mercado Pago: assinatura inválida')
+    // O x-signature é um HMAC com timestamp, não segredo: logá-lo é o que permite
+    // reproduzir o cálculo quando o MP e nós discordamos.
+    logger.warn(
+      { requestId, dataId, type, signature: header(req, 'x-signature') },
+      'webhook Mercado Pago: assinatura inválida',
+    )
     res.status(401).send('Assinatura inválida')
     return
   }
