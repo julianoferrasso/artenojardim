@@ -42,6 +42,9 @@ export const ERROR_CODES = {
   SKU_ALREADY_EXISTS: 'SKU_ALREADY_EXISTS',
   PRODUCT_NOT_PUBLISHABLE: 'PRODUCT_NOT_PUBLISHABLE',
   VARIANT_MISSING_WEIGHT: 'VARIANT_MISSING_WEIGHT',
+  /// Produto que já esteve em algum pedido não pode ser excluído, só arquivado:
+  /// o delete anularia o vínculo do OrderItem com a variante.
+  PRODUCT_HAS_ORDERS: 'PRODUCT_HAS_ORDERS',
 
   // Estoque
   INSUFFICIENT_STOCK: 'INSUFFICIENT_STOCK',

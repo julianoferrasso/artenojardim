@@ -31,6 +31,12 @@ const baseSchema = z.object({
 
   STORE_URL: z.string().url(),
   ADMIN_URL: z.string().url(),
+  /// Mesmo valor do REVALIDATE_SECRET da loja. Ausente = a API não avisa a loja
+  /// e o catálogo só se atualiza pelo TTL de 60s do ISR.
+  STORE_REVALIDATE_SECRET: secret('STORE_REVALIDATE_SECRET')
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
 
   STORAGE_DRIVER: z.enum(['local', 'r2', 's3']).default('local'),
   LOCAL_UPLOAD_DIR: z.string().default('./uploads'),

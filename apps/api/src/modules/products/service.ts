@@ -17,6 +17,7 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { slugify, uniqueSlug } from '../../utils/slug.js'
+import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
 import { deriveOptions, validateVariants, optionKey } from './domain/variants.js'
 import { publishBlockers, BLOCKER_MESSAGES } from './domain/publish.js'
 import { PRODUCT_SELECT, LIST_SELECT, toProductDTO, toListItem } from './repository.js'
@@ -195,6 +196,9 @@ export const createProduct = async (
     changes: { name: { from: null, to: created.name }, status: { from: null, to: created.status } },
     context: ctx,
   })
+
+  // Fire-and-forget: a loja demorar (ou estar fora) não segura a resposta do admin.
+  void revalidateStorefront()
 
   return toProductDTO(created)
 }
@@ -387,6 +391,8 @@ export const updateProduct = async (
     })
   }
 
+  void revalidateStorefront()
+
   return toProductDTO(updated)
 }
 
@@ -476,6 +482,8 @@ export const updateProductImages = async (
     context: ctx,
   })
 
+  void revalidateStorefront()
+
   return getProduct(id, { publicOnly: false })
 }
 
@@ -544,6 +552,8 @@ export const updateVariant = async (
       context: ctx,
     })
   }
+
+  void revalidateStorefront()
 
   return getProduct(productId, { publicOnly: false })
 }
@@ -657,6 +667,8 @@ export const addVariant = async (
     context: ctx,
   })
 
+  void revalidateStorefront()
+
   return toProductDTO(created)
 }
 
@@ -704,6 +716,7 @@ export const removeVariant = async (
       changes: { isActive: { from: true, to: false } },
       context: ctx,
     })
+    void revalidateStorefront()
     return getProduct(productId, { publicOnly: false })
   }
 
@@ -717,31 +730,48 @@ export const removeVariant = async (
     context: ctx,
   })
 
+  void revalidateStorefront()
+
   return getProduct(productId, { publicOnly: false })
 }
 
 /**
- * Soft delete: um produto com pedidos históricos vira ARCHIVED + deletedAt, não
- * some. O `deletedAt: null` em toda leitura o esconde da loja e do admin, mas o
- * OrderItem antigo continua com a referência intacta.
+ * Exclusão DEFINITIVA, só para produto que nunca esteve num pedido (qualquer
+ * status, até cancelado). Com pedido, o delete anularia o OrderItem.variantId e
+ * o pedido perderia o vínculo — esse produto só pode ser ARQUIVADO (status, via
+ * update), que o tira da loja e o mantém no admin.
+ *
+ * O cascade leva junto o razão de estoque das variantes. Não fere o append-only:
+ * nenhum saldo é reescrito, o item inteiro deixa de existir e nenhuma venda o
+ * referencia. O audit `product.deleted` é o rastro que sobra.
  */
 export const deleteProduct = async (id: string, ctx: AuditContext): Promise<void> => {
+  const storeId = getActiveStoreId()
+
   const product = await prisma.product.findFirst({
-    where: { id, storeId: getActiveStoreId(), deletedAt: null },
-    select: { id: true, name: true },
+    where: { id, storeId, deletedAt: null },
+    select: { id: true, name: true, status: true },
   })
   if (!product) throw notFound('Produto')
 
-  await prisma.product.update({
-    where: { id },
-    data: { status: 'ARCHIVED', deletedAt: new Date() },
-  })
+  const orderItems = await prisma.orderItem.count({ where: { variant: { productId: id } } })
+  if (orderItems > 0) {
+    throw businessError(
+      ERROR_CODES.PRODUCT_HAS_ORDERS,
+      'Este produto já aparece em pedidos e não pode ser excluído. Arquive-o para tirá-lo da loja.',
+      409,
+    )
+  }
+
+  await prisma.product.delete({ where: { id } })
 
   await audit({
     action: EVENTS.product.deleted,
     entityType: 'Product',
     entityId: id,
-    changes: { name: { from: product.name, to: null } },
+    changes: { name: { from: product.name, to: null }, status: { from: product.status, to: null } },
     context: ctx,
   })
+
+  void revalidateStorefront()
 }

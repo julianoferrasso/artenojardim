@@ -11,6 +11,12 @@ import type {
 } from '@ecommerce/shared/contracts'
 import { apiFetch, apiFetchPaginated } from './api'
 
+export const PRODUCT_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Rascunho',
+  ACTIVE: 'Ativo',
+  ARCHIVED: 'Arquivado',
+}
+
 export const useProducts = (params: {
   status?: string
   q?: string
@@ -119,6 +125,10 @@ export const useDeleteProduct = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => apiFetch<void>(ROUTES.products.remove(id), { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
+    onSuccess: (_, id) => {
+      // O detalhe em cache apontaria para um produto que não existe mais.
+      qc.removeQueries({ queryKey: ['product', id] })
+      return qc.invalidateQueries({ queryKey: ['products'] })
+    },
   })
 }

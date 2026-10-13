@@ -3,8 +3,9 @@
 import { use, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Star } from 'lucide-react'
-import type { Product, ProductImage, Variant } from '@ecommerce/shared/contracts'
+import { ERROR_CODES, type Product, type ProductImage, type Variant } from '@ecommerce/shared/contracts'
 import {
+  PRODUCT_STATUS_LABEL,
   useProduct,
   useUpdateProduct,
   useUpdateProductImages,
@@ -16,6 +17,7 @@ import {
 import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { ImageUploader } from '@/components/image-uploader'
 import { ProductCampaignDialog } from '@/components/product-campaign-dialog'
+import { MoneyInput } from '@/components/money-input'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -31,6 +33,8 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
   const update = useUpdateProduct()
   const del = useDeleteProduct()
   const [error, setError] = useState<string | null>(null)
+  // Separado do `error` do topo: o botão Excluir fica no rodapé, longe do banner.
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   if (isLoading) return <Centered>Carregando…</Centered>
   if (!product) return <Centered>Produto não encontrado.</Centered>
@@ -51,10 +55,28 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
     )
   }
 
-  const onDelete = () => {
-    if (!confirm(`Arquivar "${product.name}"? Ele sai da loja mas o histórico é preservado.`)) return
-    del.mutate(id, { onSuccess: () => router.replace('/produtos') })
+  const onArchive = () => {
+    if (!confirm(`Arquivar "${product.name}"? Ele sai da loja, mas continua aqui no admin e pode ser restaurado.`)) return
+    setStatus('ARCHIVED')
   }
+
+  const onDelete = () => {
+    if (!confirm(`Excluir "${product.name}" definitivamente? Isso não pode ser desfeito.`)) return
+    setDeleteError(null)
+    del.mutate(id, {
+      onSuccess: () => router.replace('/produtos'),
+      onError: (e) =>
+        setDeleteError(
+          e instanceof ApiError && e.code === ERROR_CODES.PRODUCT_HAS_ORDERS
+            ? 'Este produto já aparece em pedidos e não pode ser excluído. Use "Arquivar" para tirá-lo da loja.'
+            : e instanceof ApiError
+              ? e.message
+              : 'Falha ao excluir.',
+        ),
+    })
+  }
+
+  const archived = product.status === 'ARCHIVED'
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
@@ -68,9 +90,22 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
         <section className="flex items-center justify-between rounded-lg border border-border bg-card p-6">
           <div>
             <p className="text-sm text-muted-foreground">Status</p>
-            <p className="font-medium">{product.status}</p>
+            <p className="font-medium">{PRODUCT_STATUS_LABEL[product.status] ?? product.status}</p>
+            {archived && (
+              <p className="text-xs text-muted-foreground">Não aparece na loja.</p>
+            )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            {archived && (
+              <button
+                onClick={() => setStatus('DRAFT')}
+                disabled={update.isPending}
+                title="Volta como rascunho, sem aparecer na loja até ser publicado"
+                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+              >
+                Restaurar
+              </button>
+            )}
             {product.status !== 'ACTIVE' && (
               <button
                 onClick={() => setStatus('ACTIVE')}
@@ -160,13 +195,33 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
           <AddVariant product={product} />
         </section>
 
-        <button
-          onClick={onDelete}
-          disabled={del.isPending}
-          className="self-start rounded-md border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
-        >
-          Arquivar produto
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {!archived && (
+            <button
+              onClick={onArchive}
+              disabled={update.isPending}
+              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+            >
+              Arquivar produto
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            disabled={del.isPending}
+            className="rounded-md border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+          >
+            {del.isPending ? 'Excluindo…' : 'Excluir produto'}
+          </button>
+          {deleteError ? (
+            <p role="alert" className="w-full text-sm text-destructive">
+              {deleteError}
+            </p>
+          ) : (
+            <p className="w-full text-xs text-muted-foreground">
+              Só é possível excluir um produto que nunca entrou em pedido. Com vendas, arquive.
+            </p>
+          )}
+        </div>
     </div>
   )
 }
@@ -502,7 +557,7 @@ function ImagesEditor({ product }: { product: Product }) {
   )
 }
 
-/** Uma linha editável de variação. Converte reais↔centavos e cm↔mm na borda. */
+/** Uma linha editável de variação. Preço já é centavos (MoneyInput); cm↔mm converte na borda. */
 function VariantRow({
   productId,
   variant,
@@ -515,7 +570,7 @@ function VariantRow({
   const update = useUpdateVariant(productId)
   const remove = useRemoveVariant(productId)
   const [sku, setSku] = useState(variant.sku)
-  const [priceReais, setPriceReais] = useState(String(variant.price / 100))
+  const [priceCents, setPriceCents] = useState(variant.price)
   const [weight, setWeight] = useState(String(variant.weight))
   const [lengthCm, setLengthCm] = useState(variant.length ? String(variant.length / 10) : '')
   const [widthCm, setWidthCm] = useState(variant.width ? String(variant.width / 10) : '')
@@ -525,7 +580,7 @@ function VariantRow({
 
   const dirty =
     sku !== variant.sku ||
-    Math.round(Number(priceReais) * 100) !== variant.price ||
+    priceCents !== variant.price ||
     Number(weight) !== variant.weight ||
     Math.round(Number(lengthCm) * 10) !== variant.length ||
     Math.round(Number(widthCm) * 10) !== variant.width ||
@@ -539,7 +594,7 @@ function VariantRow({
         variantId: variant.id,
         input: {
           sku,
-          price: Math.round(Number(priceReais) * 100),
+          price: priceCents,
           weight: Number(weight),
           length: Math.round(Number(lengthCm) * 10),
           width: Math.round(Number(widthCm) * 10),
@@ -564,14 +619,7 @@ function VariantRow({
           <input value={sku} onChange={(e) => setSku(e.target.value)} className={cn(cell, 'w-28')} />
         </td>
         <td className="py-2 pr-3">
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={priceReais}
-            onChange={(e) => setPriceReais(e.target.value)}
-            className={cn(cell, 'w-24')}
-          />
+          <MoneyInput value={priceCents} onChange={setPriceCents} className={cn(cell, 'w-28')} />
         </td>
         <td className="py-2 pr-3">
           <input type="number" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} className={cn(dimWarn(weight), 'w-20')} />
@@ -638,7 +686,7 @@ function AddVariant({ product }: { product: Product }) {
   const [open, setOpen] = useState(false)
   const [values, setValues] = useState<Record<string, string>>({})
   const [sku, setSku] = useState('')
-  const [priceReais, setPriceReais] = useState('')
+  const [priceCents, setPriceCents] = useState(0)
   const [weight, setWeight] = useState('')
   const [lengthCm, setLengthCm] = useState('')
   const [widthCm, setWidthCm] = useState('')
@@ -678,7 +726,7 @@ function AddVariant({ product }: { product: Product }) {
   const reset = () => {
     setValues({})
     setSku('')
-    setPriceReais('')
+    setPriceCents(0)
     setWeight('')
     setLengthCm('')
     setWidthCm('')
@@ -694,7 +742,7 @@ function AddVariant({ product }: { product: Product }) {
     add.mutate(
       {
         sku,
-        price: Math.round(Number(priceReais) * 100),
+        price: priceCents,
         weight: Number(weight),
         length: Math.round(Number(lengthCm) * 10),
         width: Math.round(Number(widthCm) * 10),
@@ -752,7 +800,7 @@ function AddVariant({ product }: { product: Product }) {
         </label>
         <label className="flex flex-col gap-1 text-xs">
           <span className="font-medium">Preço (R$)</span>
-          <input type="number" step="0.01" min="0" value={priceReais} onChange={(e) => setPriceReais(e.target.value)} className={cell} />
+          <MoneyInput value={priceCents} onChange={setPriceCents} className={cell} />
         </label>
         <label className="flex flex-col gap-1 text-xs">
           <span className="font-medium">Peso (g)</span>

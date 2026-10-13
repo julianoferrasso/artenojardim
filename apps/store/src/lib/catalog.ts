@@ -16,8 +16,8 @@ import { apiFetch, apiFetchPaginated } from './api'
  * um Client Component importar isto). Chama a API pelo loopback e cacheia com
  * ISR: catálogo é público, muda pouco, e SEO exige HTML renderizado no servidor.
  *
- * revalidate 60s: o lojista que publica um produto espera até 1 minuto. Sem fila
- * de revalidação (arquitetura §2) — o TTL resolve 95% dos casos.
+ * revalidate 60s é a rede de segurança: quando o lojista mexe num produto, a API
+ * chama app/api/revalidate e o cache cai na hora (arquitetura §2). Sem fila.
  */
 
 const REVALIDATE = 60

@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { cartesian, type CreateVariantInput, type OptionSpec } from '@ecommerce/shared/contracts'
 import { cn } from '@/lib/utils'
+import { MoneyInput } from './money-input'
 
 /**
  * Editor de variações — a tela mais complexa do admin, onde o lojista passa a
@@ -183,16 +184,10 @@ export const VariantEditor = ({ value, onChange }: Props) => {
                     />
                   </td>
                   <td className="py-2 pr-3">
-                    {/* Preço em reais na UI, centavos no contrato: converte na borda. */}
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={v.price ? v.price / 100 : ''}
-                      onChange={(e) =>
-                        patchVariant(i, { price: Math.round(Number(e.target.value) * 100) })
-                      }
-                      className="h-8 w-24 rounded border border-input bg-background px-2"
+                    <MoneyInput
+                      value={v.price}
+                      onChange={(price) => patchVariant(i, { price })}
+                      className="h-8 w-28 rounded border border-input bg-background px-2"
                     />
                   </td>
                   <td className="py-2 pr-3">

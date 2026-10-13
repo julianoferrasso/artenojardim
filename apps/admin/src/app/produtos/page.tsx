@@ -2,14 +2,8 @@
 
 import { useState } from 'react'
 import { Star } from 'lucide-react'
-import { useProducts } from '@/lib/products'
+import { useProducts, PRODUCT_STATUS_LABEL as STATUS_LABEL } from '@/lib/products'
 import { formatBRL, formatDate, cn } from '@/lib/utils'
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: 'Rascunho',
-  ACTIVE: 'Ativo',
-  ARCHIVED: 'Arquivado',
-}
 
 const STATUS_CLASS: Record<string, string> = {
   DRAFT: 'bg-muted text-muted-foreground',

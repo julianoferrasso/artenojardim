@@ -154,7 +154,7 @@ Postgres e RabbitMQ escutam **apenas em 127.0.0.1**. UFW libera somente 22, 80, 
 | Busca | Server Component dinâmico | Query string infinita, cache inútil |
 | Carrinho, checkout, conta | Client Component + TanStack Query | Por usuário, nunca cacheável |
 
-**Invalidação: só o TTL de 60s.** Nada de fila de revalidação — o lojista que publica um produto espera um minuto, e isso não é um problema real. Se um dia for, `revalidatePath` via um endpoint com token secreto resolve em ~20 linhas, **sem fila**.
+**Invalidação: aviso direto + TTL de 60s.** Nada de fila de revalidação. Toda mutação de produto na API chama `POST {STORE_URL}/api/revalidate` com token secreto (`integrations/storefront/revalidate.ts`), que faz `revalidatePath('/', 'layout')` na loja. Fire-and-forget: se o aviso falhar, o TTL de 60s ainda resolve. Nasceu porque o stale-while-revalidate do ISR entregava o produto arquivado à 1ª visita mesmo depois dos 60s.
 
 ### Autenticação entre domínios
 
@@ -757,7 +757,9 @@ Sem essa uniformidade, cada consumidor (carrinho, pedido, frete, estoque, busca)
 
 - Slug único por loja; ao colidir, sufixar `-2`.
 - Publicar exige: ≥1 imagem, ≥1 variante ativa, todas com preço e peso.
-- Excluir produto com pedidos → `ARCHIVED` + `deletedAt`, nunca DELETE.
+- **Arquivar** = só `status: ARCHIVED`: sai da loja, continua no admin (filtro "Arquivado"), restaura para `DRAFT`.
+- **Excluir** = DELETE real, permitido só se nenhuma variante aparece em `OrderItem` (qualquer pedido). Com pedido → `409 PRODUCT_HAS_ORDERS`: o caminho é arquivar.
+  (Antes, "excluir" gravava `ARCHIVED` + `deletedAt` e o produto sumia até do admin; a migration `unarchive_soft_deleted_products` trouxe esses de volta.)
 - Mudar preço **não** afeta pedidos (snapshot) nem carrinhos (preço ao vivo — o cliente paga o preço vigente ao fechar).
 
 ---
