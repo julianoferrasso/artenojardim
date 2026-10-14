@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { cartesian, type CreateVariantInput, type OptionSpec } from '@ecommerce/shared/contracts'
 import { cn } from '@/lib/utils'
+import { toStock } from '@/lib/inventory'
 import { MoneyInput } from './money-input'
 
 /**
@@ -33,6 +34,7 @@ const emptyVariant = (options: CreateVariantInput['options'] = []): CreateVarian
   height: 0,
   position: 0,
   isActive: true,
+  initialStock: 0,
   options,
 })
 
@@ -161,6 +163,7 @@ export const VariantEditor = ({ value, onChange }: Props) => {
                 {hasOptions && <th className="py-2 pr-3">Variação</th>}
                 <th className="py-2 pr-3">SKU</th>
                 <th className="py-2 pr-3">Preço (R$)</th>
+                <th className="py-2 pr-3">Estoque</th>
                 <th className="py-2 pr-3">Peso (g)</th>
                 <th className="py-2 pr-3">Comp. (cm)</th>
                 <th className="py-2 pr-3">Larg. (cm)</th>
@@ -188,6 +191,20 @@ export const VariantEditor = ({ value, onChange }: Props) => {
                       value={v.price}
                       onChange={(price) => patchVariant(i, { price })}
                       className="h-8 w-28 rounded border border-input bg-background px-2"
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    {/* Vira o movimento "Estoque inicial" (PURCHASE) no razão. */}
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={v.initialStock || ''}
+                      placeholder="0"
+                      onChange={(e) =>
+                        patchVariant(i, { initialStock: toStock(e.target.value) })
+                      }
+                      className="h-8 w-20 rounded border border-input bg-background px-2"
                     />
                   </td>
                   <td className="py-2 pr-3">

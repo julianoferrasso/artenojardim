@@ -60,8 +60,11 @@ export const NewsletterForm = ({ className }: { className?: string }) => {
   }
 
   return (
-    <form onSubmit={(e) => void onSubmit(e)} noValidate className={cn('w-full', className)}>
-      <div className="flex flex-col gap-2 sm:flex-row">
+    // @container: lado a lado só quando o PRÓPRIO form tem espaço. Com `sm:` (a
+    // tela) o rodapé em desktop, coluna de ~300px, espremia o input até cortar o
+    // placeholder.
+    <form onSubmit={(e) => void onSubmit(e)} noValidate className={cn('@container w-full', className)}>
+      <div className="flex flex-col gap-2 @sm:flex-row">
         <input
           type="email"
           autoComplete="email"
@@ -71,7 +74,7 @@ export const NewsletterForm = ({ className }: { className?: string }) => {
           className="h-11 w-full rounded-full border border-input bg-card px-5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
           {...register('email')}
         />
-        <Button type="submit" disabled={isSubmitting} className="h-11 shrink-0 rounded-full px-6">
+        <Button type="submit" disabled={isSubmitting} className="h-11 w-full shrink-0 rounded-full px-6 @sm:w-auto">
           {isSubmitting && <Loader2 className="animate-spin" />}
           Quero receber
         </Button>

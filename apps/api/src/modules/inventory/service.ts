@@ -116,6 +116,34 @@ export const recordMovement = async (
   return level
 }
 
+/**
+ * Estoque de uma variante recém-criada, dentro da transação de quem a criou
+ * (produto/variante nascem com o estoque, ou não nascem). A variante é nova,
+ * então a projeção nasce aqui direto com o saldo — sem o upsert de dois passos
+ * do recordMovement, que existe para linhas que talvez já existam.
+ */
+export const recordInitialStock = async (
+  tx: Prisma.TransactionClient,
+  storeId: string,
+  variantId: string,
+  quantity: number,
+  userId?: string,
+): Promise<void> => {
+  if (quantity <= 0) return
+
+  await tx.inventoryMovement.create({
+    data: {
+      storeId,
+      variantId,
+      type: 'PURCHASE',
+      quantity,
+      reason: 'Estoque inicial',
+      userId: userId ?? null,
+    },
+  })
+  await tx.inventoryLevel.create({ data: { variantId, onHand: quantity, reserved: 0 } })
+}
+
 const readLevel = async (
   tx: Prisma.TransactionClient,
   variantId: string,

@@ -18,6 +18,7 @@ import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { slugify, uniqueSlug } from '../../utils/slug.js'
 import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
+import { recordInitialStock } from '../inventory/service.js'
 import { deriveOptions, validateVariants, optionKey } from './domain/variants.js'
 import { publishBlockers, BLOCKER_MESSAGES } from './domain/publish.js'
 import { PRODUCT_SELECT, LIST_SELECT, toProductDTO, toListItem } from './repository.js'
@@ -73,6 +74,7 @@ const createProductGraph = async (
   storeId: string,
   productId: string,
   variants: CreateVariantInput[],
+  userId?: string,
 ): Promise<void> => {
   const hasOptions = variants.some((v) => v.options.length > 0)
   const valueIds: OptionValueIds = new Map()
@@ -118,7 +120,7 @@ const createProductGraph = async (
         }
       : undefined
 
-    await tx.productVariant.create({
+    const variant = await tx.productVariant.create({
       data: {
         storeId,
         productId,
@@ -135,7 +137,10 @@ const createProductGraph = async (
         isActive: v.isActive,
         ...(optionValues ? { optionValues } : {}),
       },
+      select: { id: true },
     })
+
+    await recordInitialStock(tx, storeId, variant.id, v.initialStock, userId)
   }
 }
 
@@ -182,7 +187,7 @@ export const createProduct = async (
       select: { id: true },
     })
 
-    await createProductGraph(tx, storeId, product.id, normalizeVariants(input.variants))
+    await createProductGraph(tx, storeId, product.id, normalizeVariants(input.variants), ctx.userId)
 
     return tx.product.findUniqueOrThrow({ where: { id: product.id }, select: PRODUCT_SELECT })
     // timeout generoso: a criação faz N inserts de variante em série, e em dev
@@ -631,7 +636,7 @@ export const addVariant = async (
 
     const position = await tx.productVariant.count({ where: { productId } })
 
-    await tx.productVariant.create({
+    const variant = await tx.productVariant.create({
       data: {
         storeId,
         productId,
@@ -648,7 +653,10 @@ export const addVariant = async (
         isActive: input.isActive,
         optionValues: { create: valueIds.map((id) => ({ optionValueId: id })) },
       },
+      select: { id: true },
     })
+
+    await recordInitialStock(tx, storeId, variant.id, input.initialStock, ctx.userId)
 
     return tx.product.findUniqueOrThrow({ where: { id: productId }, select: PRODUCT_SELECT })
   }).catch((err) => {

@@ -26,7 +26,7 @@ export default function NewProductPage() {
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [images, setImages] = useState<Upload[]>([])
   const [variants, setVariants] = useState<CreateProductInput['variants']>([
-    { sku: '', price: 0, weight: 0, length: 0, width: 0, height: 0, position: 0, isActive: true, options: [] },
+    { sku: '', price: 0, weight: 0, length: 0, width: 0, height: 0, position: 0, isActive: true, initialStock: 0, options: [] },
   ])
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')

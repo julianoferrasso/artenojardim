@@ -18,6 +18,7 @@ import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { ImageUploader } from '@/components/image-uploader'
 import { ProductCampaignDialog } from '@/components/product-campaign-dialog'
 import { MoneyInput } from '@/components/money-input'
+import { toStock, useRecordMovement, useVariantLevel } from '@/lib/inventory'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -171,6 +172,7 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
                   <th className="py-2 pr-3">Variação</th>
                   <th className="py-2 pr-3">SKU</th>
                   <th className="py-2 pr-3">Preço (R$)</th>
+                  <th className="py-2 pr-3">Estoque</th>
                   <th className="py-2 pr-3">Peso (g)</th>
                   <th className="py-2 pr-3">C (cm)</th>
                   <th className="py-2 pr-3">L (cm)</th>
@@ -569,6 +571,11 @@ function VariantRow({
 }) {
   const update = useUpdateVariant(productId)
   const remove = useRemoveVariant(productId)
+  const { data: level } = useVariantLevel(variant.id)
+  const recordMovement = useRecordMovement()
+  // null = não mexido: o campo mostra o saldo do servidor, que pode chegar depois
+  // do primeiro render (e mudar quando uma venda sai).
+  const [stock, setStock] = useState<string | null>(null)
   const [sku, setSku] = useState(variant.sku)
   const [priceCents, setPriceCents] = useState(variant.price)
   const [weight, setWeight] = useState(String(variant.weight))
@@ -578,7 +585,9 @@ function VariantRow({
   const [isActive, setIsActive] = useState(variant.isActive)
   const [error, setError] = useState<string | null>(null)
 
-  const dirty =
+  const stockDirty = level !== undefined && stock !== null && toStock(stock) !== level.onHand
+
+  const fieldsDirty =
     sku !== variant.sku ||
     priceCents !== variant.price ||
     Number(weight) !== variant.weight ||
@@ -587,23 +596,40 @@ function VariantRow({
     Math.round(Number(heightCm) * 10) !== variant.height ||
     isActive !== variant.isActive
 
-  const save = () => {
+  const dirty = fieldsDirty || stockDirty
+  const saving = update.isPending || recordMovement.isPending
+
+  const save = async () => {
     setError(null)
-    update.mutate(
-      {
-        variantId: variant.id,
-        input: {
-          sku,
-          price: priceCents,
-          weight: Number(weight),
-          length: Math.round(Number(lengthCm) * 10),
-          width: Math.round(Number(widthCm) * 10),
-          height: Math.round(Number(heightCm) * 10),
-          isActive,
-        },
-      },
-      { onError: (e) => setError(e instanceof ApiError ? e.message : 'Falha ao salvar.') },
-    )
+    try {
+      if (fieldsDirty) {
+        await update.mutateAsync({
+          variantId: variant.id,
+          input: {
+            sku,
+            price: priceCents,
+            weight: Number(weight),
+            length: Math.round(Number(lengthCm) * 10),
+            width: Math.round(Number(widthCm) * 10),
+            height: Math.round(Number(heightCm) * 10),
+            isActive,
+          },
+        })
+      }
+      // Estoque nunca vai no update da variante: vira uma CONTAGEM no razão, e o
+      // backend grava a diferença para o saldo atual (mesmo fluxo da tela Estoque).
+      if (stockDirty && stock !== null) {
+        await recordMovement.mutateAsync({
+          variantId: variant.id,
+          type: 'COUNT',
+          counted: toStock(stock),
+          reason: 'Ajuste na edição do produto',
+        })
+        setStock(null)
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Falha ao salvar.')
+    }
   }
 
   const cell = 'h-8 w-full rounded border border-input bg-background px-2'
@@ -620,6 +646,24 @@ function VariantRow({
         </td>
         <td className="py-2 pr-3">
           <MoneyInput value={priceCents} onChange={setPriceCents} className={cn(cell, 'w-28')} />
+        </td>
+        <td className="py-2 pr-3">
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={stock ?? (level ? String(level.onHand) : '')}
+            disabled={!level}
+            placeholder={level ? undefined : '…'}
+            onChange={(e) => setStock(e.target.value)}
+            aria-label="Estoque físico"
+            className={cn(cell, 'w-20')}
+          />
+          {level && level.reserved > 0 && (
+            <p className="mt-1 text-xs leading-tight text-muted-foreground">
+              {level.reserved} reservado{level.reserved > 1 ? 's' : ''}
+            </p>
+          )}
         </td>
         <td className="py-2 pr-3">
           <input type="number" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} className={cn(dimWarn(weight), 'w-20')} />
@@ -639,8 +683,8 @@ function VariantRow({
         <td className="py-2">
           <div className="flex gap-1">
             <button
-              onClick={save}
-              disabled={!dirty || update.isPending}
+              onClick={() => void save()}
+              disabled={!dirty || saving}
               className="h-8 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-40"
             >
               Salvar
@@ -664,7 +708,7 @@ function VariantRow({
       </tr>
       {error && (
         <tr>
-          <td colSpan={9} className="pb-2 text-xs text-destructive">
+          <td colSpan={10} className="pb-2 text-xs text-destructive">
             {error}
           </td>
         </tr>
@@ -687,6 +731,7 @@ function AddVariant({ product }: { product: Product }) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [sku, setSku] = useState('')
   const [priceCents, setPriceCents] = useState(0)
+  const [initialStock, setInitialStock] = useState('')
   const [weight, setWeight] = useState('')
   const [lengthCm, setLengthCm] = useState('')
   const [widthCm, setWidthCm] = useState('')
@@ -727,6 +772,7 @@ function AddVariant({ product }: { product: Product }) {
     setValues({})
     setSku('')
     setPriceCents(0)
+    setInitialStock('')
     setWeight('')
     setLengthCm('')
     setWidthCm('')
@@ -749,6 +795,7 @@ function AddVariant({ product }: { product: Product }) {
         height: Math.round(Number(heightCm) * 10),
         position: 0,
         isActive: true,
+        initialStock: toStock(initialStock),
         options: optionNames.map((name) => ({ option: name, value: values[name]!.trim() })),
       },
       {
@@ -801,6 +848,10 @@ function AddVariant({ product }: { product: Product }) {
         <label className="flex flex-col gap-1 text-xs">
           <span className="font-medium">Preço (R$)</span>
           <MoneyInput value={priceCents} onChange={setPriceCents} className={cell} />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="font-medium">Estoque inicial</span>
+          <input type="number" min="0" step="1" placeholder="0" value={initialStock} onChange={(e) => setInitialStock(e.target.value)} className={cell} />
         </label>
         <label className="flex flex-col gap-1 text-xs">
           <span className="font-medium">Peso (g)</span>

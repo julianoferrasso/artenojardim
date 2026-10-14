@@ -283,6 +283,12 @@ recarregar os processos.
 
 ## Backup (19/07/2026)
 
+> **Na VPS atual (179.199.150.80) isto mudou.** O backup é
+> `/usr/local/bin/artenojardim_backup.sh`, disparado pelo `artenojardim-backup.timer` do
+> systemd às 06:30 UTC; dumps em `/var/backups/artenojardim/`, 14 dias. Os comandos
+> `artenojardim-pg-backup`/`artenojardim-pg-restore` e o cron abaixo **não existem** nela — o
+> restore é `pg_restore` manual (ver README, seção Backup). O texto abaixo é o histórico da VPS antiga.
+
 `pg_dump` diário do banco `artenojardim` (nunca toca `rag_sefaz`), agendado no
 cron para **03:17**. Scripts versionados em `scripts/`, instalados na VPS:
 

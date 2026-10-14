@@ -15,7 +15,16 @@ export const useStock = (lowStock: boolean) =>
       apiFetchPaginated<StockItem>(`${ROUTES.inventory.list}?perPage=100${lowStock ? '&lowStock=true' : ''}`),
   })
 
-export const useVariantLedger = (variantId: string | undefined) =>
+/** Estoque é contagem de peças: inteiro, nunca negativo. */
+export const toStock = (raw: string): number => Math.max(0, Math.trunc(Number(raw) || 0))
+
+export const useVariantLevel = (variantId: string) =>
+  useQuery({
+    queryKey: ['inventory', 'level', variantId],
+    queryFn: () => apiFetch<InventoryLevel>(ROUTES.inventory.level(variantId)),
+  })
+
+export const useVariantLedger =(variantId: string | undefined) =>
   useQuery({
     queryKey: ['inventory', 'ledger', variantId],
     enabled: !!variantId,

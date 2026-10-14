@@ -57,6 +57,12 @@ export const createVariantSchema = z.object({
   height: z.number().int().positive('Informe a altura em mm'),
   position: z.number().int().nonnegative().default(0),
   isActive: z.boolean().default(true),
+  /**
+   * Só na CRIAÇÃO da variante: vira um movimento PURCHASE "Estoque inicial" no
+   * razão. Variante existente muda estoque por movimento (/inventory/movements),
+   * nunca por update — por isso não existe no updateVariantSchema.
+   */
+  initialStock: z.number().int().nonnegative().max(100_000).default(0),
   /** @deprecated Use `ProductImage.variantId` — tem FK e aceita N imagens por variante. */
   imageId: z.string().nullable().optional(),
   /** Quais valores de opção esta variante representa. Vazio = produto sem opções. */
