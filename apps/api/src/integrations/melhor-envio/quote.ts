@@ -28,16 +28,23 @@ export type MeCalculateOption = {
   error?: string | null
 }
 
-export const calculateShipping = (args: {
+export const calculateShipping = async (args: {
   fromZip: string
   toZip: string
   products: MeProduct[]
-}): Promise<MeCalculateOption[]> =>
-  meRequest<MeCalculateOption[]>('/api/v2/me/shipment/calculate', {
-    method: 'POST',
-    body: JSON.stringify({
-      from: { postal_code: args.fromZip },
-      to: { postal_code: args.toZip },
-      products: args.products,
-    }),
-  })
+}): Promise<MeCalculateOption[]> => {
+  const raw = await meRequest<MeCalculateOption[] | MeCalculateOption>(
+    '/api/v2/me/shipment/calculate',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        from: { postal_code: args.fromZip },
+        to: { postal_code: args.toZip },
+        products: args.products,
+      }),
+    },
+  )
+  // Com UM serviço disponível na conta, o ME devolve o objeto solto em vez de
+  // uma lista de um — e o `.filter` de quem consome quebrava (out/2026).
+  return Array.isArray(raw) ? raw : [raw]
+}
