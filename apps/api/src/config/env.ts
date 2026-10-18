@@ -91,16 +91,28 @@ const baseSchema = z.object({
   // provedor gravado em cada Payment, não esta chave.
   PAYMENT_PROVIDER: z.enum(['mercadopago', 'stripe']).default('mercadopago'),
 
-  // Mercado Pago (Checkout Transparente, Orders API). Opcionais como as do Stripe:
-  // sem elas o pagamento responde 503, o boot não cai. Ir para produção = trocar
-  // os VALORES pelas credenciais de produção. A public key vai ao front pela API
-  // (não é segredo); o MP_WEBHOOK_SECRET é a "assinatura secreta" do painel.
+  // Mercado Pago (Checkout Transparente, Orders API). Dois pares de credenciais
+  // convivem no .env — produção (sem sufixo) e teste (_TEST) — e MP_ENVIRONMENT
+  // escolhe qual a API usa. Opcionais como as do Stripe: sem o par do ambiente
+  // ativo o pagamento responde 503, o boot não cai. A public key vai ao front
+  // pela API (não é segredo); MP_WEBHOOK_SECRET* é a "assinatura secreta" do
+  // painel. Em teste, o segredo que confere é o do app do VENDEDOR de teste: é o
+  // app dele que cria, e assina, as orders feitas com credenciais de teste.
+  /// Obrigatória em produção (superRefine abaixo).
+  MP_ENVIRONMENT: z
+    .enum(['test', 'production'])
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
   MP_PUBLIC_KEY: z.string().optional(),
   MP_ACCESS_TOKEN: z.string().optional(),
   MP_WEBHOOK_SECRET: z.string().optional(),
-  /// Só enquanto as credenciais forem de TESTE: o MP só aceita o pagador
-  /// test@testuser.com em modo teste. Presente, substitui o e-mail do cliente no
-  /// que vai ao MP. Remover ao trocar para as credenciais de produção.
+  MP_PUBLIC_KEY_TEST: z.string().optional(),
+  MP_ACCESS_TOKEN_TEST: z.string().optional(),
+  MP_WEBHOOK_SECRET_TEST: z.string().optional(),
+  /// Só vale com MP_ENVIRONMENT=test: o MP de teste exige o pagador
+  /// test@testuser.com. Presente, substitui o e-mail do cliente no que vai ao
+  /// MP. Em produção é ignorado.
   MP_TEST_PAYER_EMAIL: z
     .string()
     .email()
@@ -152,6 +164,12 @@ const baseSchema = z.object({
 
 /** As três andam juntas: com credencial e sem remetente (ou vice-versa) o SES recusa tudo. */
 const EMAIL_KEYS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'EMAIL_FROM'] as const
+
+/** Public key e access token de cada ambiente do MP: um sem o outro não cobra nada. */
+const MP_KEYS = {
+  production: ['MP_PUBLIC_KEY', 'MP_ACCESS_TOKEN'],
+  test: ['MP_PUBLIC_KEY_TEST', 'MP_ACCESS_TOKEN_TEST'],
+} as const satisfies Record<'test' | 'production', readonly (keyof z.infer<typeof baseSchema>)[]>
 
 /**
  * A credencial de storage é obrigatória apenas para o driver selecionado. É o que
@@ -226,6 +244,32 @@ const envSchema = baseSchema.superRefine((env, ctx) => {
       message: 'EMAIL_UNSUBSCRIBE_SECRET é obrigatório em produção (link de descadastro do rodapé)',
     })
   }
+
+  // O ambiente do MP numa API pública é escolha explícita, nunca default: cair
+  // em `test` por esquecimento faria cartão de teste valer como pagamento.
+  if (env.NODE_ENV === 'production' && env.PAYMENT_PROVIDER === 'mercadopago' && !env.MP_ENVIRONMENT) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['MP_ENVIRONMENT'],
+      message: 'MP_ENVIRONMENT é obrigatório em produção (test | production)',
+    })
+  }
+
+  // Mesmo "pela metade" do e-mail: com só uma das duas chaves o boot passaria e
+  // o erro só apareceria na primeira cobrança.
+  const activeMp = env.MP_ENVIRONMENT ?? 'test'
+  const mpKeys = MP_KEYS[activeMp]
+  if (mpKeys.filter((key) => env[key]).length === 1) {
+    for (const key of mpKeys) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} é obrigatório com MP_ENVIRONMENT=${activeMp} — public key e access token andam juntos`,
+        })
+      }
+    }
+  }
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -241,6 +285,22 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data
+
+const mpEnvironment = env.MP_ENVIRONMENT ?? 'test'
+
+/**
+ * As credenciais do Mercado Pago do ambiente escolhido em MP_ENVIRONMENT, já
+ * resolvidas. Quem fala com o MP lê daqui e não sabe que existem dois pares:
+ * chavear é trocar uma variável e reiniciar a API.
+ */
+export const mercadoPagoConfig = {
+  environment: mpEnvironment,
+  publicKey: mpEnvironment === 'production' ? env.MP_PUBLIC_KEY : env.MP_PUBLIC_KEY_TEST,
+  accessToken: mpEnvironment === 'production' ? env.MP_ACCESS_TOKEN : env.MP_ACCESS_TOKEN_TEST,
+  webhookSecret: mpEnvironment === 'production' ? env.MP_WEBHOOK_SECRET : env.MP_WEBHOOK_SECRET_TEST,
+  // Em produção o pagador é sempre o e-mail do pedido, haja o que houver no .env.
+  testPayerEmail: mpEnvironment === 'test' ? env.MP_TEST_PAYER_EMAIL : undefined,
+}
 
 /**
  * Em desenvolvimento a loja sobe sem SES. Quem for enviar consulta isto antes —

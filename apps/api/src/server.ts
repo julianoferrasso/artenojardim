@@ -1,10 +1,11 @@
 import { createApp } from './app.js'
-import { env } from './config/env.js'
+import { env, isProduction, mercadoPagoConfig } from './config/env.js'
 import { logger } from './config/logger.js'
 import { prisma } from './config/prisma.js'
 import { closeRabbit, initRabbit } from './config/rabbitmq.js'
 import { initStoreContext } from './shared/store-context.js'
 import { storage } from './integrations/storage/index.js'
+import { isMercadoPagoConfigured } from './integrations/mercadopago/index.js'
 import { assertTopology } from './queues/topology.js'
 
 /**
@@ -23,6 +24,18 @@ const start = async (): Promise<void> => {
   initRabbit(assertTopology)
 
   logger.info({ driver: storage().id }, 'storage')
+
+  if (env.PAYMENT_PROVIDER === 'mercadopago') {
+    logger.info(
+      { environment: mercadoPagoConfig.environment, configured: isMercadoPagoConfigured() },
+      'Mercado Pago',
+    )
+    if (isProduction && mercadoPagoConfig.environment === 'test') {
+      logger.warn(
+        'Mercado Pago em modo TESTE numa API de produção: cartão de teste aprova pedido de verdade — só para janela de teste',
+      )
+    }
+  }
 
   const app = createApp()
 

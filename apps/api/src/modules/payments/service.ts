@@ -12,7 +12,7 @@ import {
 import { EVENTS, type PaymentMethod, type PaymentStatus } from '@ecommerce/shared/constants'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
-import { env } from '../../config/env.js'
+import { env, mercadoPagoConfig } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { appError, conflict, notFound } from '../../shared/errors.js'
@@ -237,7 +237,8 @@ const getMercadoPagoCheckout = async (
 // ── Mercado Pago: montar a cobrança ──────────────────────────────────────────
 
 /** Em modo teste o MP pode recusar pagador que seja conta real dele; ver MP_TEST_PAYER_EMAIL. */
-const payerEmail = (order: Pick<PayableOrder, 'email'>): string => env.MP_TEST_PAYER_EMAIL ?? order.email
+const payerEmail = (order: Pick<PayableOrder, 'email'>): string =>
+  mercadoPagoConfig.testPayerEmail ?? order.email
 
 const documentToIdentification = (document: string | null): MpPayer['identification'] => {
   const digits = document?.replace(/\D/g, '') ?? ''
@@ -275,6 +276,10 @@ const buildPayer = (order: PayableOrder, identification?: MpPayer['identificatio
   }
 }
 
+/** Do catálogo do MP (GET /item_categories): vela e aromatizador são "home". */
+const PRODUCT_CATEGORY = 'home'
+const SHIPPING_CATEGORY = 'services'
+
 /**
  * Itens do pedido + frete como item. O MP exige que a soma bata com o total e não
  * aceita item negativo: com desconto, a cobrança vai sem itens (são ponto de
@@ -283,16 +288,20 @@ const buildPayer = (order: PayableOrder, identification?: MpPayer['identificatio
 const buildItems = (order: PayableOrder): MpItem[] | undefined => {
   const items: MpItem[] = order.items.map((i) => ({
     title: i.variantName ? `${i.productName} (${i.variantName})` : i.productName,
+    description: i.productName,
     quantity: i.quantity,
     unitPriceCents: i.unitPrice,
     externalCode: i.sku,
+    categoryId: PRODUCT_CATEGORY,
   }))
   if (order.shippingTotal > 0) {
     const method = orderShippingMethodSchema.safeParse(order.shippingMethodJson)
     items.push({
       title: method.success ? `Frete ${method.data.carrier} ${method.data.service}` : 'Frete',
+      description: 'Frete',
       quantity: 1,
       unitPriceCents: order.shippingTotal,
+      categoryId: SHIPPING_CATEGORY,
     })
   }
   const sum = items.reduce((acc, i) => acc + i.unitPriceCents * i.quantity, 0)
@@ -444,6 +453,7 @@ export const createCardPayment = async (
     paymentMethodId: input.paymentMethodId,
     paymentType: input.paymentType,
     installments: input.installments,
+    deviceId: input.deviceId,
   })
 
   if (!snapshot) return declined('invalid_request')
@@ -451,6 +461,17 @@ export const createCardPayment = async (
   await recordAttempt(order, snapshot, 'CARD')
   const applied = await applyMercadoPagoOrder(snapshot)
   const status = applied?.paymentStatus
+
+  logger.info(
+    {
+      orderId: order.id,
+      mpOrderId: snapshot.id,
+      status: snapshot.status,
+      statusDetail: snapshot.payment?.statusDetail ?? snapshot.statusDetail,
+      deviceId: !!input.deviceId,
+    },
+    'Mercado Pago: cartão processado',
+  )
 
   if (status === 'PAID') return { status: 'PAID' }
   if (status === 'FAILED') return declined(snapshot.payment?.statusDetail ?? snapshot.statusDetail ?? 'failed')

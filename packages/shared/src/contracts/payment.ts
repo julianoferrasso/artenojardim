@@ -72,6 +72,17 @@ export const createCardPaymentSchema = z.object({
     type: z.enum(['CPF', 'CNPJ']),
     number: z.string().regex(/^(\d{11}|\d{14})$/, 'Documento inválido'),
   }),
+  /**
+   * Device ID do security.js do MP, repassado no header `X-meli-session-id`. O
+   * charset fechado (sem CR/LF, espaço ou ":") impede que ele vire injeção de
+   * header. Fora do formato vira ausente em vez de 400: é sinal de antifraude e
+   * não pode derrubar a venda.
+   */
+  deviceId: z
+    .string()
+    .regex(/^[A-Za-z0-9._-]{1,512}$/)
+    .optional()
+    .catch(undefined),
 })
 
 export type CreateCardPaymentInput = z.infer<typeof createCardPaymentSchema>

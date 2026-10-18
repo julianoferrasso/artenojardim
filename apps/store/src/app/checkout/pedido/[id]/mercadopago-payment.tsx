@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Script from 'next/script'
 import type { MercadoPagoOrderPayment } from '@ecommerce/shared/contracts'
+import { MP_SECURITY_SCRIPT } from '@/lib/mercadopago'
 import { PixPayment } from './pix-payment'
 import { CardPaymentForm } from './card-payment'
 
@@ -37,6 +39,9 @@ export function MercadoPagoPayment({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Aqui e não no formulário do cartão: a coleta começa enquanto o cliente escolhe o meio. */}
+      <Script id="mp-security" src={MP_SECURITY_SCRIPT} strategy="afterInteractive" />
+
       <fieldset className="grid gap-2 sm:grid-cols-2">
         <legend className="sr-only">Forma de pagamento</legend>
         {option('PIX', 'Pix', 'Aprovação na hora')}

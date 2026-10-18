@@ -1,5 +1,5 @@
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
-import { env } from '../../config/env.js'
+import { mercadoPagoConfig } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { appError, externalServiceError, type AppError } from '../../shared/errors.js'
 
@@ -16,7 +16,8 @@ import { appError, externalServiceError, type AppError } from '../../shared/erro
 
 const BASE_URL = 'https://api.mercadopago.com'
 
-export const isMercadoPagoConfigured = (): boolean => !!env.MP_ACCESS_TOKEN && !!env.MP_PUBLIC_KEY
+export const isMercadoPagoConfigured = (): boolean =>
+  !!mercadoPagoConfig.accessToken && !!mercadoPagoConfig.publicKey
 
 // Configuração ausente não é "serviço fora do ar", mas para o cliente o efeito é
 // o mesmo: pagamento indisponível agora. O log de boot/requisição diz o porquê.
@@ -25,8 +26,8 @@ const unavailable = (): AppError =>
 
 /** A public key NÃO é segredo — vai para o front inicializar o Brick. */
 export const getMpPublicKey = (): string => {
-  if (!env.MP_PUBLIC_KEY) throw unavailable()
-  return env.MP_PUBLIC_KEY
+  if (!mercadoPagoConfig.publicKey) throw unavailable()
+  return mercadoPagoConfig.publicKey
 }
 
 type MpRequest = {
@@ -34,6 +35,8 @@ type MpRequest = {
   body?: unknown
   /** Obrigatório nas escritas: é o que torna o clique duplo inofensivo. */
   idempotencyKey?: string
+  /** Device ID do comprador (antifraude); só na criação de cobrança. */
+  deviceId?: string | undefined
 }
 
 /** Resposta crua: o 402 da criação traz a order, e só quem chama sabe usá-la. */
@@ -41,19 +44,20 @@ export type MpResponse = { status: number; body: unknown }
 
 export const mpRequest = async (
   path: string,
-  { method = 'GET', body, idempotencyKey }: MpRequest = {},
+  { method = 'GET', body, idempotencyKey, deviceId }: MpRequest = {},
 ): Promise<MpResponse> => {
-  if (!env.MP_ACCESS_TOKEN) throw unavailable()
+  if (!mercadoPagoConfig.accessToken) throw unavailable()
 
   let res: Response
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${mercadoPagoConfig.accessToken}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
         ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
+        ...(deviceId ? { 'X-meli-session-id': deviceId } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       // 10 s cabem com folga nos 22 s que o MP dá ao webhook para responder.

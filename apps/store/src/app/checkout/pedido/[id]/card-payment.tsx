@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { CardPayment } from '@mercadopago/sdk-react'
 import { ApiError } from '@/lib/api'
 import { createCardPayment } from '@/lib/checkout'
-import { ensureMercadoPago } from '@/lib/mercadopago'
+import { ensureMercadoPago, readMpDeviceId } from '@/lib/mercadopago'
 import { declineMessage } from '@/lib/payment-messages'
 
 /**
@@ -47,6 +47,7 @@ export function CardPaymentForm({
   ): Promise<void> => {
     setError(null)
     const doc = formData.payer.identification
+    const deviceId = readMpDeviceId()
     try {
       const result = await createCardPayment(orderId, {
         token: formData.token,
@@ -57,6 +58,7 @@ export function CardPaymentForm({
           type: doc?.type === 'CNPJ' ? 'CNPJ' : 'CPF',
           number: (doc?.number ?? '').replace(/\D/g, ''),
         },
+        ...(deviceId ? { deviceId } : {}),
       })
       if (result.status === 'PAID') onPaid()
       else onProcessing()

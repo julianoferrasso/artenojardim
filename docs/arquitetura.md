@@ -982,8 +982,26 @@ com a "assinatura secreta" do painel (`MP_WEBHOOK_SECRET`). O `data.id` vem da Q
 **minúsculas** (o SDK oficial não faz isso); par ausente sai do manifest. Responder em até 22 s.
 **Qual segredo:** o do app que CRIA a order. Com credenciais de teste, esse app é o do *Seller Test
 User* (outro id, `integration_data.application_id` da order), não o app principal — o segredo
-dele se obtém logado como o vendedor de teste. Com credenciais live, vale a aba "Modo de produção"
-do app principal.
+dele se obtém logado como o vendedor de teste e vai em `MP_WEBHOOK_SECRET_TEST`. Com credenciais
+live, vale a aba "Modo de produção" do app principal, em `MP_WEBHOOK_SECRET`.
+
+**Ambiente (`MP_ENVIRONMENT`).** Os dois pares de credenciais convivem no `.env`: produção sem
+sufixo (`MP_PUBLIC_KEY`, `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET`) e teste com `_TEST`.
+`MP_ENVIRONMENT=test|production` escolhe o par; `config/env.ts` o resolve em `mercadoPagoConfig`, e
+o resto do código não sabe que existem dois. Chavear = trocar a variável e reiniciar a API (a loja
+não muda: a public key vem da API). É **obrigatória** com `NODE_ENV=production`: cair em `test` por
+esquecimento numa API pública faria cartão de teste valer como pagamento — e o boot avisa (warn)
+quando produção roda em `test` de propósito. `MP_TEST_PAYER_EMAIL` só vale em `test`. Um pagamento
+só é operável (reler, cancelar, reembolsar) no ambiente em que nasceu: o token de um não enxerga as
+orders do outro.
+
+**Device ID.** O MercadoPago.js põe um device ID dentro do token do cartão, mas o Orders API pede o
+do comprador no header `X-meli-session-id`. A tela de pagamento carrega o `security.js` do MP (cria
+`window.MP_DEVICE_SESSION_ID`), o front manda o valor como `deviceId` no POST do cartão e a API o
+repassa no header. O contrato tem charset fechado (sem CR/LF: não vira injeção de header) e é
+tolerante — valor estranho vira ausente, nunca 400, porque é antifraude e não pode derrubar a venda.
+O Pix ainda vai sem device ID. Os itens levam `category_id` (`home` nos produtos, `services` no
+frete) e `description`, que o checklist de qualidade do MP conta como requisito.
 
 **Por que `fetch` e não o SDK `mercadopago`:** o SDK muta a config compartilhada a cada chamada (o
 `X-Idempotency-Key` vaza entre chamadas) e descarta o corpo do 402 — que é como o MP devolve um
@@ -1003,7 +1021,7 @@ estendida até o vencimento.
 **Teste (credenciais de teste do app):** Pix com `payer.first_name = "APRO"` é aprovado sozinho em
 segundos — basta o cliente de teste se chamar "APRO …". Cartão: 5480 8328 0103 3311, 11/30, 123,
 titular `APRO` (aprova) ou `OTHE` (recusa), CPF 12345678909. `MP_TEST_PAYER_EMAIL=test@testuser.com`
-substitui o e-mail do pagador enquanto as credenciais forem de teste (remover em produção).
+substitui o e-mail do pagador só com `MP_ENVIRONMENT=test`; em produção é ignorado.
 
 ---
 

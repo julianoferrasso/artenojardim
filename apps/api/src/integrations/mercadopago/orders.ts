@@ -139,6 +139,8 @@ export type MpItem = {
   externalCode?: string
   description?: string
   pictureUrl?: string
+  /** Categoria do catálogo do MP (GET /item_categories): "home", "services"… */
+  categoryId?: string
 }
 
 type CreateBase = {
@@ -150,6 +152,8 @@ type CreateBase = {
   /** Itens melhoram a análise antifraude; a soma tem de bater com o total. */
   items?: MpItem[]
   idempotencyKey: string
+  /** Vai no header X-meli-session-id; ausente, a cobrança segue sem ele. */
+  deviceId?: string | undefined
 }
 
 /** Texto da fatura do cartão. Curto de propósito: algumas bandeiras cortam. */
@@ -183,6 +187,7 @@ const toMpItems = (items: MpItem[]) =>
     ...(i.externalCode ? { external_code: i.externalCode } : {}),
     ...(i.description ? { description: i.description } : {}),
     ...(i.pictureUrl ? { picture_url: i.pictureUrl } : {}),
+    ...(i.categoryId ? { category_id: i.categoryId } : {}),
   }))
 
 const baseBody = (input: CreateBase) => ({
@@ -209,6 +214,7 @@ export const createPixOrder = async (
   const res = await mpRequest(ORDERS, {
     method: 'POST',
     idempotencyKey: input.idempotencyKey,
+    deviceId: input.deviceId,
     body: {
       ...baseBody(input),
       transactions: {
@@ -245,6 +251,7 @@ export const createCardOrder = async (input: CreateCardInput): Promise<MpOrderSn
   const res = await mpRequest(ORDERS, {
     method: 'POST',
     idempotencyKey: input.idempotencyKey,
+    deviceId: input.deviceId,
     body: {
       ...baseBody(input),
       transactions: {

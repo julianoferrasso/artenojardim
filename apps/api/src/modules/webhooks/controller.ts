@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { env } from '../../config/env.js'
+import { mercadoPagoConfig } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { isAppError } from '../../shared/errors.js'
 import { constructWebhookEvent } from '../../integrations/stripe/index.js'
@@ -63,8 +63,11 @@ export const mercadoPagoWebhookController = async (req: Request, res: Response):
   const requestId = header(req, 'x-request-id')
   const type = query['type'] ?? body.type
 
-  if (!env.MP_WEBHOOK_SECRET) {
-    logger.error('webhook Mercado Pago: MP_WEBHOOK_SECRET ausente — notificação recusada')
+  if (!mercadoPagoConfig.webhookSecret) {
+    logger.error(
+      { environment: mercadoPagoConfig.environment },
+      'webhook Mercado Pago: segredo do ambiente ativo ausente (MP_WEBHOOK_SECRET / MP_WEBHOOK_SECRET_TEST) — notificação recusada',
+    )
     res.status(503).send('Webhook não configurado')
     return
   }
@@ -73,13 +76,20 @@ export const mercadoPagoWebhookController = async (req: Request, res: Response):
     signature: header(req, 'x-signature'),
     requestId,
     dataId: query['data.id'],
-    secret: env.MP_WEBHOOK_SECRET,
+    secret: mercadoPagoConfig.webhookSecret,
   })
   if (!valid) {
     // O x-signature é um HMAC com timestamp, não segredo: logá-lo é o que permite
     // reproduzir o cálculo quando o MP e nós discordamos.
     logger.warn(
-      { requestId, dataId, type, signature: header(req, 'x-signature') },
+      {
+        requestId,
+        dataId,
+        type,
+        signature: header(req, 'x-signature'),
+        environment: mercadoPagoConfig.environment,
+        liveMode: body.live_mode,
+      },
       'webhook Mercado Pago: assinatura inválida',
     )
     res.status(401).send('Assinatura inválida')

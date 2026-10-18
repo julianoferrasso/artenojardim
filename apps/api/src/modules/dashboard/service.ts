@@ -31,15 +31,18 @@ export const getOverview = async (query: DashboardQuery): Promise<DashboardOverv
   const fromInstant = spDayStart(fromKey)
   const fromDateColumn = spDayAsDateColumn(fromKey)
 
+  // Pedido cancelado não é venda nem pendência, mesmo pago: o dinheiro dele está
+  // de saída (reembolso) e não há o que cobrar.
   const paidWhere = {
     storeId,
     paymentStatus: 'PAID' as const,
+    canceledAt: null,
     createdAt: { gte: fromInstant },
   }
 
   const [agg, pendingOrders, paidOrders, groupedItems, groupedViews] = await Promise.all([
     prisma.order.aggregate({ where: paidWhere, _sum: { total: true }, _count: true }),
-    prisma.order.count({ where: { storeId, paymentStatus: 'PENDING' } }),
+    prisma.order.count({ where: { storeId, paymentStatus: 'PENDING', canceledAt: null } }),
     prisma.order.findMany({ where: paidWhere, select: { createdAt: true, total: true } }),
     prisma.orderItem.groupBy({
       by: ['productName'],

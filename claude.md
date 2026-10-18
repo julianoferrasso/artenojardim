@@ -44,7 +44,9 @@ O que **não** pode esquecer:
 - **Roadmap completo e decisões:** [docs/arquitetura.md](docs/arquitetura.md) (§21 Roadmap).
 - **Credenciais** (Mercado Pago, Stripe, Melhor Envio, DB) vivem em `apps/api/.env` — fora do git, nunca em log.
 - **Pagamentos:** Mercado Pago (Checkout Transparente, Orders API) é o provedor ativo; o Stripe está
-  em standby e volta com `PAYMENT_PROVIDER=stripe`. Detalhes em [docs/arquitetura.md](docs/arquitetura.md) §10.
+  em standby e volta com `PAYMENT_PROVIDER=stripe`. O ambiente do MP é `MP_ENVIRONMENT=test|production`
+  (os dois pares de credenciais convivem no `.env`; os de teste têm sufixo `_TEST`). Obrigatória em
+  produção. Detalhes em [docs/arquitetura.md](docs/arquitetura.md) §10.
 
 ## Stack
 

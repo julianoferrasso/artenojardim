@@ -280,7 +280,12 @@ export const cancelOrderInternal = async (
   }
 
   const storeId = getActiveStoreId()
-  const wasPaid = order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIALLY_REFUNDED'
+  // REFUNDED conta como pago: o estorno devolve o dinheiro, não a peça. Quem a
+  // devolve à prateleira é o cancelamento, venha ele antes ou depois do estorno.
+  const wasPaid =
+    order.paymentStatus === 'PAID' ||
+    order.paymentStatus === 'PARTIALLY_REFUNDED' ||
+    order.paymentStatus === 'REFUNDED'
   const userId = actor.kind === 'staff' ? (actor.userId ?? null) : null
 
   await prisma.$transaction(async (tx) => {
