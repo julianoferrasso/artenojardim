@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { orderAddressSchema, orderShippingMethodSchema, orderItemSchema } from './orders.js'
+import { couponCodeSchema } from './coupons.js'
 
 /**
  * Contratos de checkout. O front manda IDS e ESCOLHAS, nunca valores: o endereço
@@ -10,6 +11,8 @@ import { orderAddressSchema, orderShippingMethodSchema, orderItemSchema } from '
 export const checkoutSummaryRequestSchema = z.object({
   addressId: z.string().min(1, 'Escolha um endereço de entrega'),
   shippingServiceId: z.string().min(1, 'Escolha uma opção de frete'),
+  /** Só o código: o desconto é revalidado e recalculado do banco. */
+  couponCode: couponCodeSchema.optional(),
 })
 
 export type CheckoutSummaryRequest = z.infer<typeof checkoutSummaryRequestSchema>

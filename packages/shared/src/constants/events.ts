@@ -122,6 +122,12 @@ export const EVENTS = {
     updated: 'banner.updated',
     deleted: 'banner.deleted',
   },
+  /** Cupons de desconto. Só auditoria — nenhum consumidor de fila. */
+  coupon: {
+    created: 'coupon.created',
+    updated: 'coupon.updated',
+    deleted: 'coupon.deleted',
+  },
   /** Posts da seção "No Instagram" da home. Só auditoria — nenhum consumidor de fila. */
   instagramPost: {
     created: 'instagram_post.created',

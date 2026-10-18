@@ -400,7 +400,7 @@ Nascem já na Fase 1, porque são obviamente puros, complexos e críticos:
 | Arquivo | Responsabilidade |
 |---|---|
 | `checkout/domain/totals.ts` | itens + cupom + frete → subtotal, desconto, total. **O coração do "nunca confie no front"** |
-| `coupons/domain/rules.ts` | este cupom se aplica a este carrinho? validade, mínimo, teto, limites |
+| `coupons/domain/rules.ts` | este cupom se aplica a este carrinho? validade, mínimo, limites; quanto desconta |
 | `shipping/domain/packing.ts` | cubagem: itens → caixas com peso e dimensões |
 | `inventory/domain/ledger.ts` | movimentos → saldo; saldo acumulado do extrato |
 | `products/domain/variants.ts` | produto cartesiano de opções, validação de combinações |
@@ -639,11 +639,15 @@ Tabela separada porque um pedido pode ter mais de uma remessa — na v1 sempre u
 
 #### Cupons
 
-**`Coupon`** — `id`, `storeId`, `code`, `type: CouponType`, `value`, `minOrderValue?`, `maxDiscount?`, `usageLimit?`, `usageCount`, `usageLimitPerCustomer?`, `startsAt?`, `endsAt?`, `isActive`, timestamps. `@@unique([storeId, code])`.
+**`Coupon`** — `id`, `storeId`, `code` (maiúsculo, imutável), `type: CouponType`, `value`, `minOrderValue?`, `usageLimit?`, `usageCount`, `usageLimitPerCustomer?`, `startsAt?`, `endsAt?`, `isActive`, timestamps. `@@unique([storeId, code])`.
 `enum CouponType { PERCENTAGE FIXED_AMOUNT FREE_SHIPPING }`
 
-**`CouponUsage`** — `id`, `couponId`, `orderId @unique`, `customerId`, `discountAmount`, `createdAt`.
-`usageCount` é cache; `CouponUsage` é a verdade — mesmo padrão do estoque. `orderId @unique` impede contar duas vezes.
+**Implementado (out/2026) mais simples que o desenho original:**
+- **Sem `CouponUsage`.** Um uso = um `Order` **não cancelado** com `couponId` — é a verdade. `usageCount` é o cache que deixa o limite total atômico: `UPDATE ... SET "usageCount" = "usageCount" + 1 WHERE "usageCount" < "usageLimit"` dentro da transação do confirm (o mesmo truque da reserva de estoque); o cancelamento devolve o uso na mesma transação. O limite por cliente reconta os pedidos dele sob o lock da linha do cupom.
+- **O uso conta ao criar o pedido**, não ao pagar: contar no pagamento deixaria o limite estourar (não dá para recusar quem já pagou). Contrapartida: pedido abandonado segura a vaga até ser cancelado — como a reserva de estoque — até existir o job de expiração.
+- **Sem `maxDiscount`** e **sem cupom no carrinho** (`Cart.couponId` segue sem uso): a loja guarda o cupom aplicado só na tela do checkout e manda o código no confirm.
+- PERCENTAGE/FIXED_AMOUNT descontam só os produtos (teto: subtotal); FREE_SHIPPING desconta o frete — `shippingTotal` fica cheio e o abatimento entra em `discountTotal`. Desconto zero (frete já grátis) não grava cupom nem gasta uso; total zero é recusado (`COUPON_NOT_APPLICABLE`).
+- Inativo/agendado respondem como inexistente (`COUPON_NOT_FOUND`): não revela campanha futura. Cupom com pedido não se exclui (`COUPON_IN_USE`, FK Restrict) — desativa-se.
 
 #### CMS
 
@@ -1788,7 +1792,7 @@ Portanto:
 /clientes  └── /[id]  Perfil, endereços, histórico, LTV
 /estoque              Níveis, alerta de baixo, ajuste
   /estoque/[variantId] Extrato do ledger
-/cupons               Fase 2
+/cupons               Lista + formulário (no ar desde out/2026)
 /cms/{paginas,banners,menus}   Fase 2
 /configuracoes        Loja, frete, pagamento, e-mails, usuários, flags
 /uploads              Biblioteca de mídia

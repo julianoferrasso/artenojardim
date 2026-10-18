@@ -55,6 +55,13 @@ export const ERROR_CODES = {
   COUPON_EXPIRED: 'COUPON_EXPIRED',
   COUPON_USAGE_LIMIT_REACHED: 'COUPON_USAGE_LIMIT_REACHED',
   COUPON_MIN_ORDER_NOT_MET: 'COUPON_MIN_ORDER_NOT_MET',
+  /// O cliente já usou este cupom o máximo de vezes permitido por pessoa.
+  COUPON_ALREADY_USED: 'COUPON_ALREADY_USED',
+  /// O desconto zeraria o pedido — e não há cobrança de R$ 0.
+  COUPON_NOT_APPLICABLE: 'COUPON_NOT_APPLICABLE',
+  COUPON_CODE_TAKEN: 'COUPON_CODE_TAKEN',
+  /// Cupom que já esteve em algum pedido não pode ser excluído, só desativado.
+  COUPON_IN_USE: 'COUPON_IN_USE',
 
   // Checkout / frete / pagamento
   CART_EMPTY: 'CART_EMPTY',

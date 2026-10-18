@@ -24,6 +24,7 @@ import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import { createRefund } from '../../integrations/stripe/index.js'
 import { releaseOrderReservations, restockCanceledOrder } from '../inventory/service.js'
+import { releaseCouponUse } from '../coupons/service.js'
 import {
   cancelPendingMercadoPagoPayments,
   refundMercadoPagoPayment,
@@ -302,6 +303,9 @@ export const cancelOrderInternal = async (
 
     if (wasPaid) await restockCanceledOrder(tx, storeId, id, userId ?? undefined)
     else await releaseOrderReservations(tx, id)
+
+    // Pedido cancelado deixa de ser uso do cupom, pago ou não: a vaga volta.
+    if (order.couponId) await releaseCouponUse(tx, order.couponId)
 
     await tx.orderEvent.create({
       data: {

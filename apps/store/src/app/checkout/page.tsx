@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { Address, ShippingOption } from '@ecommerce/shared/contracts'
+import type { Address, AppliedCoupon, ShippingOption } from '@ecommerce/shared/contracts'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
 import { listAddresses } from '@/lib/addresses'
 import { quoteShipping } from '@/lib/shipping'
 import { confirmCheckout } from '@/lib/checkout'
+import { validateCoupon, couponErrorMessage, isCouponError } from '@/lib/coupons'
 import { formatBRL, cn } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
 import { buttonVariants } from '@/components/ui/button'
@@ -32,6 +33,10 @@ export default function CheckoutPage() {
   const [quoting, setQuoting] = useState(false)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [couponInput, setCouponInput] = useState('')
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [applyingCoupon, setApplyingCoupon] = useState(false)
 
   const items = (cart?.items ?? []).filter((i) => i.purchasable)
 
@@ -85,7 +90,31 @@ export default function CheckoutPage() {
 
   const selectedShipping = options?.find((o) => o.id === serviceId) ?? null
   const subtotal = cart?.subtotal ?? 0
-  const total = subtotal + (selectedShipping?.priceCents ?? 0)
+  const shippingPrice = selectedShipping?.priceCents ?? 0
+  // Prévia: o confirm recalcula o desconto do banco. Frete grátis desconta o
+  // frete escolhido, que a API ainda não conhecia quando validou o código.
+  const couponDiscount = !coupon
+    ? 0
+    : coupon.type === 'FREE_SHIPPING'
+      ? shippingPrice
+      : coupon.discountCents
+  const total = subtotal + shippingPrice - couponDiscount
+  const freeShippingAlready = coupon?.type === 'FREE_SHIPPING' && !!selectedShipping && shippingPrice === 0
+
+  const applyCoupon = async () => {
+    const code = couponInput.trim()
+    if (!code) return
+    setApplyingCoupon(true)
+    setCouponError(null)
+    try {
+      setCoupon(await validateCoupon(code))
+      setCouponInput('')
+    } catch (err) {
+      setCouponError(couponErrorMessage(err))
+    } finally {
+      setApplyingCoupon(false)
+    }
+  }
 
   const place = async () => {
     if (!addressId || !serviceId) return
@@ -95,11 +124,20 @@ export default function CheckoutPage() {
       const order = await confirmCheckout({
         addressId,
         shippingServiceId: serviceId,
+        ...(coupon ? { couponCode: coupon.code } : {}),
         ...(note.trim() ? { customerNote: note.trim() } : {}),
       })
       router.replace(`/checkout/pedido/${order.id}`)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Não foi possível finalizar o pedido.')
+      // O cupom pode ter expirado ou esgotado desde que foi aplicado: sai do
+      // resumo para o cliente ver o total novo antes de confirmar de novo.
+      if (isCouponError(err)) {
+        setCoupon(null)
+        setCouponError(couponErrorMessage(err))
+        setError('O cupom não pôde ser usado e foi removido. Confira o novo total.')
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Não foi possível finalizar o pedido.')
+      }
       setPlacing(false)
     }
   }
@@ -198,7 +236,63 @@ export default function CheckoutPage() {
             </li>
           ))}
         </ul>
-        <div className="flex justify-between border-t border-border pt-2 text-sm">
+
+        <div className="mb-3 border-t border-border pt-3">
+          {coupon ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm">
+              <span>
+                Cupom <span className="font-medium">{coupon.code}</span> aplicado
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCoupon(null)
+                  setCouponError(null)
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Remover
+              </button>
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void applyCoupon()
+              }}
+              className="flex gap-2"
+            >
+              <input
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value)}
+                placeholder="Cupom de desconto"
+                aria-label="Cupom de desconto"
+                autoComplete="off"
+                maxLength={30}
+                className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-sm uppercase outline-none transition-colors placeholder:normal-case focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              />
+              <button
+                type="submit"
+                disabled={!couponInput.trim() || applyingCoupon}
+                className={buttonVariants({ variant: 'neutral', emphasis: 'quiet' })}
+              >
+                {applyingCoupon ? 'Aplicando…' : 'Aplicar'}
+              </button>
+            </form>
+          )}
+          {couponError && (
+            <p role="alert" className="mt-1.5 text-xs text-destructive">
+              {couponError}
+            </p>
+          )}
+          {freeShippingAlready && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              O frete deste pedido já é grátis, então o cupom não muda o total.
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Subtotal</span>
           <span>{formatBRL(subtotal)}</span>
         </div>
@@ -206,6 +300,12 @@ export default function CheckoutPage() {
           <span className="text-muted-foreground">Frete</span>
           <span>{selectedShipping ? formatBRL(selectedShipping.priceCents) : '—'}</span>
         </div>
+        {coupon && couponDiscount > 0 && (
+          <div className="flex justify-between text-sm text-success">
+            <span>Desconto ({coupon.code})</span>
+            <span>−{formatBRL(couponDiscount)}</span>
+          </div>
+        )}
         <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-semibold">
           <span>Total</span>
           <span>{formatBRL(total)}</span>

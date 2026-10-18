@@ -146,6 +146,12 @@ export const ROUTES = {
       reactivate: (id: string) => `${base}/admin/users/${id}/reactivate`,
       password: (id: string) => `${base}/admin/users/${id}/password`,
     },
+
+    /** Cupons de desconto. Router inteiro atrás de requireStaff. */
+    coupons: {
+      list: `${base}/admin/coupons`,
+      detail: (id: string) => `${base}/admin/coupons/${id}`,
+    },
   },
 
   /** Superfície do PRÓPRIO cliente. A visão de staff vive em `admin.customers`. */
@@ -162,9 +168,9 @@ export const ROUTES = {
     address: (id: string) => `${base}/customers/me/addresses/${id}`,
   },
 
+  /** O cliente confere um código contra o próprio carrinho. A gestão vive em `admin.coupons`. */
   coupons: {
     validate: `${base}/coupons/validate`,
-    list: `${base}/coupons`,
   },
 
   inventory: {

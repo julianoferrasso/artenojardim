@@ -13,6 +13,7 @@ import {
   Camera,
   Mail,
   Palette,
+  TicketPercent,
   Truck,
   UserRound,
   Users,
@@ -42,6 +43,8 @@ const NAV: NavItem[] = [
   { href: '/banners', label: 'Banners', icon: GalleryHorizontalEnd },
   // lucide 1.x não traz ícones de marca — a câmera é o "Instagram" do menu.
   { href: '/instagram', label: 'Instagram', icon: Camera },
+  // Cupom é preço com outro nome: o mesmo staff que edita produto cria cupom.
+  { href: '/cupons', label: 'Cupons', icon: TicketPercent },
   // O disparo mora na tela do produto; aqui fica só o histórico do que saiu.
   { href: '/campanhas', label: 'Campanhas', icon: Mail },
   // Conectar troca a conta que paga os fretes: mesmo piso da API (requireMinRole).

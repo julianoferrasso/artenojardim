@@ -247,6 +247,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
           shippingTotal={order.shippingTotal}
           discountTotal={order.discountTotal}
           total={order.total}
+          couponCode={order.couponCodeSnapshot}
         />
       </div>
 

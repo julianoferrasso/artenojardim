@@ -18,6 +18,8 @@ import { resolveCart, getCart } from '../cart/service.js'
 import { getAddress } from '../addresses/service.js'
 import { quoteShipping } from '../shipping/service.js'
 import { getOrder } from '../orders/service.js'
+import { resolveCoupon, claimCouponUse, type CheckoutCoupon } from '../coupons/service.js'
+import { computeCouponDiscount } from '../coupons/domain/rules.js'
 import { calculateTotals, type Totals } from './domain/totals.js'
 
 /**
@@ -36,6 +38,8 @@ type Prepared = {
   items: CartItem[]
   shipping: ShippingOption
   totals: Totals
+  /** null também quando o cupom não mudaria nada (frete grátis num frete já zerado). */
+  coupon: CheckoutCoupon | null
   customer: { email: string; phone: string | null }
 }
 
@@ -75,17 +79,43 @@ const prepare = async (customerId: string, req: CheckoutSummaryRequest): Promise
     )
   }
 
-  const totals = calculateTotals({
-    items: items.map((i) => ({ unitPrice: i.unitPrice, quantity: i.quantity })),
-    shippingCents: shipping.priceCents,
-  })
+  const totalsItems = items.map((i) => ({ unitPrice: i.unitPrice, quantity: i.quantity }))
+  let totals = calculateTotals({ items: totalsItems, shippingCents: shipping.priceCents })
+
+  // O cupom é revalidado AGORA (pode ter expirado ou esgotado desde a prévia) e
+  // o desconto sai do banco, nunca do que a loja mostrou.
+  let coupon: CheckoutCoupon | null = null
+  if (req.couponCode) {
+    const found = await resolveCoupon(customerId, req.couponCode, totals.subtotal)
+    const discount = computeCouponDiscount(found, {
+      subtotal: totals.subtotal,
+      shipping: totals.shippingTotal,
+    })
+    // Desconto zero (frete grátis num frete que já é grátis) não gasta um uso.
+    if (discount.products + discount.shipping > 0) {
+      coupon = found
+      totals = calculateTotals({
+        items: totalsItems,
+        shippingCents: shipping.priceCents,
+        discountCents: discount.products,
+        shippingDiscountCents: discount.shipping,
+      })
+      if (totals.total === 0) {
+        throw businessError(
+          ERROR_CODES.COUPON_NOT_APPLICABLE,
+          'Este cupom zera o pedido e não pode ser usado nesta compra.',
+          422,
+        )
+      }
+    }
+  }
 
   const customer = await prisma.customer.findUniqueOrThrow({
     where: { id: customerId },
     select: { email: true, phone: true },
   })
 
-  return { cartId, address, items, shipping, totals, customer }
+  return { cartId, address, items, shipping, totals, coupon, customer }
 }
 
 const addressSnapshot = (a: Address): Order['shippingAddress'] => ({
@@ -106,6 +136,12 @@ const methodSnapshot = (s: ShippingOption): Order['shippingMethod'] => ({
   priceCents: s.priceCents,
   deliveryDays: s.deliveryDays,
 })
+
+const isOrderNumberCollision = (err: unknown): boolean => {
+  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== 'P2002') return false
+  const target = err.meta?.['target']
+  return Array.isArray(target) ? target.includes('number') : String(target).includes('number')
+}
 
 /** Prévia do pedido — não cria nada. Alimenta a tela de resumo. */
 export const getSummary = async (
@@ -139,7 +175,10 @@ export const getSummary = async (
  * prateleira até o pagamento (Fase 1.12).
  */
 export const confirm = async (customerId: string, input: ConfirmCheckoutInput): Promise<Order> => {
-  const { cartId, address, items, shipping, totals, customer } = await prepare(customerId, input)
+  const { cartId, address, items, shipping, totals, coupon, customer } = await prepare(
+    customerId,
+    input,
+  )
   const storeId = getActiveStoreId()
 
   // Peso é snapshot no item; carrega das variantes (o carrinho não guarda peso).
@@ -159,6 +198,10 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const orderId = await prisma.$transaction(async (tx) => {
+        // Antes do create: a contagem por cliente dentro do claim não pode
+        // enxergar o próprio pedido que está nascendo.
+        if (coupon) await claimCouponUse(tx, coupon, customerId)
+
         const agg = await tx.order.aggregate({ where: { storeId }, _max: { number: true } })
         const number = (agg._max.number ?? 0) + 1
 
@@ -173,6 +216,8 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
             discountTotal: totals.discountTotal,
             shippingTotal: totals.shippingTotal,
             total: totals.total,
+            couponId: coupon?.id ?? null,
+            couponCodeSnapshot: coupon?.code ?? null,
             shippingAddressJson: addressSnapshot(address) as object,
             shippingMethodJson: methodSnapshot(shipping) as object,
             customerNote: input.customerNote ?? null,
@@ -224,8 +269,9 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
 
       return getOrder(customerId, orderId)
     } catch (err) {
-      // Colisão no número: tenta de novo com o próximo. Outros erros sobem.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue
+      // Colisão no número: tenta de novo com o próximo. Outros erros sobem —
+      // inclusive outro unique, que repetido quatro vezes daria a mensagem errada.
+      if (isOrderNumberCollision(err)) continue
       throw err
     }
   }

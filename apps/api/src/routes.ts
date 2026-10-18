@@ -23,6 +23,7 @@ import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
 import { newsletterRoutes } from './modules/newsletter/routes.js'
 import { bannerRoutes } from './modules/banners/routes.js'
 import { instagramPostRoutes } from './modules/instagram/routes.js'
+import { adminCouponRoutes, couponRoutes } from './modules/coupons/routes.js'
 
 /**
  * Montagem de todos os módulos. Os caminhos vêm de shared/constants — renomear
@@ -62,6 +63,9 @@ apiRoutes.use('/admin/campaigns', campaignRoutes)
 apiRoutes.use('/admin/users', adminUserRoutes)
 // Aparência da loja. Também exige ADMIN — ver o comentário no router.
 apiRoutes.use('/admin/store', adminStoreRoutes)
+// Cupons: gestão do staff aqui; a validação do cliente em /coupons.
+apiRoutes.use('/admin/coupons', adminCouponRoutes)
+apiRoutes.use('/coupons', couponRoutes)
 apiRoutes.use('/product-views', productViewRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
 apiRoutes.use('/store', storeRoutes)

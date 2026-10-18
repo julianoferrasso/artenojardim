@@ -57,6 +57,7 @@ export const ADMIN_ORDER_SELECT = {
   discountTotal: true,
   shippingTotal: true,
   total: true,
+  couponId: true,
   couponCodeSnapshot: true,
   shippingAddressJson: true,
   shippingMethodJson: true,

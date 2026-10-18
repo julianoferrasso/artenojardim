@@ -54,6 +54,7 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
       email: true,
       subtotal: true,
       discountTotal: true,
+      couponCodeSnapshot: true,
       shippingTotal: true,
       total: true,
       shippingAddressJson: true,
@@ -85,7 +86,12 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
     totals: [
       { label: 'Subtotal', value: formatBRL(order.subtotal) },
       ...(order.discountTotal > 0
-        ? [{ label: 'Desconto', value: `− ${formatBRL(order.discountTotal)}` }]
+        ? [
+            {
+              label: order.couponCodeSnapshot ? `Desconto (${order.couponCodeSnapshot})` : 'Desconto',
+              value: `− ${formatBRL(order.discountTotal)}`,
+            },
+          ]
         : []),
       { label: 'Frete', value: formatBRL(order.shippingTotal) },
       { label: 'Total', value: formatBRL(order.total), strong: true },

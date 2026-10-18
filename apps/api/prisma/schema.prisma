@@ -100,6 +100,13 @@ enum InstagramDisplayMode {
   EMBED
 }
 
+/// Tipo do cupom. Espelha COUPON_TYPES em constants (guardado pelo drift).
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -137,6 +144,7 @@ model Store {
   emailCampaigns        EmailCampaign[]
   banners               Banner[]
   instagramPosts        InstagramPost[]
+  coupons               Coupon[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -824,6 +832,8 @@ model Order {
   shippingTotal Int
   total         Int
 
+  /// Pedido não cancelado com couponId = um uso do cupom. É a verdade; o
+  /// Coupon.usageCount é só o cache que torna o limite atômico.
   couponId           String?
   couponCodeSnapshot String?
 
@@ -840,6 +850,8 @@ model Order {
 
   store    Store        @relation(fields: [storeId], references: [id], onDelete: Restrict)
   customer Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  /// Restrict: cupom que já foi usado não se apaga — desativa-se.
+  coupon   Coupon?      @relation(fields: [couponId], references: [id], onDelete: Restrict)
   items    OrderItem[]
   events   OrderEvent[]
   payments Payment[]
@@ -849,6 +861,39 @@ model Order {
   @@index([storeId, fulfillmentStatus])
   @@index([storeId, createdAt])
   @@index([customerId])
+  @@index([couponId])
+}
+
+/// Cupom de desconto. Um por pedido, aplicado no checkout e congelado no Order
+/// (couponId + couponCodeSnapshot + discountTotal): editar o cupom depois não
+/// muda pedido nenhum.
+model Coupon {
+  id      String     @id @default(cuid())
+  storeId String
+  /// Sempre MAIÚSCULO (o contrato normaliza). Imutável depois de criado.
+  code    String
+  type    CouponType
+  /// PERCENTAGE: 1–100 (CHECK no banco). FIXED_AMOUNT: centavos. FREE_SHIPPING: 0.
+  value   Int
+
+  /// Comparado com o subtotal dos PRODUTOS, antes do desconto.
+  minOrderValue         Int?
+  usageLimit            Int?
+  /// Pedidos não cancelados com este cupom. Sobe no confirm, desce no cancelamento.
+  usageCount            Int       @default(0)
+  usageLimitPerCustomer Int?
+  /// Instantes já convertidos do dia de São Paulo (início 00:00, fim 23:59:59.999).
+  startsAt              DateTime?
+  endsAt                DateTime?
+  isActive              Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store  Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@unique([storeId, code])
 }
 
 /// Item do pedido: TUDO é snapshot. Apagar a variante em 2027 não muda o pedido de

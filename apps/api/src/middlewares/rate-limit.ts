@@ -246,6 +246,17 @@ export const paymentAttemptLimiter = build({
   keyBy: byCustomer,
 })
 
+/**
+ * Conferir cupom. O teto é contra chutar códigos ("BLACK10", "BLACK15"...) até
+ * achar uma campanha; 20/h sobra para quem digita errado e tenta de novo.
+ */
+export const couponValidateLimiter = build({
+  name: 'coupon-validate',
+  windowMs: 60 * 60_000,
+  max: 20,
+  keyBy: byCustomer,
+})
+
 /** Comprar de novo escreve no carrinho e lê estoque item a item. */
 export const orderReorderLimiter = build({
   name: 'order-reorder',
