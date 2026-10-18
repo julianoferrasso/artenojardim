@@ -19,6 +19,7 @@ import { getActiveStoreId } from '../../shared/store-context.js'
 import { notFound, conflict } from '../../shared/errors.js'
 import { toPrismaPagination, buildMeta } from '../../shared/pagination.js'
 import { cancelOrderInternal } from '../admin-orders/service.js'
+import { refreshPendingMercadoPagoPayment } from '../payments/service.js'
 import { resolveCart, addItems } from '../cart/service.js'
 import {
   CUSTOMER_LIST_SELECT,
@@ -122,12 +123,14 @@ export const getOrder = async (customerId: string, id: string): Promise<Customer
   toCustomerOrderDTO(await findOwnedOrThrow(customerId, id, CUSTOMER_ORDER_SELECT))
 
 export const getOrderStatus = async (customerId: string, id: string): Promise<OrderStatus> => {
-  const row = await findOwnedOrThrow(customerId, id, {
-    id: true,
-    paymentStatus: true,
-    fulfillmentStatus: true,
-  })
-  return row
+  const select = { id: true, paymentStatus: true, fulfillmentStatus: true } as const
+  const row = await findOwnedOrThrow(customerId, id, select)
+  if (row.paymentStatus !== 'PENDING') return row
+
+  // Polling da tela de pagamento: se o webhook do MP falhou ou atrasou, a
+  // releitura confirma por aqui (mesma função única, regra 6).
+  await refreshPendingMercadoPagoPayment(row.id)
+  return findOwnedOrThrow(customerId, id, select)
 }
 
 // ── Cancelamento ─────────────────────────────────────────────────────────────

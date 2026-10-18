@@ -774,6 +774,42 @@ const currentState = async (tx: Prisma.TransactionClient, paymentId: string): Pr
   return p ? { orderId: p.orderId, paymentStatus: p.status } : null
 }
 
+/** Intervalo mínimo entre duas releituras da mesma tentativa por polling. */
+const REFRESH_INTERVAL_MS = 10_000
+
+/**
+ * Contingência do webhook: a tela de pagamento faz polling do status, e enquanto
+ * houver tentativa em aberto no MP relemos a order lá e aplicamos — pela mesma
+ * função única. Sem isto, uma notificação perdida ou recusada só seria reenviada
+ * pelo MP 15 minutos depois, com o cliente olhando a tela do Pix.
+ *
+ * A vez é reivindicada no banco (`updatedAt` mais velho que o intervalo): várias
+ * abas e várias instâncias do PM2 fazem, juntas, no máximo uma chamada ao MP a
+ * cada 10 s por tentativa. Nunca lança — o status responde o que o banco tem.
+ */
+export const refreshPendingMercadoPagoPayment = async (orderId: string): Promise<void> => {
+  try {
+    const storeId = getActiveStoreId()
+    const pending = await prisma.payment.findFirst({
+      where: { orderId, storeId, provider: 'MERCADO_PAGO', status: 'PROCESSING', mpOrderId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, mpOrderId: true },
+    })
+    if (!pending?.mpOrderId) return
+
+    const now = new Date()
+    const claimed = await prisma.payment.updateMany({
+      where: { id: pending.id, status: 'PROCESSING', updatedAt: { lt: new Date(now.getTime() - REFRESH_INTERVAL_MS) } },
+      data: { updatedAt: now },
+    })
+    if (claimed.count === 0) return
+
+    await syncMercadoPagoOrder(pending.mpOrderId)
+  } catch (err) {
+    logger.warn({ err, orderId }, 'Mercado Pago: releitura por polling falhou')
+  }
+}
+
 /** Webhook: relê a order no MP (a notificação só diz "olhe de novo") e aplica. */
 export const syncMercadoPagoOrder = async (mpOrderId: string): Promise<ApplyResult | null> => {
   const snapshot = await getMpOrder(mpOrderId)

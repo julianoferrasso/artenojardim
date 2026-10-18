@@ -971,9 +971,19 @@ estado relido, e as escritas são guardadas pelo status atual (`updateMany where
 FAILED; `refunded` ou `processed/refunded` → REFUNDED; `processed/partially_refunded` →
 PARTIALLY_REFUNDED; `charged_back` não tem transição automática. FAILED e REFUNDED são finais.
 
+**Contingência por polling.** Enquanto a tela de pagamento consulta `GET /orders/:id/status` e
+o pedido está PENDING com tentativa MP em aberto, a API relê a order no MP e aplica pela mesma
+função — no máximo uma vez a cada 10 s por tentativa (a vez é reivindicada no `updatedAt` do
+Payment, então abas e instâncias do PM2 não multiplicam chamadas). O webhook continua sendo o
+caminho principal; isto cobre notificação perdida/recusada, que o MP só reenviaria 15 min depois.
+
 **Assinatura do webhook.** Manifest `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, HMAC-SHA256
 com a "assinatura secreta" do painel (`MP_WEBHOOK_SECRET`). O `data.id` vem da QUERY e entra em
 **minúsculas** (o SDK oficial não faz isso); par ausente sai do manifest. Responder em até 22 s.
+**Qual segredo:** o do app que CRIA a order. Com credenciais de teste, esse app é o do *Seller Test
+User* (outro id, `integration_data.application_id` da order), não o app principal — o segredo
+dele se obtém logado como o vendedor de teste. Com credenciais live, vale a aba "Modo de produção"
+do app principal.
 
 **Por que `fetch` e não o SDK `mercadopago`:** o SDK muta a config compartilhada a cada chamada (o
 `X-Idempotency-Key` vaza entre chamadas) e descarta o corpo do 402 — que é como o MP devolve um
