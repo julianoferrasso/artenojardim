@@ -48,6 +48,11 @@ export const SETTING_SCHEMAS = {
    * Estado do OAuth do Melhor Envio. `state` é o anti-CSRF do fluxo (existe só
    * entre o connect e o callback). Os tokens ficam aqui — no banco, nunca em log
    * nem no código. O access token é curto; o refresh renova sozinho.
+   *
+   * SEM cache: o refresh token rotaciona a cada renovação, e mais de um processo
+   * escreve aqui (API, worker, a API de dev — que usa o MESMO banco). Um token
+   * velho em memória num processo invalida a conexão de todos. Foi assim que o
+   * frete ficou fora em out/2026.
    */
   melhor_envio_oauth: {
     schema: z.object({
@@ -58,6 +63,7 @@ export const SETTING_SCHEMAS = {
       expiresAt: z.number().int().nullable(),
     }),
     default: { state: null, accessToken: null, refreshToken: null, expiresAt: null },
+    cache: false,
   },
 } as const
 
@@ -65,6 +71,11 @@ type SettingKey = keyof typeof SETTING_SCHEMAS
 type SettingValue<K extends SettingKey> = z.infer<(typeof SETTING_SCHEMAS)[K]['schema']>
 
 const cache = new Map<string, unknown>()
+
+const isCacheable = (key: SettingKey): boolean => {
+  const spec = SETTING_SCHEMAS[key]
+  return !('cache' in spec && spec.cache === false)
+}
 
 export const getSetting = async <K extends SettingKey>(key: K): Promise<SettingValue<K>> => {
   const cached = cache.get(key)
@@ -81,7 +92,7 @@ export const getSetting = async <K extends SettingKey>(key: K): Promise<SettingV
   // Valor corrompido no banco cai no default em vez de derrubar a requisição.
   const value = (parsed?.success ? parsed.data : spec.default) as SettingValue<K>
 
-  cache.set(key, value)
+  if (isCacheable(key)) cache.set(key, value)
   return value
 }
 
@@ -97,7 +108,7 @@ export const setSetting = async <K extends SettingKey>(
     update: { valueJson: parsed as object },
   })
 
-  cache.set(key, parsed)
+  if (isCacheable(key)) cache.set(key, parsed)
 }
 
 export const invalidateSettingsCache = (): void => cache.clear()

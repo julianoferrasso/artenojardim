@@ -1,5 +1,6 @@
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import { env } from '../../config/env.js'
+import { logger } from '../../config/logger.js'
 import { appError, externalServiceError } from '../../shared/errors.js'
 
 /**
@@ -78,6 +79,21 @@ export const buildAuthorizeUrl = (state: string): string => {
   return `${c.baseUrl}/oauth/authorize?${params.toString()}`
 }
 
+/**
+ * Só os campos de diagnóstico do corpo de erro (padrão OAuth/Laravel Passport).
+ * Nunca o corpo inteiro: numa resposta inesperada ele poderia trazer token.
+ */
+const rejectionReason = async (res: Response): Promise<Record<string, string>> => {
+  const raw: unknown = await res.json().catch(() => null)
+  if (!raw || typeof raw !== 'object') return {}
+  const picked: Record<string, string> = {}
+  for (const field of ['error', 'error_description', 'hint', 'message']) {
+    const value = (raw as Record<string, unknown>)[field]
+    if (typeof value === 'string') picked[field] = value.slice(0, 200)
+  }
+  return picked
+}
+
 const postToken = async (body: Record<string, string>): Promise<MeTokens> => {
   const c = meOAuthConfig()
   let res: Response
@@ -93,8 +109,20 @@ const postToken = async (body: Record<string, string>): Promise<MeTokens> => {
   }
 
   if (!res.ok) {
-    // Código expirado/inválido ou refresh revogado. Não é 503: é o lojista que
-    // precisa reautorizar. 400 de negócio com code estável.
+    // O motivo do ME é o que separa secret errado (`invalid_client`) de refresh
+    // morto (`invalid_grant`). Sem ele no log, o incidente de out/2026 só pôde
+    // ser diagnosticado lendo o banco.
+    logger.warn(
+      { status: res.status, grantType: body.grant_type, ...(await rejectionReason(res)) },
+      'Melhor Envio recusou a troca de token',
+    )
+
+    if (res.status >= 500) {
+      throw externalServiceError('Melhor Envio', new Error(`HTTP ${res.status}`))
+    }
+
+    // Código expirado/inválido ou refresh revogado: é o lojista que precisa
+    // reautorizar. `token.ts` reconhece este code como falha DEFINITIVA.
     throw appError(
       ERROR_CODES.SHIPPING_UNAVAILABLE,
       'Não foi possível autenticar no Melhor Envio. Reconecte a conta.',

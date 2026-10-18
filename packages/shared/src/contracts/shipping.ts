@@ -34,3 +34,10 @@ export const shippingOptionSchema = z.object({
 })
 
 export type ShippingOption = z.infer<typeof shippingOptionSchema>
+
+/** Conexão da conta do provider de frete, para a tela Frete do admin. */
+export type ShippingProviderStatus = {
+  connected: boolean
+  /** ISO. Vencimento do access token atual — renovado sozinho bem antes disso. */
+  expiresAt: string | null
+}

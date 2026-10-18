@@ -4,5 +4,10 @@
  * client, quote) possa mudar sem tocar em quem usa.
  */
 export { buildAuthorizeUrl } from './oauth.js'
-export { completeAuthorization, isConnected, savePendingState, getValidAccessToken } from './token.js'
+export {
+  completeAuthorization,
+  getConnectionStatus,
+  savePendingState,
+  getValidAccessToken,
+} from './token.js'
 export { calculateShipping, type MeProduct, type MeCalculateOption } from './quote.js'

@@ -1,5 +1,7 @@
+import { isProduction } from './config/env.js'
 import { logger } from './config/logger.js'
 import { prisma } from './config/prisma.js'
+import { startJobs } from './jobs/index.js'
 import { closeRabbit, connectRabbitOrThrow } from './config/rabbitmq.js'
 import { initStoreContext } from './shared/store-context.js'
 import { consume } from './queues/consumer.js'
@@ -9,7 +11,8 @@ import { emailSendHandler } from './queues/consumers/email-send.js'
 import { orderPaidHandler } from './queues/consumers/order-paid.js'
 
 /**
- * Processo dos consumidores. SEPARADO da API, e não uma thread dentro dela:
+ * Processo dos consumidores (e dos jobs periódicos, de `jobs/`). SEPARADO da
+ * API, e não uma thread dentro dela:
  *
  *   1. A API pode `pm2 reload`. Um worker com mensagem não-ackada precisa do
  *      próprio ciclo de shutdown, e misturar os dois torna o reload da API mais
@@ -36,6 +39,10 @@ const start = async (): Promise<void> => {
 
   logger.info({ queues: Object.keys(tags).length }, 'worker pronto')
 
+  // Só em produção: dev usa o MESMO banco, e um worker de dev renovando tokens
+  // em paralelo disputaria a rotação do refresh token com o de produção.
+  const stopJobs = isProduction ? startJobs() : () => {}
+
   /**
    * Shutdown: cancelar o consumidor PRIMEIRO (para de receber mensagens novas),
    * depois fechar. Sem isso, `pm2 reload` mata o processo com uma mensagem em
@@ -48,6 +55,7 @@ const start = async (): Promise<void> => {
     logger.info({ signal }, 'encerrando worker')
 
     try {
+      stopJobs()
       for (const tag of tags) await channel.cancel(tag)
       await closeRabbit()
       await prisma.$disconnect()

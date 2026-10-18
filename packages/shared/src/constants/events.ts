@@ -109,6 +109,8 @@ export const EVENTS = {
   shipping: {
     labelRequested: 'shipping.label.requested',
     trackingSync: 'shipping.tracking.sync',
+    /** Staff gerou o link de (re)conexão da conta do Melhor Envio. Só auditoria. */
+    providerConnectStarted: 'shipping.provider_connect_started',
   },
   store: {
     /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */

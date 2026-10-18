@@ -13,6 +13,7 @@ import {
   Camera,
   Mail,
   Palette,
+  Truck,
   UserRound,
   Users,
   type LucideIcon,
@@ -43,6 +44,8 @@ const NAV: NavItem[] = [
   { href: '/instagram', label: 'Instagram', icon: Camera },
   // O disparo mora na tela do produto; aqui fica só o histórico do que saiu.
   { href: '/campanhas', label: 'Campanhas', icon: Mail },
+  // Conectar troca a conta que paga os fretes: mesmo piso da API (requireMinRole).
+  { href: '/frete', label: 'Frete', icon: Truck, minRole: 'ADMIN' },
   // Mexe na cara da loja inteira: mesmo piso de cargo da gestão de usuários.
   { href: '/aparencia', label: 'Aparência', icon: Palette, minRole: 'ADMIN' },
   { href: '/usuarios', label: 'Usuários', icon: Users, minRole: MANAGE_USERS_MIN_ROLE },

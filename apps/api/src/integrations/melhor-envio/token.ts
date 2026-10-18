@@ -1,6 +1,6 @@
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import { getSetting, setSetting } from '../../shared/settings.js'
-import { appError } from '../../shared/errors.js'
+import { appError, isAppError } from '../../shared/errors.js'
 import { logger } from '../../config/logger.js'
 import { exchangeCodeForTokens, refreshTokens, type MeTokens } from './oauth.js'
 
@@ -45,27 +45,85 @@ export const completeAuthorization = async (code: string, state: string): Promis
   logger.info('Melhor Envio conectado com sucesso')
 }
 
-export const isConnected = async (): Promise<boolean> => {
+export const getConnectionStatus = async (): Promise<{
+  connected: boolean
+  expiresAt: number | null
+}> => {
   const s = await getSetting('melhor_envio_oauth')
-  return Boolean(s.accessToken)
+  const connected = Boolean(s.accessToken && s.refreshToken)
+  return { connected, expiresAt: connected ? s.expiresAt : null }
 }
 
-/** Um access token válido, renovando se estiver perto de expirar. */
-export const getValidAccessToken = async (): Promise<string> => {
-  const s = await getSetting('melhor_envio_oauth')
+const notConnected = () =>
+  appError(
+    ERROR_CODES.SHIPPING_UNAVAILABLE,
+    'Frete não configurado: conecte a conta do Melhor Envio.',
+    503,
+  )
 
-  if (!s.accessToken || !s.refreshToken) {
-    throw appError(
-      ERROR_CODES.SHIPPING_UNAVAILABLE,
-      'Frete não configurado: conecte a conta do Melhor Envio.',
-      503,
-    )
+/**
+ * Refresh recusado pelo ME (refresh vencido/revogado ou secret errado).
+ *
+ * Antes de zerar, relê o banco: se o refresh token gravado já não é o que
+ * tentamos, outro processo renovou no meio do caminho (o nosso virou inválido
+ * pela rotação) — e o dele vale. Zerar ali derrubaria uma conexão saudável.
+ */
+const handleRejectedRefresh = async (triedRefreshToken: string): Promise<string> => {
+  const current = await getSetting('melhor_envio_oauth')
+  if (current.accessToken && current.refreshToken && current.refreshToken !== triedRefreshToken) {
+    return current.accessToken
   }
 
-  const stillValid = s.expiresAt && s.expiresAt - Date.now() > REFRESH_MARGIN_MS
+  // Zerado, o status mostra "desconectado" no admin e a cotação falha na hora,
+  // sem bater no ME a cada cliente. O `state` fica: pode haver reconexão em curso.
+  await setSetting('melhor_envio_oauth', {
+    state: current.state,
+    accessToken: null,
+    refreshToken: null,
+    expiresAt: null,
+  })
+  logger.error('Melhor Envio desconectado: o refresh foi recusado. Reconecte em /frete no admin.')
+  throw notConnected()
+}
+
+const renew = async (refreshToken: string): Promise<string> => {
+  try {
+    const renewed = await refreshTokens(refreshToken)
+    await persist(renewed)
+    logger.info('Melhor Envio: token renovado')
+    return renewed.accessToken
+  } catch (err) {
+    // EXTERNAL_SERVICE_ERROR (5xx, rede) é transitório: mantém os tokens e
+    // tenta de novo na próxima chamada.
+    if (isAppError(err) && err.code === ERROR_CODES.SHIPPING_UNAVAILABLE) {
+      return handleRejectedRefresh(refreshToken)
+    }
+    throw err
+  }
+}
+
+/**
+ * Renovação em andamento neste processo. O refresh token rotaciona: duas cotações
+ * simultâneas renovando cada uma por conta própria gastariam o mesmo token, e a
+ * segunda seria recusada — derrubando a conexão que a primeira acabou de renovar.
+ */
+let renewing: Promise<string> | null = null
+
+/**
+ * Um access token válido por pelo menos `marginMs`, renovando antes disso.
+ * A cotação usa a margem curta; o job de renovação usa dias, para que a conexão
+ * não dependa de haver tráfego.
+ */
+export const getValidAccessToken = async (marginMs = REFRESH_MARGIN_MS): Promise<string> => {
+  const s = await getSetting('melhor_envio_oauth')
+
+  if (!s.accessToken || !s.refreshToken) throw notConnected()
+
+  const stillValid = s.expiresAt && s.expiresAt - Date.now() > marginMs
   if (stillValid) return s.accessToken
 
-  const renewed = await refreshTokens(s.refreshToken)
-  await persist(renewed)
-  return renewed.accessToken
+  renewing ??= renew(s.refreshToken).finally(() => {
+    renewing = null
+  })
+  return renewing
 }

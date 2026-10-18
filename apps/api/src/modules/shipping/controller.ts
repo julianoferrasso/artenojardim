@@ -9,9 +9,16 @@ export const quoteController = async (req: Request, res: Response): Promise<void
   ok(res, await service.quoteShipping(req.body as QuoteRequestInput))
 }
 
-/** Staff inicia a conexão da conta do Melhor Envio; devolve a URL de consentimento. */
-export const connectController = async (_req: Request, res: Response): Promise<void> => {
-  ok(res, await service.startProviderConnection())
+/** Admin inicia a conexão da conta do Melhor Envio; devolve a URL de consentimento. */
+export const connectController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await service.startProviderConnection({
+      userId: req.auth?.sub,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    }),
+  )
 }
 
 /**

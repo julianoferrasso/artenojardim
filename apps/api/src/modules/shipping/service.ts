@@ -1,14 +1,21 @@
 import { randomBytes } from 'node:crypto'
-import type { QuoteRequestInput, ShippingOption } from '@ecommerce/shared/contracts'
+import type {
+  QuoteRequestInput,
+  ShippingOption,
+  ShippingProviderStatus,
+} from '@ecommerce/shared/contracts'
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
+import { EVENTS } from '@ecommerce/shared/constants'
 import { prisma } from '../../config/prisma.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { getSetting } from '../../shared/settings.js'
 import { appError, notFound } from '../../shared/errors.js'
+import { audit, type AuditContext } from '../../shared/audit.js'
 import {
   buildAuthorizeUrl,
   completeAuthorization,
-  isConnected,
+  getConnectionStatus,
+  getValidAccessToken,
   savePendingState,
 } from '../../integrations/melhor-envio/index.js'
 import { toPackages, type PackItem } from './domain/packing.js'
@@ -91,10 +98,25 @@ export const quoteShipping = async (input: QuoteRequestInput): Promise<ShippingO
 
 // ─── OAuth do provider (conexão da conta do lojista, uma vez) ────────────────
 
-/** Início do fluxo: gera o state anti-CSRF e devolve a URL de consentimento. */
-export const startProviderConnection = async (): Promise<{ authorizeUrl: string }> => {
+/**
+ * Início do fluxo: gera o state anti-CSRF e devolve a URL de consentimento.
+ *
+ * Tem que rodar na API de PRODUÇÃO: o callback chega nela, e o state precisa
+ * estar no banco que ela lê. Link gerado pela API de dev é o que falhou em 14/10.
+ */
+export const startProviderConnection = async (
+  context: AuditContext,
+): Promise<{ authorizeUrl: string }> => {
   const state = randomBytes(24).toString('hex')
   await savePendingState(state)
+
+  await audit({
+    action: EVENTS.shipping.providerConnectStarted,
+    entityType: 'Store',
+    entityId: getActiveStoreId(),
+    context,
+  })
+
   return { authorizeUrl: buildAuthorizeUrl(state) }
 }
 
@@ -102,6 +124,22 @@ export const startProviderConnection = async (): Promise<{ authorizeUrl: string 
 export const finishProviderConnection = (code: string, state: string): Promise<void> =>
   completeAuthorization(code, state)
 
-export const providerStatus = async (): Promise<{ connected: boolean }> => ({
-  connected: await isConnected(),
-})
+export const providerStatus = async (): Promise<ShippingProviderStatus> => {
+  const { connected, expiresAt } = await getConnectionStatus()
+  return { connected, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null }
+}
+
+/**
+ * O access token dura 30 dias e só era renovado quando uma cotação chegava perto
+ * do vencimento. Loja com pouco tráfego deixou o refresh token vencer também, e o
+ * frete caiu sem ninguém ver. Com 7 dias de folga, o job renova por volta do dia
+ * 23 — haja ou não cliente cotando.
+ */
+const PROACTIVE_RENEWAL_MARGIN_MS = 7 * 24 * 60 * 60_000
+
+/** Chamado pelo job periódico. Conta não conectada não é erro: só não há o que renovar. */
+export const renewProviderToken = async (): Promise<ShippingProviderStatus> => {
+  const before = await getConnectionStatus()
+  if (before.connected) await getValidAccessToken(PROACTIVE_RENEWAL_MARGIN_MS)
+  return providerStatus()
+}

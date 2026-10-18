@@ -34,7 +34,10 @@ export const meRequest = async <T>(path: string, init: RequestInit = {}): Promis
   }
 
   if (!res.ok) {
-    throw externalServiceError('Melhor Envio', new Error(`HTTP ${res.status}`))
+    // O texto do ME vai só para o `cause` (logado pelo error-handler), nunca
+    // para o cliente. Truncado: um 422 de validação lista campo a campo.
+    const detail = (await res.text().catch(() => '')).slice(0, 300)
+    throw externalServiceError('Melhor Envio', new Error(`HTTP ${res.status} ${detail}`.trim()))
   }
 
   return (await res.json()) as T
