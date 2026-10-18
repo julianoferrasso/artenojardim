@@ -533,10 +533,9 @@ falta o passo no `pg-backup.sh`, num bucket privado próprio (não o da mídia).
 pedido PENDING, mas nada varre e libera as reservas vencidas (TTL em `Setting.reservation_ttl_minutes`).
 Checkout abandonado prende `reserved` até o job existir (`jobs/release-reservations`, Fase 1.18).
 
-**SES ainda em sandbox.** 200 e-mails/dia e só para endereços verificados um a um. A campanha
-de marketing funciona no código, mas falha por destinatário até sair — peça "Production
-access" no console da AWS (leva ~24h) antes do primeiro envio real. **É o único bloqueio que
-resta para a campanha funcionar de verdade.**
+**~~SES em sandbox~~ — resolvido.** Conferido em 18/10/2026 pela API do SES (`GetAccount`):
+`ProductionAccessEnabled: true`, cota de 50 mil e-mails/dia, `EnforcementStatus: HEALTHY`. O envio
+para qualquer destinatário funciona.
 
 ## Backups da configuração
 

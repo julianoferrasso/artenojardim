@@ -156,6 +156,19 @@ Os logs ficam em `/var/log/artenojardim/` (`api-*`, `worker-*`, `store-*`, `admi
 `--update-env` (ver acima). Sem ele, o PM2 não relê o ambiente. A API recusa subir se faltar
 variável obrigatória: confira `pm2 logs artenojardim-api` logo depois.
 
+**Chavear o Mercado Pago entre produção e teste:** os dois pares de credenciais ficam no
+`apps/api/.env` (`MP_*` e `MP_*_TEST`), e só `MP_ENVIRONMENT` muda:
+
+```bash
+aj "cd /var/www/artenojardim/apps/api && sed -i 's/^MP_ENVIRONMENT=.*/MP_ENVIRONMENT=test/' .env"   # ou =production
+aj 'cd /var/www/artenojardim && pm2 restart artenojardim-api --update-env'
+grep '"msg":"Mercado Pago"' /var/log/artenojardim/api-out-0.log | tail -n 1   # confira o environment
+```
+
+Em `test` o boot avisa (warn): numa loja pública, cartão de teste aprova pedido de verdade — use
+só em janela de teste. Pagamento criado num ambiente só é lido, cancelado e reembolsado nele
+mesmo; voltar para `test` com pedido real aberto deixa esse pedido sem estorno pela API.
+
 **Mudou o `.env` da loja ou do admin** (`apps/store/.env`, `apps/admin/.env`):
 - variável comum (ex.: `REVALIDATE_SECRET`): basta o `pm2 restart` do app;
 - variável `NEXT_PUBLIC_*` (ex.: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_CDN_HOST`): é **fixada no

@@ -859,7 +859,8 @@ Data, tipo, quantidade com sinal, saldo acumulado (`SUM() OVER (ORDER BY created
 
 ## 10. Checkout — fluxo transparente
 
-> **Provedor ativo: Mercado Pago** (desde 13/10/2026) — ver "Mercado Pago (Orders API)" no fim
+> **Provedor ativo: Mercado Pago** (desde 13/10/2026; **credenciais de produção desde 18/10/2026**,
+> `MP_ENVIRONMENT=production`) — ver "Mercado Pago (Orders API)" no fim
 > desta seção. O fluxo Stripe descrito a seguir continua no código, em **standby**: volta com
 > `PAYMENT_PROVIDER=stripe` no `.env` da API + restart. A troca foi porque o Pix do Stripe não
 > estava disponível de cara no Brasil; o do Mercado Pago está.
