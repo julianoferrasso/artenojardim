@@ -27,6 +27,12 @@ export const formatBRL = (cents: number): string =>
     currency: DEFAULT_CURRENCY.code,
   }).format(cents / 100)
 
+/** Máscara de digitação do CEP ("00000-000"). A API normaliza para 8 dígitos. */
+export const maskCep = (v: string): string => {
+  const d = v.replace(/\D/g, '').slice(0, 8)
+  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
+}
+
 export const formatDate = (value: string | Date): string =>
   new Intl.DateTimeFormat(DEFAULT_LOCALE, { dateStyle: 'short' }).format(new Date(value))
 

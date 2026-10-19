@@ -1,85 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { BR_STATES } from '@ecommerce/shared/constants'
-import type { Address, CreateAddressInput } from '@ecommerce/shared/contracts'
+import { useCallback, useEffect, useState } from 'react'
+import type { Address } from '@ecommerce/shared/contracts'
 import { useAuth } from '@/lib/auth'
-import { ApiError } from '@/lib/api'
-import {
-  listAddresses,
-  createAddress,
-  updateAddress,
-  deleteAddress,
-  lookupCep,
-} from '@/lib/addresses'
+import { listAddresses, updateAddress, deleteAddress } from '@/lib/addresses'
+import { maskCep } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
+import { AddressForm } from '@/components/address-form'
 
 /**
  * Endereços do cliente. Toda a validação e a posse são da API — aqui é só CRUD de
- * UI. O CEP autopreenche rua/bairro/cidade/UF (ViaCEP), mas o cliente pode
- * corrigir: a máscara é da UI, a fonte da verdade é o que ele confirma.
+ * UI; o formulário (com o autopreenchimento por CEP) é o mesmo do checkout.
  */
-
-type FormState = {
-  label: string
-  recipient: string
-  zipCode: string
-  street: string
-  number: string
-  complement: string
-  district: string
-  city: string
-  state: string
-  isDefault: boolean
-}
-
-const EMPTY: FormState = {
-  label: '',
-  recipient: '',
-  zipCode: '',
-  street: '',
-  number: '',
-  complement: '',
-  district: '',
-  city: '',
-  state: '',
-  isDefault: false,
-}
-
-const inputCls =
-  'h-10 w-full rounded-lg border border-input bg-card px-3.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40'
-
-const maskCep = (v: string): string => {
-  const d = v.replace(/\D/g, '').slice(0, 8)
-  return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
-}
-
-const toForm = (a: Address): FormState => ({
-  label: a.label ?? '',
-  recipient: a.recipient,
-  zipCode: maskCep(a.zipCode),
-  street: a.street,
-  number: a.number,
-  complement: a.complement ?? '',
-  district: a.district,
-  city: a.city,
-  state: a.state,
-  isDefault: a.isDefault,
-})
-
-/** Monta o payload omitindo os opcionais vazios (a API não quer string vazia). */
-const toPayload = (f: FormState): CreateAddressInput => ({
-  recipient: f.recipient,
-  zipCode: f.zipCode.replace(/\D/g, ''),
-  street: f.street,
-  number: f.number,
-  district: f.district,
-  city: f.city,
-  state: f.state,
-  isDefault: f.isDefault,
-  ...(f.label.trim() ? { label: f.label.trim() } : {}),
-  ...(f.complement.trim() ? { complement: f.complement.trim() } : {}),
-})
 
 export default function EnderecosPage() {
   // Sem guard aqui: conta/layout.tsx já barra quem não tem sessão.
@@ -87,12 +19,9 @@ export default function EnderecosPage() {
 
   const [addresses, setAddresses] = useState<Address[]>([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState<FormState>(EMPTY)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Address | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [cepLoading, setCepLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -108,63 +37,15 @@ export default function EnderecosPage() {
     if (customer) void refresh()
   }, [customer, refresh])
 
-  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }))
-
-  const openNew = () => {
-    setForm(EMPTY)
-    setEditingId(null)
+  const openForm = (a: Address | null) => {
+    setEditing(a)
     setError(null)
     setShowForm(true)
   }
 
-  const openEdit = (a: Address) => {
-    setForm(toForm(a))
-    setEditingId(a.id)
-    setError(null)
-    setShowForm(true)
-  }
-
-  const onCepBlur = async () => {
-    const digits = form.zipCode.replace(/\D/g, '')
-    if (digits.length !== 8) return
-    setCepLoading(true)
-    setError(null)
-    try {
-      const found = await lookupCep(digits)
-      setForm((f) => ({
-        ...f,
-        street: found.street || f.street,
-        district: found.district || f.district,
-        city: found.city,
-        state: found.state,
-      }))
-    } catch (err) {
-      setError(err instanceof ApiError && err.status === 404 ? 'CEP não encontrado.' : 'Não foi possível consultar o CEP.')
-    } finally {
-      setCepLoading(false)
-    }
-  }
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setSaving(true)
-    setError(null)
-    try {
-      const payload = toPayload(form)
-      if (editingId) await updateAddress(editingId, payload)
-      else await createAddress(payload)
-      setShowForm(false)
-      await refresh()
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 422) {
-        setError('Confira os campos: algum dado está inválido.')
-      } else {
-        setError('Não foi possível salvar o endereço. Tente novamente.')
-      }
-    } finally {
-      setSaving(false)
-    }
+  const onSaved = async () => {
+    setShowForm(false)
+    await refresh()
   }
 
   const onDelete = async (id: string) => {
@@ -200,7 +81,7 @@ export default function EnderecosPage() {
         </div>
         {!showForm && (
           <button
-            onClick={openNew}
+            onClick={() => openForm(null)}
             className={buttonVariants({ size: 'sm' })}
           >
             Novo endereço
@@ -213,110 +94,13 @@ export default function EnderecosPage() {
       )}
 
       {showForm ? (
-        <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6 shadow-soft">
-          <Field label="Identificação (opcional)" hint="Ex.: Casa, Trabalho">
-            <input
-              value={form.label}
-              onChange={(e) => set('label', e.target.value)}
-              maxLength={40}
-              className={inputCls}
-            />
-          </Field>
-
-          <Field label="Quem recebe">
-            <input
-              value={form.recipient}
-              onChange={(e) => set('recipient', e.target.value)}
-              required
-              className={inputCls}
-            />
-          </Field>
-
-          <Field label="CEP" hint={cepLoading ? 'Consultando…' : undefined}>
-            <input
-              value={form.zipCode}
-              onChange={(e) => set('zipCode', maskCep(e.target.value))}
-              onBlur={() => void onCepBlur()}
-              inputMode="numeric"
-              placeholder="00000-000"
-              required
-              className={inputCls}
-            />
-          </Field>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
-              <Field label="Rua">
-                <input value={form.street} onChange={(e) => set('street', e.target.value)} required className={inputCls} />
-              </Field>
-            </div>
-            <Field label="Número">
-              <input value={form.number} onChange={(e) => set('number', e.target.value)} required className={inputCls} />
-            </Field>
-          </div>
-
-          <Field label="Complemento (opcional)">
-            <input value={form.complement} onChange={(e) => set('complement', e.target.value)} className={inputCls} />
-          </Field>
-
-          <Field label="Bairro">
-            <input value={form.district} onChange={(e) => set('district', e.target.value)} required className={inputCls} />
-          </Field>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2">
-              <Field label="Cidade">
-                <input value={form.city} onChange={(e) => set('city', e.target.value)} required className={inputCls} />
-              </Field>
-            </div>
-            <Field label="UF">
-              <select
-                value={form.state}
-                onChange={(e) => set('state', e.target.value)}
-                required
-                className={inputCls}
-              >
-                <option value="" disabled>
-                  —
-                </option>
-                {BR_STATES.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.code}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.isDefault}
-              onChange={(e) => set('isDefault', e.target.checked)}
-              className="size-4 rounded border-border"
-            />
-            Usar como endereço padrão
-          </label>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className={buttonVariants({ size: 'sm' })}
-            >
-              {saving ? 'Salvando…' : 'Salvar'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
+        <AddressForm
+          key={editing?.id ?? 'new'}
+          address={editing ?? undefined}
+          onSaved={() => void onSaved()}
+          onCancel={() => setShowForm(false)}
+          className="rounded-xl border border-border bg-card p-6 shadow-soft"
+        />
       ) : addresses.length === 0 ? (
         <section className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Você ainda não cadastrou endereços.
@@ -350,7 +134,7 @@ export default function EnderecosPage() {
                     Tornar padrão
                   </button>
                 )}
-                <button onClick={() => openEdit(a)} className="text-muted-foreground hover:underline">
+                <button onClick={() => openForm(a)} className="text-muted-foreground hover:underline">
                   Editar
                 </button>
                 <button onClick={() => void onDelete(a.id)} className="text-destructive hover:underline">
@@ -364,21 +148,3 @@ export default function EnderecosPage() {
     </div>
   )
 }
-
-const Field = ({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string | undefined
-  children: React.ReactNode
-}) => (
-  <label className="flex flex-col gap-1">
-    <span className="flex items-center justify-between text-sm font-medium">
-      {label}
-      {hint && <span className="text-xs font-normal text-muted-foreground">{hint}</span>}
-    </span>
-    {children}
-  </label>
-)

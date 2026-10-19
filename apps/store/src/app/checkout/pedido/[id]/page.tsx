@@ -47,8 +47,8 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   const startedPolling = useRef(false)
 
   useEffect(() => {
-    if (!authLoading && !customer) router.replace('/entrar')
-  }, [authLoading, customer, router])
+    if (!authLoading && !customer) router.replace(`/entrar?next=${encodeURIComponent(`/checkout/pedido/${id}`)}`)
+  }, [authLoading, customer, router, id])
 
   // Carrega o pedido e decide o próximo passo.
   useEffect(() => {

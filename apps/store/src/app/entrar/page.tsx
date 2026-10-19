@@ -21,6 +21,17 @@ import { cn, fieldClass as field, submitButtonClass } from '@/lib/utils'
 
 type Mode = 'login' | 'register'
 
+/**
+ * Para onde voltar depois do login (`?next=`, posto pelo guard do checkout e da
+ * conta). Lido no submit e não com useSearchParams, que exigiria um Suspense só
+ * para isto. Aceita só caminho interno: "//x.com" e "/\x.com" o browser trata
+ * como outro domínio, e o link de login viraria um redirecionador aberto.
+ */
+const nextPath = (): string => {
+  const next = new URLSearchParams(window.location.search).get('next')
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/conta'
+}
+
 export default function EntrarPage() {
   const [mode, setMode] = useState<Mode>('login')
   const logoUrl = useBrandLogo()
@@ -75,7 +86,7 @@ function LoginForm() {
         setUnverifiedEmail(null)
         try {
           await login(v)
-          router.replace('/conta')
+          router.replace(nextPath())
         } catch (e) {
           setError(authErrorMessage(e))
           if (e instanceof ApiError && e.code === 'EMAIL_NOT_VERIFIED') {

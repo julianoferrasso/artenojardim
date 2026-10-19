@@ -1,36 +1,53 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import type { Address, AppliedCoupon, ShippingOption } from '@ecommerce/shared/contracts'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
+import { useShippingCep } from '@/lib/shipping-cep'
 import { listAddresses } from '@/lib/addresses'
 import { quoteShipping } from '@/lib/shipping'
 import { confirmCheckout } from '@/lib/checkout'
 import { validateCoupon, couponErrorMessage, isCouponError } from '@/lib/coupons'
-import { formatBRL, cn } from '@/lib/utils'
+import { formatBRL, cn, maskCep } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
 import { buttonVariants } from '@/components/ui/button'
 import { ProductImage } from '@/components/product-image'
+import { AddressForm } from '@/components/address-form'
 
 /**
  * Checkout em página única com seções (não wizard): cada navegação é um ponto de
  * abandono. O cliente escolhe endereço e frete; o total mostrado é uma prévia — o
  * backend recalcula tudo do banco ao confirmar, e o pedido criado é a verdade.
+ *
+ * O CEP que o cliente já informou no simulador escolhe o endereço salvo de mesmo
+ * CEP, ou abre o cadastro aqui mesmo já preenchido. Mandar o cliente para a conta
+ * cadastrar endereço era sair do checkout e digitar o CEP de novo.
  */
+
+/** Quem simulou o frete para um CEP quer receber nele; senão, o padrão. */
+const pickAddress = (list: Address[], cep: string | null): Address | undefined =>
+  list.find((a) => a.zipCode === cep) ?? list.find((a) => a.isDefault) ?? list[0]
+
 export default function CheckoutPage() {
   const { customer, loading: authLoading } = useAuth()
   const { cart, loading: cartLoading } = useCart()
+  const { cep: savedCep, ready: cepReady, setCep: saveCep } = useShippingCep()
   const router = useRouter()
 
-  const [addresses, setAddresses] = useState<Address[]>([])
+  const [addresses, setAddresses] = useState<Address[] | null>(null)
   const [addressId, setAddressId] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [formKey, setFormKey] = useState(0)
+  const [formDefaults, setFormDefaults] = useState<{ zipCode?: string | undefined; recipient?: string | undefined }>({})
+  /** CEP digitado no form ainda não salvo: o frete já cota por ele. */
+  const [formZip, setFormZip] = useState<string | null>(null)
   const [options, setOptions] = useState<ShippingOption[] | null>(null)
   const [serviceId, setServiceId] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [quoting, setQuoting] = useState(false)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [couponInput, setCouponInput] = useState('')
@@ -39,54 +56,104 @@ export default function CheckoutPage() {
   const [applyingCoupon, setApplyingCoupon] = useState(false)
 
   const items = (cart?.items ?? []).filter((i) => i.purchasable)
+  const itemsKey = items.map((i) => `${i.variantId}:${i.quantity}`).join(',')
 
-  // Guards: sem sessão vai para login; carrinho vazio volta ao carrinho.
+  // Guards: sem sessão vai para login (e volta para cá); carrinho vazio volta ao carrinho.
   useEffect(() => {
-    if (!authLoading && !customer) router.replace('/entrar')
+    if (!authLoading && !customer) router.replace('/entrar?next=/checkout')
   }, [authLoading, customer, router])
   useEffect(() => {
     if (!cartLoading && cart && items.length === 0) router.replace('/carrinho')
   }, [cartLoading, cart, items.length, router])
 
-  useEffect(() => {
-    if (!customer) return
-    void listAddresses().then((list) => {
-      setAddresses(list)
-      const def = list.find((a) => a.isDefault) ?? list[0]
-      if (def) setAddressId(def.id)
-    })
-  }, [customer])
+  const openForm = (zip: string | null) => {
+    setFormDefaults({ zipCode: zip ?? undefined, recipient: customer?.name })
+    setFormZip(zip)
+    setFormKey((k) => k + 1)
+    setFormOpen(true)
+    setAddressId(null)
+  }
 
-  // Recota o frete sempre que muda o endereço (o CEP de destino muda).
-  const quote = useCallback(async () => {
-    const address = addresses.find((a) => a.id === addressId)
-    if (!address || items.length === 0) return
-    setQuoting(true)
-    setError(null)
+  // Espera o CEP lembrado sair do localStorage: é ele que escolhe o endereço.
+  // Pelo id e não pelo objeto: a renovação da sessão troca o objeto e reabriria
+  // o formulário que o cliente está preenchendo.
+  const customerId = customer?.id
+  useEffect(() => {
+    if (!customerId || !cepReady) return
+    listAddresses()
+      .then((list) => {
+        setAddresses(list)
+        const picked = pickAddress(list, savedCep)
+        if (picked) setAddressId(picked.id)
+        else openForm(savedCep)
+      })
+      .catch(() => setError('Não foi possível carregar seus endereços. Recarregue a página.'))
+    // Só na chegada: depois, o CEP lembrado muda porque o cliente escolheu um endereço.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, cepReady])
+
+  const selectAddress = (a: Address) => {
+    setAddressId(a.id)
+    saveCep(a.zipCode)
+  }
+
+  const onAddressSaved = (a: Address) => {
+    setAddresses((prev) => [...(prev ?? []), a])
+    setFormOpen(false)
+    setFormZip(null)
+    selectAddress(a)
+  }
+
+  const cancelForm = () => {
+    setFormOpen(false)
+    setFormZip(null)
+    setAddressId(pickAddress(addresses ?? [], savedCep)?.id ?? null)
+  }
+
+  const selectedAddress = addresses?.find((a) => a.id === addressId) ?? null
+  const destinationZip = formOpen ? formZip : (selectedAddress?.zipCode ?? null)
+  // CEP simulado que não é de nenhum endereço salvo: vira atalho para cadastrá-lo.
+  const unmatchedCep =
+    savedCep && addresses && !addresses.some((a) => a.zipCode === savedCep) ? savedCep : null
+
+  // Recota quando muda o CEP de destino ou os itens (o minicarrinho abre por cima).
+  // Sem cache: aqui o valor precisa estar fresco — o confirm recota de qualquer jeito.
+  useEffect(() => {
     setOptions(null)
     setServiceId(null)
-    try {
-      const opts = await quoteShipping({
-        zipCode: address.zipCode,
-        items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
-      })
-      setOptions(opts)
-      if (opts[0]) setServiceId(opts[0].id)
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.code === 'SHIPPING_UNAVAILABLE'
-          ? 'Frete indisponível para este endereço/itens.'
-          : 'Não foi possível calcular o frete.',
-      )
-    } finally {
+    setQuoteError(null)
+    if (!destinationZip || items.length === 0) {
       setQuoting(false)
+      return
     }
+    let stale = false
+    setQuoting(true)
+    quoteShipping({
+      zipCode: destinationZip,
+      items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+    })
+      .then((opts) => {
+        if (stale) return
+        setOptions(opts)
+        setServiceId(opts[0]?.id ?? null)
+      })
+      .catch((err: unknown) => {
+        if (stale) return
+        setQuoteError(
+          err instanceof ApiError && err.code === 'SHIPPING_UNAVAILABLE'
+            ? 'Frete indisponível para este endereço/itens.'
+            : 'Não foi possível calcular o frete.',
+        )
+      })
+      .finally(() => {
+        if (!stale) setQuoting(false)
+      })
+    return () => {
+      stale = true
+    }
+    // `itemsKey` representa `items`, recriado a cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addressId, addresses])
-
-  useEffect(() => {
-    void quote()
-  }, [quote])
+  }, [destinationZip, itemsKey])
 
   const selectedShipping = options?.find((o) => o.id === serviceId) ?? null
   const subtotal = cart?.subtotal ?? 0
@@ -154,36 +221,51 @@ export default function CheckoutPage() {
       {/* Endereço */}
       <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
         <h2 className="mb-3 font-medium">Endereço de entrega</h2>
-        {addresses.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Você ainda não tem endereços.{' '}
-            <Link href="/conta/enderecos" className="text-primary-ink hover:underline">
-              Cadastrar endereço
-            </Link>
-          </p>
+        {!addresses ? (
+          <p className="text-sm text-muted-foreground">Carregando endereços…</p>
+        ) : formOpen ? (
+          <AddressForm
+            key={formKey}
+            defaults={formDefaults}
+            minimal
+            submitLabel="Usar este endereço"
+            onSaved={onAddressSaved}
+            onZipCodeChange={setFormZip}
+            onCancel={addresses.length > 0 ? cancelForm : undefined}
+          />
         ) : (
-          <ul className="flex flex-col gap-2">
-            {addresses.map((a) => (
-              <li key={a.id}>
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-secondary/40">
-                  <input
-                    type="radio"
-                    name="address"
-                    checked={addressId === a.id}
-                    onChange={() => setAddressId(a.id)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-medium">{a.label || a.recipient}</span>
-                    <span className="block text-muted-foreground">
-                      {a.street}, {a.number}
-                      {a.complement ? ` — ${a.complement}` : ''} · {a.district} · {a.city}/{a.state}
+          <>
+            <ul className="flex flex-col gap-2">
+              {addresses.map((a) => (
+                <li key={a.id}>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-secondary/40">
+                    <input
+                      type="radio"
+                      name="address"
+                      checked={addressId === a.id}
+                      onChange={() => selectAddress(a)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="font-medium">{a.label || a.recipient}</span>
+                      <span className="block text-muted-foreground">
+                        {a.street}, {a.number}
+                        {a.complement ? ` — ${a.complement}` : ''} · {a.district} · {a.city}/{a.state} ·{' '}
+                        {maskCep(a.zipCode)}
+                      </span>
                     </span>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => openForm(unmatchedCep)}
+              className="mt-3 text-sm text-primary-ink hover:underline"
+            >
+              {unmatchedCep ? `Entregar no CEP ${maskCep(unmatchedCep)}` : 'Entregar em outro endereço'}
+            </button>
+          </>
         )}
       </section>
 
@@ -192,8 +274,12 @@ export default function CheckoutPage() {
         <h2 className="mb-3 font-medium">Frete</h2>
         {quoting ? (
           <p className="text-sm text-muted-foreground">Calculando frete…</p>
+        ) : quoteError ? (
+          <p className="text-sm text-destructive">{quoteError}</p>
         ) : !options ? (
-          <p className="text-sm text-muted-foreground">Escolha um endereço para ver o frete.</p>
+          <p className="text-sm text-muted-foreground">
+            {formOpen ? 'Informe o CEP para ver o frete.' : 'Escolha um endereço para ver o frete.'}
+          </p>
         ) : options.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nenhuma opção de frete para este endereço.</p>
         ) : (
@@ -329,13 +415,13 @@ export default function CheckoutPage() {
 
       <button
         onClick={() => void place()}
-        disabled={!addressId || !serviceId || placing}
+        disabled={!addressId || !serviceId || placing || formOpen}
         className={cn(buttonVariants({ size: 'lg' }), 'w-full')}
       >
         {placing ? 'Finalizando…' : `Confirmar pedido · ${formatBRL(total)}`}
       </button>
       <p className="mt-2 text-center text-xs text-muted-foreground">
-        O pagamento entra na próxima etapa.
+        {formOpen ? 'Salve o endereço de entrega para continuar.' : 'O pagamento entra na próxima etapa.'}
       </p>
     </main>
   )

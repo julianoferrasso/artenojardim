@@ -29,8 +29,8 @@ export default function ContaLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
 
   useEffect(() => {
-    if (!loading && !customer) router.replace('/entrar')
-  }, [loading, customer, router])
+    if (!loading && !customer) router.replace(`/entrar?next=${encodeURIComponent(pathname)}`)
+  }, [loading, customer, router, pathname])
 
   if (loading) {
     return (
