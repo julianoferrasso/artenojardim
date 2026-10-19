@@ -6,6 +6,7 @@ import {
   refundOrderSchema,
   internalNoteSchema,
   addOrderEventSchema,
+  declineCancelRequestSchema,
 } from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticate, requireStaff } from '../../middlewares/authenticate.js'
@@ -35,12 +36,24 @@ adminOrderRoutes.patch(
 )
 adminOrderRoutes.post('/:id/cancel', validate({ body: cancelOrderSchema }), controller.cancelController)
 
-// Único endpoint com exigência de cargo: é dinheiro saindo da conta.
+// Exigência de cargo onde sai dinheiro da conta: reembolsar, e aprovar o
+// pedido de cancelamento (que estorna automaticamente).
 adminOrderRoutes.post(
   '/:id/refund',
   requireMinRole('ADMIN'),
   validate({ body: refundOrderSchema }),
   controller.refundController,
+)
+adminOrderRoutes.post(
+  '/:id/cancel-request/approve',
+  requireMinRole('ADMIN'),
+  controller.approveCancelRequestController,
+)
+// Recusar não mexe em dinheiro: quem atende pode responder.
+adminOrderRoutes.post(
+  '/:id/cancel-request/decline',
+  validate({ body: declineCancelRequestSchema }),
+  controller.declineCancelRequestController,
 )
 
 adminOrderRoutes.patch('/:id/note', validate({ body: internalNoteSchema }), controller.noteController)

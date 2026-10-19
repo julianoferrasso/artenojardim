@@ -105,6 +105,9 @@ export const ROUTES = {
   admin: {
     /** Aparência da loja (cores, raio, logo). Atrás de requireMinRole('ADMIN'). */
     storeTheme: `${base}/admin/store/theme`,
+    /** Para onde vão os e-mails da equipe. GET/PUT; `test` dispara um envio de prova. */
+    storeNotifications: `${base}/admin/store/notifications`,
+    storeNotificationsTest: `${base}/admin/store/notifications/test`,
 
     orders: {
       list: `${base}/admin/orders`,
@@ -114,6 +117,18 @@ export const ROUTES = {
       refund: (id: string) => `${base}/admin/orders/${id}/refund`,
       note: (id: string) => `${base}/admin/orders/${id}/note`,
       events: (id: string) => `${base}/admin/orders/${id}/events`,
+      /** Decisão sobre o pedido de cancelamento do cliente. Aprovar estorna. */
+      approveCancelRequest: (id: string) => `${base}/admin/orders/${id}/cancel-request/approve`,
+      declineCancelRequest: (id: string) => `${base}/admin/orders/${id}/cancel-request/decline`,
+    },
+
+    /** Atendimento: conversas por pedido. Router inteiro atrás de requireStaff. */
+    support: {
+      threads: `${base}/admin/support/threads`,
+      thread: (id: string) => `${base}/admin/support/threads/${id}`,
+      messages: (id: string) => `${base}/admin/support/threads/${id}/messages`,
+      /** Contadores do menu (aguardando resposta, cancelamentos pendentes). */
+      summary: `${base}/admin/support/summary`,
     },
 
     /** Gestão de clientes da loja. Aberta ao staff — atender é trabalho dele. */

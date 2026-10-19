@@ -24,6 +24,7 @@ export const ADMIN_LIST_SELECT = {
   paymentStatus: true,
   fulfillmentStatus: true,
   canceledAt: true,
+  cancelRequestedAt: true,
   customer: { select: { name: true } },
   _count: { select: { items: true } },
 } satisfies Prisma.OrderSelect
@@ -42,6 +43,10 @@ export const toAdminListItem = (row: AdminListRow): AdminOrderListItem => ({
   fulfillmentStatus: row.fulfillmentStatus,
   canceledAt: row.canceledAt?.toISOString() ?? null,
   situation: deriveSituation(row),
+  cancelRequested: !!row.cancelRequestedAt && !row.canceledAt,
+  // PAID ainda com o pedido cancelado: o estorno não saiu. PARTIALLY_REFUNDED
+  // fica de fora — reembolso parcial num cancelado foi decisão de alguém.
+  refundPending: !!row.canceledAt && row.paymentStatus === 'PAID',
 })
 
 export const ADMIN_ORDER_SELECT = {
@@ -51,6 +56,8 @@ export const ADMIN_ORDER_SELECT = {
   fulfillmentStatus: true,
   canceledAt: true,
   cancelReason: true,
+  cancelRequestedAt: true,
+  cancelRequestReason: true,
   email: true,
   phone: true,
   subtotal: true,
@@ -66,6 +73,7 @@ export const ADMIN_ORDER_SELECT = {
   createdAt: true,
   updatedAt: true,
   customer: { select: { id: true, name: true, email: true, phone: true, document: true } },
+  supportThread: { select: { id: true, status: true } },
   items: {
     orderBy: { id: 'asc' },
     select: {
@@ -214,6 +222,12 @@ export const toAdminOrderDTO = (row: AdminOrderRow, ctx: DtoContext): AdminOrder
 
     canCancel: canCancelOrder(row),
     refundableAmount: payment ? payment.amount - payment.refundedAmount : 0,
+
+    cancelRequest:
+      row.cancelRequestedAt && !row.canceledAt
+        ? { requestedAt: row.cancelRequestedAt.toISOString(), reason: row.cancelRequestReason }
+        : null,
+    supportThread: row.supportThread,
 
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

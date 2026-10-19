@@ -14,6 +14,7 @@ import { shippingRoutes } from './modules/shipping/routes.js'
 import { checkoutRoutes } from './modules/checkout/routes.js'
 import { orderRoutes } from './modules/orders/routes.js'
 import { adminOrderRoutes } from './modules/admin-orders/routes.js'
+import { adminSupportRoutes } from './modules/support/routes.js'
 import { adminCustomerRoutes } from './modules/admin-customers/routes.js'
 import { campaignRoutes } from './modules/campaigns/routes.js'
 import { adminUserRoutes } from './modules/admin-users/routes.js'
@@ -55,6 +56,8 @@ apiRoutes.use('/orders', orderRoutes)
 // Staff. Caminho distinto de /orders (cliente) de propósito: os dois têm auth
 // diferente, e um Router só com `authenticateCustomer` não comporta os dois.
 apiRoutes.use('/admin/orders', adminOrderRoutes)
+// Atendimento: conversas por pedido. Aberto ao staff.
+apiRoutes.use('/admin/support', adminSupportRoutes)
 // Gestão de clientes. Aberta ao staff; só a anonimização exige ADMIN.
 apiRoutes.use('/admin/customers', adminCustomerRoutes)
 // E-mail de marketing de produto. Aberto ao staff, como a gestão de clientes.

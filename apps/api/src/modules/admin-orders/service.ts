@@ -1,40 +1,44 @@
 import {
   ERROR_CODES,
+  CANCELABLE_FULFILLMENTS,
   canTransitionFulfillment,
-  canCancelOrder,
   situationFilter,
   type AdminOrder,
   type AdminOrderListItem,
   type AdminOrderListQuery,
   type UpdateFulfillmentInput,
   type CancelOrderInput,
+  type CustomerCancelReason,
+  type DeclineCancelRequestInput,
   type RefundOrderInput,
   type InternalNoteInput,
   type AddOrderEventData,
   type PaginationMeta,
 } from '@ecommerce/shared/contracts'
-import { EVENTS } from '@ecommerce/shared/constants'
+import { EVENTS, REFUND_TIMING_LABEL, type FulfillmentStatus } from '@ecommerce/shared/constants'
 import { spDayStart, spDayEnd } from '@ecommerce/shared/utils'
 import { Prisma, type $Enums } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
-import { logger } from '../../config/logger.js'
-import { notFound, conflict, businessError } from '../../shared/errors.js'
+import { notFound, conflict } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
-import { createRefund } from '../../integrations/stripe/index.js'
+import { formatBRL } from '../../utils/money.js'
 import { releaseOrderReservations, restockCanceledOrder } from '../inventory/service.js'
 import { releaseCouponUse } from '../coupons/service.js'
 import {
   cancelPendingMercadoPagoPayments,
-  refundMercadoPagoPayment,
+  refundCanceledOrder,
+  refundOrderPayment,
 } from '../payments/service.js'
+import type { AutoRefundOutcome } from '../payments/domain/refund.js'
+import { appendMessage } from '../support/service.js'
+import { notifyOrderCanceled, notifyOrderRefunded, notifySupportReply } from '../notifications/service.js'
 import {
   ADMIN_LIST_SELECT,
   ADMIN_ORDER_SELECT,
   toAdminListItem,
   toAdminOrderDTO,
-  paidPayment,
   type AdminOrderRow,
 } from './repository.js'
 
@@ -252,10 +256,12 @@ export const updateFulfillment = async (
  *   - pedido pago: as reservas já viraram SALE → CANCELLATION (+qty) no ledger
  *   - pedido não pago: as reservas estão vivas → basta liberá-las
  *
- * NÃO devolve dinheiro. Reembolsar é ação separada e auditada à parte, porque
- * cancelar um pedido não pago (o caso comum) não tem nada a estornar.
+ * NÃO devolve dinheiro. Reembolsar é ação separada — quem cancela a pedido do
+ * cliente (ele mesmo, ou a loja aprovando) chama `refundCanceledOrder` depois.
  */
-export type CancelActor = { kind: 'staff'; userId?: string | undefined } | { kind: 'customer' }
+export type CancelActor =
+  | { kind: 'staff'; userId?: string | undefined; approvedRequest?: boolean }
+  | { kind: 'customer'; reasonCode?: CustomerCancelReason }
 
 /**
  * A mecânica do cancelamento, sem auditoria e sem recarregar o DTO.
@@ -264,16 +270,24 @@ export type CancelActor = { kind: 'staff'; userId?: string | undefined } | { kin
  * reimplementar a devolução de estoque em dois lugares é como se perde a conta
  * do que voltou para a prateleira. Quem chama decide o que auditar e o que
  * devolver.
+ *
+ * `allowedFulfillments` estreita onde se pode cancelar: o cliente só cancela
+ * sozinho antes da separação, o staff até o despacho.
+ *
+ * Devolve se o pedido estava pago NO INSTANTE do cancelamento — é o que diz a
+ * quem chama se há estorno a pedir.
  */
 export const cancelOrderInternal = async (
   id: string,
   reason: string,
   actor: CancelActor,
-): Promise<void> => {
+  opts: { allowedFulfillments?: readonly FulfillmentStatus[] } = {},
+): Promise<{ paidAtCancel: boolean }> => {
   const order = await findOrThrow(id)
+  const allowed = opts.allowedFulfillments ?? CANCELABLE_FULFILLMENTS
 
   if (order.canceledAt) throw conflict('Pedido já cancelado.', ERROR_CODES.ORDER_NOT_CANCELABLE)
-  if (!canCancelOrder(order)) {
+  if (!allowed.includes(order.fulfillmentStatus)) {
     throw conflict(
       'Pedido já saiu para envio — o caminho é registrar devolução, não cancelar.',
       ERROR_CODES.ORDER_NOT_CANCELABLE,
@@ -281,25 +295,35 @@ export const cancelOrderInternal = async (
   }
 
   const storeId = getActiveStoreId()
-  // REFUNDED conta como pago: o estorno devolve o dinheiro, não a peça. Quem a
-  // devolve à prateleira é o cancelamento, venha ele antes ou depois do estorno.
-  const wasPaid =
-    order.paymentStatus === 'PAID' ||
-    order.paymentStatus === 'PARTIALLY_REFUNDED' ||
-    order.paymentStatus === 'REFUNDED'
   const userId = actor.kind === 'staff' ? (actor.userId ?? null) : null
 
-  await prisma.$transaction(async (tx) => {
-    // updateMany com `canceledAt: null` no where, e não update: entre o
-    // findOrThrow acima e esta linha cabe um segundo clique, e cancelar duas
-    // vezes reestocaria duas vezes o mesmo pedido.
+  const paidAtCancel = await prisma.$transaction(async (tx) => {
+    // updateMany com as guardas no where, e não update: entre o findOrThrow
+    // acima e esta linha cabem um segundo clique e o staff mudando a expedição.
+    // Cancelar duas vezes reestocaria duas vezes o mesmo pedido.
     const claimed = await tx.order.updateMany({
-      where: { id, canceledAt: null },
+      where: { id, canceledAt: null, fulfillmentStatus: { in: [...allowed] } },
       data: { canceledAt: new Date(), cancelReason: reason },
     })
     if (claimed.count === 0) {
-      throw conflict('Pedido já cancelado.', ERROR_CODES.ORDER_NOT_CANCELABLE)
+      throw conflict(
+        'O pedido mudou de situação enquanto o cancelamento era feito. Atualize a página.',
+        ERROR_CODES.ORDER_NOT_CANCELABLE,
+      )
     }
+
+    // O pagamento é relido DEPOIS do claim, dentro da transação: o claim trava
+    // a linha do pedido, então o webhook que confirma o pagamento ou já gravou
+    // (e o lemos aqui) ou espera este commit (e vê o pedido cancelado). Lido
+    // antes, um pagamento no meio-tempo cancelava como "não pago": estoque
+    // perdido e nenhum estorno.
+    const fresh = await tx.order.findUniqueOrThrow({ where: { id }, select: { paymentStatus: true } })
+    // REFUNDED conta como pago: o estorno devolve o dinheiro, não a peça. Quem a
+    // devolve à prateleira é o cancelamento, venha ele antes ou depois do estorno.
+    const wasPaid =
+      fresh.paymentStatus === 'PAID' ||
+      fresh.paymentStatus === 'PARTIALLY_REFUNDED' ||
+      fresh.paymentStatus === 'REFUNDED'
 
     if (wasPaid) await restockCanceledOrder(tx, storeId, id, userId ?? undefined)
     else await releaseOrderReservations(tx, id)
@@ -314,17 +338,25 @@ export const cancelOrderInternal = async (
         description: `Pedido cancelado: ${reason}`,
         metadataJson: {
           restocked: wasPaid,
-          paymentStatus: order.paymentStatus,
+          paymentStatus: fresh.paymentStatus,
           by: actor.kind,
+          ...(actor.kind === 'customer' && actor.reasonCode ? { reasonCode: actor.reasonCode } : {}),
+          ...(actor.kind === 'staff' && actor.approvedRequest ? { approvedRequest: true } : {}),
         },
         userId,
       },
     })
+
+    // Só o que foi PAGO de fato tem o que estornar; REFUNDED já voltou.
+    return fresh.paymentStatus === 'PAID' || fresh.paymentStatus === 'PARTIALLY_REFUNDED'
   })
 
   // Fora da transação (é chamada externa) e depois do commit: o Pix em aberto
   // no Mercado Pago continuaria pagável para um pedido que não existe mais.
-  if (!wasPaid) await cancelPendingMercadoPagoPayments(id)
+  // Roda mesmo com o pedido pago — só mexe em tentativas ainda em aberto.
+  await cancelPendingMercadoPagoPayments(id)
+
+  return { paidAtCancel }
 }
 
 export const cancelOrder = async (
@@ -346,78 +378,144 @@ export const cancelOrder = async (
   return reload(id)
 }
 
+// ── Pedido de cancelamento do cliente ────────────────────────────────────────
+
+const assertPendingRequest = (order: AdminOrderRow): void => {
+  if (!order.cancelRequestedAt || order.canceledAt) {
+    throw conflict('Não há pedido de cancelamento esperando decisão neste pedido.')
+  }
+}
+
+const approvalMessage = (refund: AutoRefundOutcome): string => {
+  if (refund.status === 'requested') {
+    const timing = refund.method ? ` ${REFUND_TIMING_LABEL[refund.method]}` : ''
+    return `Cancelamento aprovado. O estorno de ${formatBRL(refund.amount)} já foi solicitado.${timing}`
+  }
+  if (refund.status === 'failed') {
+    return `Cancelamento aprovado. O estorno de ${formatBRL(refund.amount)} está em processamento — avisaremos por e-mail quando for concluído.`
+  }
+  return 'Cancelamento aprovado.'
+}
+
+/**
+ * Aprovar = cancelar + estornar tudo, num clique. É o mesmo efeito do
+ * cancelamento que o cliente faria sozinho antes da separação; a loja só
+ * confirma que a caixa meio montada pode voltar para a prateleira.
+ */
+export const approveCancelRequest = async (id: string, ctx: AuditContext): Promise<AdminOrder> => {
+  const order = await findOrThrow(id)
+  assertPendingRequest(order)
+
+  const reason = order.cancelRequestReason ?? 'Pedido de cancelamento do cliente'
+  const { paidAtCancel } = await cancelOrderInternal(id, reason, {
+    kind: 'staff',
+    userId: ctx.userId,
+    approvedRequest: true,
+  })
+
+  const refund: AutoRefundOutcome = paidAtCancel
+    ? await refundCanceledOrder(id, { kind: 'staff', userId: ctx.userId })
+    : { status: 'none' }
+
+  await prisma.$transaction((tx) =>
+    appendMessage(tx, {
+      orderId: id,
+      customerId: order.customer.id,
+      author: 'SYSTEM',
+      topic: 'CANCELLATION',
+      body: approvalMessage(refund),
+    }),
+  )
+
+  await audit({
+    action: EVENTS.order.canceled,
+    entityType: 'Order',
+    entityId: id,
+    changes: {
+      canceledAt: { from: null, to: new Date().toISOString() },
+      cancelRequest: { from: 'pending', to: 'approved' },
+      refund: { from: null, to: refund.status },
+    },
+    context: ctx,
+  })
+
+  await notifyOrderCanceled(id, { by: 'store', reason, refund })
+
+  return reload(id)
+}
+
+/**
+ * Recusar devolve o pedido ao fluxo normal e explica por quê ao cliente — pela
+ * conversa e por e-mail. A solicitação zera: se o pedido ainda estiver em
+ * separação, o cliente pode pedir de novo.
+ */
+export const declineCancelRequest = async (
+  id: string,
+  input: DeclineCancelRequestInput,
+  ctx: AuditContext,
+): Promise<AdminOrder> => {
+  const order = await findOrThrow(id)
+  assertPendingRequest(order)
+
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.order.updateMany({
+      where: { id, cancelRequestedAt: { not: null }, canceledAt: null },
+      data: { cancelRequestedAt: null, cancelRequestReason: null },
+    })
+    if (claimed.count === 0) throw conflict('Este pedido de cancelamento já foi decidido.')
+
+    await tx.orderEvent.create({
+      data: {
+        orderId: id,
+        type: EVENTS.order.cancelRequestDeclined,
+        description: input.message,
+        metadataJson: { by: 'staff' },
+        userId: ctx.userId ?? null,
+      },
+    })
+
+    await appendMessage(tx, {
+      orderId: id,
+      customerId: order.customer.id,
+      author: 'STAFF',
+      userId: ctx.userId ?? null,
+      topic: 'CANCELLATION',
+      body: input.message,
+    })
+  })
+
+  await audit({
+    action: EVENTS.order.cancelRequestDeclined,
+    entityType: 'Order',
+    entityId: id,
+    changes: { cancelRequest: { from: 'pending', to: 'declined' } },
+    context: ctx,
+  })
+
+  await notifySupportReply(id, { body: input.message, kind: 'cancel_declined' })
+
+  return reload(id)
+}
+
 // ── Reembolso ────────────────────────────────────────────────────────────────
 
 /**
- * Pede o reembolso ao provedor do pagamento e registra o PEDIDO na timeline. O
- * status do pagamento (REFUNDED/PARTIALLY_REFUNDED) e o `refundedAmount` vêm do
- * provedor: no Stripe, pelo webhook `charge.refunded`; no Mercado Pago, pela
- * order que ele devolve já reembolsada (e o webhook confirma).
- *
- * Gravar aqui por conta própria estaria errado na hora em que o provedor
- * recusasse: o pedido diria "reembolsado" com o dinheiro ainda no caixa.
+ * Reembolso pedido pelo staff. A mecânica (provedor, idempotência, timeline)
+ * mora em `payments`, porque o cancelamento do cliente e o pagamento que chega
+ * depois do cancelamento também estornam — aqui ficam a auditoria e o aviso.
  */
 export const refundOrder = async (
   id: string,
   input: RefundOrderInput,
   ctx: AuditContext,
 ): Promise<AdminOrder> => {
-  const order = await findOrThrow(id)
-  const payment = paidPayment(order)
+  await findOrThrow(id)
 
-  if (!payment) {
-    throw businessError(ERROR_CODES.VALIDATION_ERROR, 'Este pedido não tem pagamento confirmado para reembolsar.', 422)
-  }
-
-  const refundable = payment.amount - payment.refundedAmount
-  if (refundable <= 0) throw conflict('Este pagamento já foi totalmente reembolsado.')
-
-  const amount = input.amount ?? refundable
-  if (amount > refundable) {
-    throw businessError(
-      ERROR_CODES.VALIDATION_ERROR,
-      `Valor acima do saldo reembolsável (${(refundable / 100).toFixed(2)}).`,
-      422,
-    )
-  }
-
-  // Inclui o já reembolsado: dois parciais iguais e legítimos precisam ser dois
-  // reembolsos, mas um clique duplo no mesmo estado precisa ser um só.
-  const idempotencyKey = `refund_${id}_${payment.refundedAmount}_${amount}`
-
-  let providerLabel: string
-  let refundMeta: Record<string, unknown>
-  if (payment.provider === 'MERCADO_PAGO') {
-    if (!payment.mpOrderId) throw conflict('Pagamento sem order do Mercado Pago para reembolsar.')
-    // Sem valor = "todo o saldo": o MP calcula o restante, sem arredondar do nosso lado.
-    await refundMercadoPagoPayment(
-      { mpOrderId: payment.mpOrderId, mpPaymentId: payment.mpPaymentId },
-      amount === refundable ? undefined : amount,
-      idempotencyKey,
-    )
-    providerLabel = 'Mercado Pago'
-    refundMeta = { mpOrderId: payment.mpOrderId }
-  } else {
-    if (!payment.stripePaymentIntentId) throw conflict('Pagamento sem PaymentIntent do Stripe para reembolsar.')
-    const refund = await createRefund({
-      paymentIntentId: payment.stripePaymentIntentId,
-      amountCents: amount,
-      reason: input.reason,
-      idempotencyKey,
-    })
-    providerLabel = 'Stripe'
-    refundMeta = { refundId: refund.id, status: refund.status }
-  }
-
-  await prisma.orderEvent.create({
-    data: {
-      orderId: id,
-      type: EVENTS.order.refundRequested,
-      description: `Reembolso de R$ ${(amount / 100).toFixed(2)} solicitado ao ${providerLabel}`,
-      metadataJson: { ...refundMeta, amount, reason: input.reason },
-      userId: ctx.userId ?? null,
-    },
-  })
+  const { amount, method } = await refundOrderPayment(
+    id,
+    { amount: input.amount, reason: input.reason },
+    { kind: 'staff', userId: ctx.userId },
+  )
 
   await audit({
     action: EVENTS.order.refundRequested,
@@ -427,7 +525,7 @@ export const refundOrder = async (
     context: ctx,
   })
 
-  logger.info({ orderId: id, amount, provider: payment.provider, ...refundMeta }, 'reembolso solicitado')
+  await notifyOrderRefunded(id, { amount, method })
 
   return reload(id)
 }

@@ -2,9 +2,9 @@
 
 import { use, useState } from 'react'
 import Link from 'next/link'
-import { Truck, FileText, RotateCcw } from 'lucide-react'
-import { PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL } from '@ecommerce/shared/constants'
-import type { ReorderResult } from '@ecommerce/shared/contracts'
+import { Truck, FileText, RotateCcw, MessageCircle } from 'lucide-react'
+import { PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, REFUND_TIMING_LABEL } from '@ecommerce/shared/constants'
+import type { CustomerOrder, ReorderResult, SupportTopic } from '@ecommerce/shared/contracts'
 import { ApiError } from '@/lib/api'
 import { useMyOrder, useReorder } from '@/lib/orders'
 import { useCart } from '@/lib/cart'
@@ -13,7 +13,7 @@ import { OrderItemList, OrderDeliveryCard, OrderTotals } from '@/components/orde
 import { OrderSituationBadge } from '@/components/order-situation-badge'
 import { OrderTimeline } from '@/components/order-timeline'
 import { CancelOrderDialog } from '@/components/cancel-order-dialog'
-import { SupportForm } from '@/components/support-form'
+import { OrderConversation, type ComposeRequest } from '@/components/order-conversation'
 import { buttonVariants } from '@/components/ui/button'
 
 /**
@@ -28,8 +28,11 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
   const { id } = use(params)
   const { data: order, isLoading, isError, error } = useMyOrder(id)
   const [reorderResult, setReorderResult] = useState<ReorderResult | null>(null)
+  const [compose, setCompose] = useState<ComposeRequest | null>(null)
   const reorder = useReorder(id)
   const { refresh, openCart } = useCart()
+
+  const writeToStore = (topic: SupportTopic) => setCompose((prev) => ({ topic, nonce: (prev?.nonce ?? 0) + 1 }))
 
   const buyAgain = async () => {
     setReorderResult(null)
@@ -82,10 +85,12 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
         Realizado em {formatDateLong(order.createdAt)}
       </p>
 
+      {order.canceledAt && <CanceledBanner order={order} />}
+
       {order.cancelRequestedAt && !order.canceledAt && (
         <div className="mb-6 rounded-lg bg-warning/10 p-4 text-sm text-warning-foreground">
           Você solicitou o cancelamento em {formatDateTime(order.cancelRequestedAt)}. Nossa equipe
-          está analisando.
+          está analisando e responde em até 1 dia útil, aqui na conversa e por e-mail.
         </div>
       )}
 
@@ -118,6 +123,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
         <div className="flex flex-col gap-4">
           <OrderItemList items={order.items} title={`Itens (${order.items.length})`} />
           <OrderTimeline steps={order.steps} events={order.timeline} />
+          <OrderConversation orderId={order.id} thread={order.support} compose={compose} />
         </div>
 
         <aside className="mt-4 flex flex-col gap-4 lg:sticky lg:top-24 lg:mt-0">
@@ -228,14 +234,118 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
               </button>
             )}
 
-            <SupportForm orderId={order.id} />
+            <AfterShippingCard order={order} onWrite={writeToStore} />
+
+            <button
+              type="button"
+              onClick={() => writeToStore('OTHER')}
+              className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'w-full')}
+            >
+              <MessageCircle className="size-4" aria-hidden />
+              Falar com a loja
+            </button>
 
             {order.cancelMode !== 'NONE' && !order.cancelRequestedAt && (
-              <CancelOrderDialog orderId={order.id} mode={order.cancelMode} />
+              <CancelOrderDialog
+                orderId={order.id}
+                mode={order.cancelMode}
+                refundAmount={order.cancelRefundAmount}
+                paymentMethod={order.payment?.method ?? null}
+              />
             )}
           </div>
         </aside>
       </div>
     </>
   )
+}
+
+/**
+ * O que aconteceu com o dinheiro de um pedido cancelado. "Em processamento"
+ * cobre tanto o estorno a caminho quanto o que o provedor recusou e a equipe
+ * vai refazer — para o cliente, as duas coisas são a mesma espera.
+ */
+const CanceledBanner = ({ order }: { order: CustomerOrder }) => {
+  const payment = order.payment
+  const timing = payment?.method ? REFUND_TIMING_LABEL[payment.method] : null
+
+  return (
+    <div className="mb-6 rounded-lg bg-muted p-4 text-sm">
+      <p className="font-medium">Pedido cancelado em {formatDateTime(order.canceledAt!)}.</p>
+      {order.cancelReason && <p className="mt-1 text-muted-foreground">Motivo: {order.cancelReason}</p>}
+      {payment && payment.refundedAmount > 0 && (
+        <p className="mt-2">
+          Estorno de {formatBRL(payment.refundedAmount)} realizado.
+          {timing && <span className="text-muted-foreground"> {timing}</span>}
+        </p>
+      )}
+      {order.cancelRefundAmount > 0 && (
+        <p className="mt-2">
+          Estorno de {formatBRL(order.cancelRefundAmount)} em processamento.
+          {timing && <span className="text-muted-foreground"> {timing}</span>}
+        </p>
+      )}
+    </div>
+  )
+}
+
+const RETURN_WINDOW_DAYS = 7
+
+/**
+ * Depois que o pacote sai, cancelar vira outra coisa: recusar a entrega ou,
+ * recebido, desistir em até 7 dias (CDC art. 49). O caminho é a conversa — o
+ * Decreto 7.962 pede que o meio de arrependimento esteja claro e no mesmo canal
+ * da compra.
+ */
+const AfterShippingCard = ({
+  order,
+  onWrite,
+}: {
+  order: CustomerOrder
+  onWrite: (topic: SupportTopic) => void
+}) => {
+  if (order.canceledAt) return null
+
+  if (order.fulfillmentStatus === 'SHIPPED') {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4 text-sm shadow-soft">
+        <p className="text-muted-foreground">
+          Seu pedido já foi enviado e não pode mais ser cancelado. Se não quiser mais, você pode recusar a
+          entrega ou, depois de receber, desistir da compra em até {RETURN_WINDOW_DAYS} dias.
+        </p>
+        <button
+          type="button"
+          onClick={() => onWrite('RETURN')}
+          className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'mt-3 w-full')}
+        >
+          Falar sobre devolução
+        </button>
+      </div>
+    )
+  }
+
+  if (order.fulfillmentStatus === 'DELIVERED') {
+    const deliveredAt = order.steps.find((s) => s.key === 'DELIVERED')?.reachedAt
+    const withinWindow =
+      !!deliveredAt && Date.now() - new Date(deliveredAt).getTime() <= RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+
+    return (
+      <div className="rounded-xl border border-border bg-card p-4 text-sm shadow-soft">
+        <p className="text-muted-foreground">
+          {withinWindow
+            ? `Recebeu e não quer ficar com o produto? Você pode desistir da compra em até ${RETURN_WINDOW_DAYS} dias após o recebimento, com o valor devolvido integralmente.`
+            : 'Algum problema com o produto que você recebeu? Conte para a gente.'}
+        </p>
+        <button
+          type="button"
+          onClick={() => onWrite(withinWindow ? 'RETURN' : 'PRODUCT')}
+          className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'mt-3 w-full')}
+        >
+          {withinWindow ? 'Pedir devolução' : 'Relatar um problema'}
+        </button>
+      </div>
+    )
+  }
+
+  return null
 }

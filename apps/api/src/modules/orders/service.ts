@@ -2,6 +2,7 @@ import {
   situationFilter,
   periodStart,
   customerCancelMode,
+  cancelReasonText,
   ERROR_CODES,
   type CustomerOrder,
   type CustomerOrderListItem,
@@ -12,14 +13,21 @@ import {
   type OrderStatus,
   type PaginationMeta,
 } from '@ecommerce/shared/contracts'
-import { EVENTS, SUPPORT_TOPIC_LABEL } from '@ecommerce/shared/constants'
+import { EVENTS } from '@ecommerce/shared/constants'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { notFound, conflict } from '../../shared/errors.js'
 import { toPrismaPagination, buildMeta } from '../../shared/pagination.js'
 import { cancelOrderInternal } from '../admin-orders/service.js'
-import { refreshPendingMercadoPagoPayment } from '../payments/service.js'
+import { refreshPendingMercadoPagoPayment, refundCanceledOrder } from '../payments/service.js'
+import type { AutoRefundOutcome } from '../payments/domain/refund.js'
+import { appendMessage } from '../support/service.js'
+import {
+  notifyCancelRequested,
+  notifyOrderCanceled,
+  notifySupportMessage,
+} from '../notifications/service.js'
 import { resolveCart, addItems } from '../cart/service.js'
 import {
   CUSTOMER_LIST_SELECT,
@@ -135,54 +143,145 @@ export const getOrderStatus = async (customerId: string, id: string): Promise<Or
 
 // ── Cancelamento ─────────────────────────────────────────────────────────────
 
+const CANCEL_STATE_SELECT = {
+  id: true,
+  paymentStatus: true,
+  fulfillmentStatus: true,
+  canceledAt: true,
+  cancelRequestedAt: true,
+  payments: {
+    where: { status: { in: ['PAID', 'PARTIALLY_REFUNDED'] } },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    select: { amount: true, refundedAmount: true },
+  },
+} satisfies Prisma.OrderSelect
+
 /**
- * Duas saídas, decididas por `customerCancelMode`:
+ * Cancelado como "não pago", mas o Pix foi pago no meio do caminho: o MP recusou
+ * cancelar a cobrança, a releitura aplicou o pagamento e o estorno já saiu por
+ * `applyMercadoPagoOrder`. O e-mail do cancelamento precisa contar isso, e não
+ * dizer "nada a estornar" a quem acabou de pagar.
+ */
+const refundFromLatePayment = async (orderId: string): Promise<AutoRefundOutcome> => {
+  const paid = await prisma.payment.findFirst({
+    where: { orderId, storeId: getActiveStoreId(), status: { in: ['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED'] } },
+    orderBy: { createdAt: 'desc' },
+    select: { status: true, method: true, amount: true, refundedAmount: true },
+  })
+  if (!paid) return { status: 'none' }
+  return paid.status === 'REFUNDED'
+    ? { status: 'requested', amount: paid.refundedAmount, method: paid.method }
+    : { status: 'failed', amount: Math.max(0, paid.amount - paid.refundedAmount), method: paid.method }
+}
+
+const notCancelable = (fulfillment: string): never => {
+  const shipped = fulfillment === 'SHIPPED' || fulfillment === 'DELIVERED' || fulfillment === 'RETURNED'
+  throw conflict(
+    shipped
+      ? 'Este pedido já foi enviado e não pode mais ser cancelado. Fale com a gente pela página do pedido sobre a devolução.'
+      : 'Este pedido não pode mais ser cancelado. Fale com a gente pela página do pedido.',
+    ERROR_CODES.ORDER_NOT_CANCELABLE,
+  )
+}
+
+/**
+ * Três saídas, decididas por `customerCancelMode` sobre o estado REAL:
  *
- * IMMEDIATE — nada foi pago e ninguém tirou produto da prateleira: cancela de
- * verdade, reusando a transação do admin (estoque volta pelo mesmo caminho).
+ * IMMEDIATE — ninguém começou a separar: cancela de verdade, reusando a
+ * transação do admin (estoque e cupom voltam pelo mesmo caminho). Se estava
+ * pago, o estorno total sai na hora, sem ninguém da loja precisar agir.
  *
- * REQUEST — há dinheiro ou trabalho envolvido: registra a solicitação na
- * timeline e não muda estado nenhum. Quem decide estorno é o staff, no admin.
+ * REQUEST — a caixa já está sendo montada: registra o pedido de cancelamento
+ * (coluna + conversa) e avisa a equipe, que aprova (e estorna) ou recusa.
  *
- * `paymentStatus` não é tocado em nenhum dos dois ramos: só o webhook do Stripe
- * escreve pagamento (regra 6).
+ * NONE — o pacote saiu: a conversa é o caminho (recusa na entrega, devolução).
+ *
+ * `paymentStatus` não é tocado aqui: só o estado que o provedor confirma
+ * escreve pagamento (regra 6). O estorno é PEDIDO ao provedor.
  */
 export const cancelOrder = async (
   customerId: string,
   id: string,
   input: CustomerCancelInput,
 ): Promise<CustomerOrder> => {
-  const row = await findOwnedOrThrow(customerId, id, CUSTOMER_ORDER_SELECT)
-  const mode = customerCancelMode(row)
+  let row = await findOwnedOrThrow(customerId, id, CANCEL_STATE_SELECT)
 
-  if (mode === 'NONE') {
-    throw conflict(
-      'Este pedido não pode mais ser cancelado. Fale com o suporte.',
-      ERROR_CODES.ORDER_NOT_CANCELABLE,
-    )
+  // Pix pago há segundos com o webhook ainda a caminho: sem esta releitura o
+  // pedido seria cancelado como "não pago", e o estorno dependeria do webhook
+  // chegar depois. Relido, cai no ramo certo de primeira.
+  if (row.paymentStatus === 'PENDING' || row.paymentStatus === 'PROCESSING') {
+    await refreshPendingMercadoPagoPayment(id, { force: true })
+    row = await findOwnedOrThrow(customerId, id, CANCEL_STATE_SELECT)
   }
 
+  const mode = customerCancelMode(row)
+  if (mode === 'NONE') return notCancelable(row.fulfillmentStatus)
+
+  const reason = cancelReasonText(input)
+
   if (mode === 'IMMEDIATE') {
-    await cancelOrderInternal(id, input.reason, { kind: 'customer' })
+    const { paidAtCancel } = await cancelOrderInternal(
+      id,
+      reason,
+      { kind: 'customer', reasonCode: input.reasonCode },
+      { allowedFulfillments: ['UNFULFILLED'] },
+    )
+    const refund: AutoRefundOutcome = paidAtCancel
+      ? await refundCanceledOrder(id, { kind: 'customer' })
+      : await refundFromLatePayment(id)
+
+    await notifyOrderCanceled(id, { by: 'customer', reason, refund })
     return getOrder(customerId, id)
   }
 
-  const alreadyRequested = row.events.some((e) => e.type === EVENTS.order.cancelRequested)
-  if (alreadyRequested) {
+  if (row.cancelRequestedAt) {
     throw conflict(
-      'Você já solicitou o cancelamento deste pedido. Nossa equipe está analisando.',
+      'Você já pediu o cancelamento deste pedido. Nossa equipe está analisando.',
       ERROR_CODES.CONFLICT,
     )
   }
 
-  await prisma.orderEvent.create({
-    data: {
-      orderId: id,
-      type: EVENTS.order.cancelRequested,
-      description: input.reason,
-      metadataJson: { by: 'customer' },
-      userId: null,
-    },
+  const claimed = await prisma.$transaction(async (tx) => {
+    // As guardas no where: o staff pode ter despachado (ou outro clique pode ter
+    // pedido) entre a leitura acima e esta linha.
+    const result = await tx.order.updateMany({
+      where: {
+        id,
+        canceledAt: null,
+        cancelRequestedAt: null,
+        fulfillmentStatus: { in: ['PICKING', 'READY_TO_SHIP'] },
+      },
+      data: { cancelRequestedAt: new Date(), cancelRequestReason: reason },
+    })
+    if (result.count === 0) return false
+
+    await tx.orderEvent.create({
+      data: {
+        orderId: id,
+        type: EVENTS.order.cancelRequested,
+        description: reason,
+        metadataJson: { by: 'customer', reasonCode: input.reasonCode },
+        userId: null,
+      },
+    })
+
+    await appendMessage(tx, { orderId: id, customerId, author: 'CUSTOMER', topic: 'CANCELLATION', body: reason })
+    return true
+  })
+
+  if (!claimed) {
+    const fresh = await findOwnedOrThrow(customerId, id, CANCEL_STATE_SELECT)
+    if (fresh.cancelRequestedAt) {
+      throw conflict('Você já pediu o cancelamento deste pedido. Nossa equipe está analisando.', ERROR_CODES.CONFLICT)
+    }
+    return notCancelable(fresh.fulfillmentStatus)
+  }
+
+  const paid = row.payments[0]
+  await notifyCancelRequested(id, {
+    reason,
+    refundAmount: paid ? Math.max(0, paid.amount - paid.refundedAmount) : 0,
   })
 
   return getOrder(customerId, id)
@@ -191,10 +290,8 @@ export const cancelOrder = async (
 // ── Suporte ──────────────────────────────────────────────────────────────────
 
 /**
- * A mensagem vira um evento na timeline do pedido — é onde o staff já olha
- * quando o assunto é "o que houve com o 1042?". Não publica em fila: o evento
- * não tem consumidor (regra 9), e uma fila sem worker seria só uma mensagem
- * apodrecendo.
+ * A mensagem entra na conversa do pedido (criada na primeira vez) e a equipe é
+ * avisada por e-mail. Antes, virava um evento na timeline que ninguém via.
  */
 export const sendSupportMessage = async (
   customerId: string,
@@ -203,15 +300,11 @@ export const sendSupportMessage = async (
 ): Promise<CustomerOrder> => {
   await findOwnedOrThrow(customerId, id, { id: true })
 
-  await prisma.orderEvent.create({
-    data: {
-      orderId: id,
-      type: EVENTS.order.supportMessage,
-      description: `[${SUPPORT_TOPIC_LABEL[input.topic]}] ${input.message}`,
-      metadataJson: { by: 'customer', topic: input.topic },
-      userId: null,
-    },
-  })
+  const { threadId } = await prisma.$transaction((tx) =>
+    appendMessage(tx, { orderId: id, customerId, author: 'CUSTOMER', topic: input.topic, body: input.message }),
+  )
+
+  await notifySupportMessage(id, { threadId, topic: input.topic, body: input.message })
 
   return getOrder(customerId, id)
 }

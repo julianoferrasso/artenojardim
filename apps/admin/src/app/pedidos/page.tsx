@@ -22,7 +22,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
 import { OrderSituationBadge } from '@/components/order-situation-badge'
+import { CancelRequestedBadge } from '@/components/support-status-badge'
 import { useOrders } from '@/lib/orders'
 import { SITUATION_LABEL, SITUATION_ORDER, SORT_OPTIONS } from '@/lib/order-labels'
 import { formatBRL, formatDate } from '@/lib/utils'
@@ -196,8 +198,17 @@ export default function OrdersPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <Link href={`/pedidos/${order.id}`} className="block">
+                    <Link href={`/pedidos/${order.id}`} className="flex flex-wrap gap-1">
                       <OrderSituationBadge situation={order.situation} />
+                      {order.cancelRequested && <CancelRequestedBadge />}
+                      {order.refundPending && (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/30 bg-destructive/10 font-medium text-destructive"
+                        >
+                          Estorno pendente
+                        </Badge>
+                      )}
                     </Link>
                   </TableCell>
                   <TableCell className="text-right font-medium whitespace-nowrap">

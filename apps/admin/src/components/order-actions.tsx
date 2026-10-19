@@ -234,6 +234,8 @@ export const OrderActions = ({ order }: { order: AdminOrder }) => {
               {order.refundableAmount > 0
                 ? 'O dinheiro NÃO é devolvido: use “Reembolsar” depois, se for o caso.'
                 : 'Este pedido não tem pagamento a estornar.'}
+              {order.cancelRequest &&
+                ' O cliente pediu este cancelamento: prefira “Aprovar” no aviso do topo, que já estorna e responde a ele.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
 

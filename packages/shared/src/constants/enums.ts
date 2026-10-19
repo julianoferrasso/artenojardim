@@ -105,3 +105,13 @@ export type EmailCampaignStatus = z.infer<typeof emailCampaignStatusSchema>
 export const INSTAGRAM_DISPLAY_MODES = ['IMAGE', 'EMBED'] as const
 export const instagramDisplayModeSchema = z.enum(INSTAGRAM_DISPLAY_MODES)
 export type InstagramDisplayMode = z.infer<typeof instagramDisplayModeSchema>
+
+/** Situação de uma conversa do atendimento. OPEN = a vez é da loja responder. */
+export const SUPPORT_THREAD_STATUSES = ['OPEN', 'ANSWERED', 'CLOSED'] as const
+export const supportThreadStatusSchema = z.enum(SUPPORT_THREAD_STATUSES)
+export type SupportThreadStatus = z.infer<typeof supportThreadStatusSchema>
+
+/** SYSTEM = texto que a própria API escreveu (ex.: "cancelamento aprovado"). */
+export const SUPPORT_AUTHORS = ['CUSTOMER', 'STAFF', 'SYSTEM'] as const
+export const supportAuthorSchema = z.enum(SUPPORT_AUTHORS)
+export type SupportAuthor = z.infer<typeof supportAuthorSchema>

@@ -149,13 +149,15 @@ describe('canTransitionFulfillment', () => {
 })
 
 describe('canCancelOrder', () => {
-  it('cancela enquanto nada saiu do estoque físico', () => {
+  it('cancela enquanto o pacote não saiu', () => {
     expect(canCancelOrder({ canceledAt: null, fulfillmentStatus: 'UNFULFILLED' })).toBe(true)
     expect(canCancelOrder({ canceledAt: null, fulfillmentStatus: 'PICKING' })).toBe(true)
+    // O cliente pode pedir o cancelamento até aqui; a loja precisa poder aprovar.
+    expect(canCancelOrder({ canceledAt: null, fulfillmentStatus: 'READY_TO_SHIP' })).toBe(true)
   })
 
-  it('depois de pronto/enviado não é cancelamento, é devolução', () => {
-    for (const f of ['READY_TO_SHIP', 'SHIPPED', 'DELIVERED', 'RETURNED'] as const) {
+  it('depois de enviado não é cancelamento, é devolução', () => {
+    for (const f of ['SHIPPED', 'DELIVERED', 'RETURNED'] as const) {
       expect(canCancelOrder({ canceledAt: null, fulfillmentStatus: f })).toBe(false)
     }
   })

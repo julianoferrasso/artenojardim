@@ -2,11 +2,23 @@
 
 import { useState } from 'react'
 import type { AdminOrder } from '@ecommerce/shared/contracts'
+import { EVENTS } from '@ecommerce/shared/constants'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useAddOrderEvent } from '@/lib/orders'
 import { cn, formatDate } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
+
+/**
+ * Título para os eventos cuja `description` é texto livre (o motivo do cliente,
+ * a resposta da loja): sem ele, a linha seria só a frase solta, sem dizer o que
+ * aconteceu.
+ */
+const EVENT_TITLE: Partial<Record<string, string>> = {
+  [EVENTS.order.cancelRequested]: 'Cancelamento solicitado pelo cliente',
+  [EVENTS.order.cancelRequestDeclined]: 'Pedido de cancelamento recusado',
+  [EVENTS.order.refundFailed]: 'Estorno recusado pelo provedor',
+}
 
 /**
  * Histórico do pedido, do mais recente para o mais antigo — a pergunta do
@@ -39,19 +51,32 @@ export const OrderTimeline = ({ order }: { order: AdminOrder }) => {
           // CLIENTE. Sem esta distinção apareceriam como "sistema", e a equipe
           // leria um desabafo do comprador como se fosse log automático.
           const byCustomer = event.metadata?.['by'] === 'customer'
+          const title = EVENT_TITLE[event.type]
+          // Dinheiro que ficou na loja: precisa saltar aos olhos de quem rola o histórico.
+          const failed = event.type === EVENTS.order.refundFailed
           return (
             <li key={event.id} className="flex gap-3">
               <div className="flex flex-col items-center pt-1">
                 <span
                   className={cn(
                     'size-2 shrink-0 rounded-full',
-                    byCustomer ? 'bg-warning' : 'bg-primary',
+                    failed ? 'bg-destructive' : byCustomer ? 'bg-warning' : 'bg-primary',
                   )}
                 />
                 <span className="mt-1 w-px flex-1 bg-border" />
               </div>
               <div className="min-w-0 flex-1 pb-1">
-                <p className="text-sm">{event.description}</p>
+                {title && (
+                  <p className={cn('text-sm font-medium', failed && 'text-destructive')}>{title}</p>
+                )}
+                <p
+                  className={cn(
+                    'text-sm whitespace-pre-wrap',
+                    title && !failed && 'text-muted-foreground',
+                  )}
+                >
+                  {event.description}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {formatDate(event.createdAt)}
                   {byCustomer

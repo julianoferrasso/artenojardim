@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { updateStoreThemeSchema } from '@ecommerce/shared/contracts'
+import { updateStoreThemeSchema, updateStaffNotificationsSchema } from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticate } from '../../middlewares/authenticate.js'
 import { requireMinRole } from '../../middlewares/authorize.js'
@@ -30,3 +30,12 @@ adminStoreRoutes.put(
   validate({ body: updateStoreThemeSchema }),
   controller.updateThemeController,
 )
+
+/** Para onde vão os e-mails da equipe. ADMIN pelo mesmo motivo do tema: é configuração da loja. */
+adminStoreRoutes.get('/notifications', controller.getNotificationsController)
+adminStoreRoutes.put(
+  '/notifications',
+  validate({ body: updateStaffNotificationsSchema }),
+  controller.updateNotificationsController,
+)
+adminStoreRoutes.post('/notifications/test', controller.testNotificationsController)

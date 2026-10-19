@@ -8,6 +8,7 @@ import {
   type MercadoPagoOrderPayment,
   type OrderPayment,
   type PixCharge,
+  type RefundOrderInput,
 } from '@ecommerce/shared/contracts'
 import { EVENTS, type PaymentMethod, type PaymentStatus } from '@ecommerce/shared/constants'
 import { Prisma } from '@prisma/client'
@@ -15,11 +16,12 @@ import { prisma } from '../../config/prisma.js'
 import { env, mercadoPagoConfig } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
-import { appError, conflict, notFound } from '../../shared/errors.js'
+import { appError, businessError, conflict, notFound } from '../../shared/errors.js'
 import { getSetting } from '../../shared/settings.js'
 import { publish } from '../../shared/publish.js'
 import {
   createPaymentIntent,
+  createRefund,
   retrievePaymentIntent,
   getPublishableKey,
   type PaymentIntentResult,
@@ -36,7 +38,14 @@ import {
   type MpPayer,
 } from '../../integrations/mercadopago/index.js'
 import { settleOrderReservations, extendOrderReservations } from '../inventory/service.js'
+import { notifyOrderRefunded, notifyRefundFailed } from '../notifications/service.js'
 import { decideMercadoPagoTransition, mpPaymentMethod } from './domain/mercadopago-transition.js'
+import {
+  refundableOf,
+  refundIdempotencyKey,
+  type AutoRefundOutcome,
+  type RefundActor,
+} from './domain/refund.js'
 
 /**
  * Pagamentos. O provedor dos pagamentos NOVOS vem de PAYMENT_PROVIDER: Mercado
@@ -535,14 +544,13 @@ export const cancelPendingMercadoPagoPayments = async (orderId: string): Promise
   }
 }
 
-// ── Mercado Pago: reembolso (chamado pelo admin) ─────────────────────────────
+// ── Reembolso ────────────────────────────────────────────────────────────────
 
 /**
  * Pede o reembolso ao MP e aplica o estado que ele devolve. Sem `amountCents` =
- * todo o saldo restante. A chave de idempotência vem de quem chama (ela precisa
- * incluir o já reembolsado — ver admin-orders).
+ * todo o saldo restante.
  */
-export const refundMercadoPagoPayment = async (
+const refundMercadoPagoPayment = async (
   payment: { mpOrderId: string; mpPaymentId: string | null },
   amountCents: number | undefined,
   idempotencyKey: string,
@@ -553,6 +561,163 @@ export const refundMercadoPagoPayment = async (
     idempotencyKey,
   )
   await applyMercadoPagoOrder(snapshot)
+}
+
+const REFUNDABLE_PAYMENT_SELECT = {
+  id: true,
+  provider: true,
+  method: true,
+  amount: true,
+  refundedAmount: true,
+  mpOrderId: true,
+  mpPaymentId: true,
+  stripePaymentIntentId: true,
+} satisfies Prisma.PaymentSelect
+
+/** O pagamento que efetivamente pagou: um pedido pode ter tentativas falhas antes dele. */
+const findPaidPayment = (orderId: string) =>
+  prisma.payment.findFirst({
+    where: { orderId, storeId: getActiveStoreId(), status: { in: ['PAID', 'PARTIALLY_REFUNDED'] } },
+    orderBy: { createdAt: 'desc' },
+    select: REFUNDABLE_PAYMENT_SELECT,
+  })
+
+const actorUserId = (actor: RefundActor): string | null =>
+  actor.kind === 'staff' ? (actor.userId ?? null) : null
+
+/**
+ * Pede o reembolso ao provedor e registra o PEDIDO na timeline. O status do
+ * pagamento (REFUNDED/PARTIALLY_REFUNDED) e o `refundedAmount` vêm do provedor —
+ * no MP, pela order que ele devolve já reembolsada; no Stripe, pelo webhook
+ * `charge.refunded`. Gravar aqui por conta própria estaria errado na hora em que
+ * o provedor recusasse: o pedido diria "reembolsado" com o dinheiro no caixa.
+ *
+ * A recusa do provedor vira `order.refund_failed` na timeline antes de subir: é
+ * o que faz o staff ver o porquê, e o que renova a chave de idempotência da
+ * próxima tentativa.
+ */
+export const refundOrderPayment = async (
+  orderId: string,
+  input: { amount?: number | undefined; reason: RefundOrderInput['reason'] },
+  actor: RefundActor,
+): Promise<{ amount: number; method: PaymentMethod | null }> => {
+  const payment = await findPaidPayment(orderId)
+  if (!payment) {
+    throw businessError(ERROR_CODES.VALIDATION_ERROR, 'Este pedido não tem pagamento confirmado para reembolsar.', 422)
+  }
+
+  const refundable = refundableOf(payment)
+  if (refundable <= 0) throw conflict('Este pagamento já foi totalmente reembolsado.')
+
+  const amount = input.amount ?? refundable
+  if (amount > refundable) {
+    throw businessError(
+      ERROR_CODES.VALIDATION_ERROR,
+      `Valor acima do saldo reembolsável (${(refundable / 100).toFixed(2)}).`,
+      422,
+    )
+  }
+
+  const priorFailures = await prisma.orderEvent.count({ where: { orderId, type: EVENTS.order.refundFailed } })
+  const idempotencyKey = refundIdempotencyKey(orderId, payment.refundedAmount, amount, priorFailures)
+
+  let providerLabel: string
+  let refundMeta: Record<string, unknown>
+  try {
+    if (payment.provider === 'MERCADO_PAGO') {
+      if (!payment.mpOrderId) throw conflict('Pagamento sem order do Mercado Pago para reembolsar.')
+      // Sem valor = "todo o saldo": o MP calcula o restante, sem arredondar do nosso lado.
+      await refundMercadoPagoPayment(
+        { mpOrderId: payment.mpOrderId, mpPaymentId: payment.mpPaymentId },
+        amount === refundable ? undefined : amount,
+        idempotencyKey,
+      )
+      providerLabel = 'Mercado Pago'
+      refundMeta = { mpOrderId: payment.mpOrderId }
+    } else {
+      if (!payment.stripePaymentIntentId) throw conflict('Pagamento sem PaymentIntent do Stripe para reembolsar.')
+      const refund = await createRefund({
+        paymentIntentId: payment.stripePaymentIntentId,
+        amountCents: amount,
+        reason: input.reason,
+        idempotencyKey,
+      })
+      providerLabel = 'Stripe'
+      refundMeta = { refundId: refund.id, status: refund.status }
+    }
+  } catch (err) {
+    const cause = (err as { cause?: unknown }).cause
+    await prisma.orderEvent
+      .create({
+        data: {
+          orderId,
+          type: EVENTS.order.refundFailed,
+          description: `Estorno de R$ ${(amount / 100).toFixed(2)} recusado — reembolsar pelo admin`,
+          metadataJson: {
+            amount,
+            by: actor.kind,
+            error: err instanceof Error ? err.message : String(err),
+            ...(cause instanceof Error ? { cause: cause.message } : {}),
+          },
+          userId: actorUserId(actor),
+        },
+      })
+      .catch((eventErr: unknown) => logger.error({ err: eventErr, orderId }, 'falha ao registrar estorno recusado'))
+    throw err
+  }
+
+  await prisma.orderEvent.create({
+    data: {
+      orderId,
+      type: EVENTS.order.refundRequested,
+      description: `Reembolso de R$ ${(amount / 100).toFixed(2)} solicitado ao ${providerLabel}`,
+      metadataJson: { ...refundMeta, amount, reason: input.reason, by: actor.kind, idempotencyKey },
+      userId: actorUserId(actor),
+    },
+  })
+
+  logger.info({ orderId, amount, provider: payment.provider, by: actor.kind, ...refundMeta }, 'reembolso solicitado')
+  return { amount, method: payment.method }
+}
+
+/**
+ * Estorno TOTAL de um pedido cancelado, sem ninguém clicando: o cliente cancelou
+ * um pedido pago, a loja aprovou o pedido de cancelamento, ou o pagamento chegou
+ * depois do cancelamento.
+ *
+ * Nunca lança. O cancelamento já está gravado e não volta atrás por causa do
+ * provedor; a recusa (saldo insuficiente, dinheiro ainda não liberado) fica na
+ * timeline como `refund_failed`, e o pedido cancelado com saldo reembolsável é
+ * o que o staff resolve no botão Reembolsar.
+ */
+export const refundCanceledOrder = async (orderId: string, actor: RefundActor): Promise<AutoRefundOutcome> => {
+  let payment: Awaited<ReturnType<typeof findPaidPayment>> = null
+  try {
+    payment = await findPaidPayment(orderId)
+    if (!payment || refundableOf(payment) <= 0) return { status: 'none' }
+
+    const result = await refundOrderPayment(orderId, { reason: 'requested_by_customer' }, actor)
+    return { status: 'requested', amount: result.amount, method: result.method }
+  } catch (err) {
+    logger.error({ err, orderId, by: actor.kind }, 'estorno automático do pedido cancelado falhou')
+    return {
+      status: 'failed',
+      amount: payment ? refundableOf(payment) : 0,
+      method: payment?.method ?? null,
+    }
+  }
+}
+
+/**
+ * O pagamento chegou com o pedido já cancelado (o webhook atrasou, ou o cliente
+ * pagou o Pix depois de cancelar). Antes, isto virava um evento pedindo ao staff
+ * que reembolsasse; agora o estorno sai sozinho, e o staff só é acordado se o
+ * provedor recusar.
+ */
+const refundPaidAfterCancel = async (orderId: string): Promise<void> => {
+  const outcome = await refundCanceledOrder(orderId, { kind: 'system' })
+  if (outcome.status === 'requested') await notifyOrderRefunded(orderId, outcome)
+  if (outcome.status === 'failed') await notifyRefundFailed(orderId, outcome)
 }
 
 // ── Mercado Pago: a função única de estado ───────────────────────────────────
@@ -621,6 +786,7 @@ export const applyMercadoPagoOrder = async (snapshot: MpOrderSnapshot): Promise<
   const storeId = getActiveStoreId()
   const detail = snapshot.payment?.statusDetail ?? snapshot.statusDetail
   let paidOrderId: string | null = null
+  let refundAfterCancelOrderId: string | null = null
 
   const result = await prisma.$transaction(async (tx): Promise<ApplyResult | null> => {
     const payment =
@@ -657,16 +823,20 @@ export const applyMercadoPagoOrder = async (snapshot: MpOrderSnapshot): Promise<
         })
         if (claimed.count === 0) return currentState(tx, payment.id)
 
-        const order = await tx.order.findUnique({
-          where: { id: payment.orderId },
-          select: { id: true, storeId: true, paymentStatus: true, canceledAt: true },
-        })
-        if (!order) return { orderId: payment.orderId, paymentStatus: 'PAID' }
-
         const orderClaimed = await tx.order.updateMany({
-          where: { id: order.id, paymentStatus: 'PENDING' },
+          where: { id: payment.orderId, paymentStatus: 'PENDING' },
           data: { paymentStatus: 'PAID' },
         })
+
+        // Lido DEPOIS do claim, e não antes: o claim trava a linha do pedido, e só
+        // assim um cancelamento que acabou de ser gravado aparece aqui. Lido antes,
+        // o pedido cancelado no meio-tempo caía no ramo normal — "pedido
+        // confirmado" para o cliente e nenhum estorno.
+        const order = await tx.order.findUnique({
+          where: { id: payment.orderId },
+          select: { id: true, storeId: true, canceledAt: true },
+        })
+        if (!order) return { orderId: payment.orderId, paymentStatus: 'PAID' }
 
         if (orderClaimed.count === 0) {
           // Outra tentativa já pagou este pedido: dinheiro em dobro.
@@ -681,16 +851,19 @@ export const applyMercadoPagoOrder = async (snapshot: MpOrderSnapshot): Promise<
           })
         } else if (order.canceledAt) {
           // Pago depois do cancelamento: o dinheiro entrou, mas o estoque já foi
-          // liberado e não há o que confirmar ao cliente. O staff reembolsa.
+          // liberado e não há o que confirmar ao cliente. O estorno sai depois
+          // do commit — é chamada externa, e o pagamento precisa estar gravado
+          // como PAID para o reembolso achá-lo.
           logger.warn({ orderId: order.id, mpOrderId: snapshot.id }, 'Mercado Pago: pagamento em pedido cancelado')
           await tx.orderEvent.create({
             data: {
               orderId: order.id,
               type: EVENTS.order.paid,
-              description: 'Pagamento recebido com o pedido já cancelado — reembolsar.',
+              description: 'Pagamento recebido com o pedido já cancelado — estorno automático solicitado.',
               metadataJson: { afterCancel: true, mpOrderId: snapshot.id },
             },
           })
+          refundAfterCancelOrderId = order.id
         } else {
           await tx.orderEvent.create({
             data: {
@@ -787,6 +960,10 @@ export const applyMercadoPagoOrder = async (snapshot: MpOrderSnapshot): Promise<
     }
   }
 
+  // Nunca lança: o webhook reentregue cairia em "sem mudança" e não tentaria de
+  // novo — a falha vira evento na timeline e e-mail para a equipe.
+  if (refundAfterCancelOrderId) await refundPaidAfterCancel(refundAfterCancelOrderId)
+
   return result
 }
 
@@ -807,8 +984,15 @@ const REFRESH_INTERVAL_MS = 10_000
  * A vez é reivindicada no banco (`updatedAt` mais velho que o intervalo): várias
  * abas e várias instâncias do PM2 fazem, juntas, no máximo uma chamada ao MP a
  * cada 10 s por tentativa. Nunca lança — o status responde o que o banco tem.
+ *
+ * `force` pula a vez: o cancelamento do cliente precisa do estado REAL antes de
+ * decidir entre cancelar um pedido não pago e estornar um pago, e o polling da
+ * tela pode ter acabado de gastar a janela. O cancelamento já tem limite próprio.
  */
-export const refreshPendingMercadoPagoPayment = async (orderId: string): Promise<void> => {
+export const refreshPendingMercadoPagoPayment = async (
+  orderId: string,
+  opts: { force?: boolean } = {},
+): Promise<void> => {
   try {
     const storeId = getActiveStoreId()
     const pending = await prisma.payment.findFirst({
@@ -818,12 +1002,14 @@ export const refreshPendingMercadoPagoPayment = async (orderId: string): Promise
     })
     if (!pending?.mpOrderId) return
 
-    const now = new Date()
-    const claimed = await prisma.payment.updateMany({
-      where: { id: pending.id, status: 'PROCESSING', updatedAt: { lt: new Date(now.getTime() - REFRESH_INTERVAL_MS) } },
-      data: { updatedAt: now },
-    })
-    if (claimed.count === 0) return
+    if (!opts.force) {
+      const now = new Date()
+      const claimed = await prisma.payment.updateMany({
+        where: { id: pending.id, status: 'PROCESSING', updatedAt: { lt: new Date(now.getTime() - REFRESH_INTERVAL_MS) } },
+        data: { updatedAt: now },
+      })
+      if (claimed.count === 0) return
+    }
 
     await syncMercadoPagoOrder(pending.mpOrderId)
   } catch (err) {

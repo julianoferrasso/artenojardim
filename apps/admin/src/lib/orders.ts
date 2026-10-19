@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { ROUTES } from '@ecommerce/shared/constants'
 import type {
   AdminOrder,
@@ -9,6 +9,7 @@ import type {
   RefundOrderInput,
   InternalNoteInput,
   AddOrderEventInput,
+  DeclineCancelRequestInput,
 } from '@ecommerce/shared/contracts'
 import { apiFetch, apiFetchPaginated } from './api'
 
@@ -52,10 +53,14 @@ export const useOrder = (id: string | undefined) =>
     queryFn: () => apiFetch<AdminOrder>(ROUTES.admin.orders.detail(id!)),
   })
 
-/** Invalida lista + detalhe. Compartilhado por todas as mutações do pedido. */
+/**
+ * Invalida lista + detalhe. Compartilhado por todas as mutações do pedido.
+ * `alsoInvalidate` é para o que mexe em outra tela além do pedido.
+ */
 const useOrderMutation = <TInput>(
   id: string,
   request: (id: string, input: TInput) => Promise<AdminOrder>,
+  alsoInvalidate: readonly QueryKey[] = [],
 ) => {
   const qc = useQueryClient()
   return useMutation({
@@ -64,6 +69,7 @@ const useOrderMutation = <TInput>(
       qc.setQueryData(['order', id], order)
       qc.invalidateQueries({ queryKey: ['orders'] })
       qc.invalidateQueries({ queryKey: ['order', id] })
+      for (const queryKey of alsoInvalidate) qc.invalidateQueries({ queryKey })
     },
   })
 }
@@ -106,4 +112,28 @@ export const useAddOrderEvent = (id: string) =>
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  )
+
+/**
+ * A decisão sobre o pedido de cancelamento escreve na conversa do atendimento
+ * (mensagem da loja ou do sistema) e tira o pedido de "Cancelamentos pendentes":
+ * por isso invalida ['support'] também.
+ */
+export const useApproveCancelRequest = (id: string) =>
+  useOrderMutation<void>(
+    id,
+    (orderId) =>
+      apiFetch<AdminOrder>(ROUTES.admin.orders.approveCancelRequest(orderId), { method: 'POST' }),
+    [['support']],
+  )
+
+export const useDeclineCancelRequest = (id: string) =>
+  useOrderMutation<DeclineCancelRequestInput>(
+    id,
+    (orderId, input) =>
+      apiFetch<AdminOrder>(ROUTES.admin.orders.declineCancelRequest(orderId), {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    [['support']],
   )

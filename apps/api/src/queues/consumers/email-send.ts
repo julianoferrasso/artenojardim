@@ -6,6 +6,7 @@ import type { EmailContent } from '../../integrations/email/index.js'
 import { permanentError } from '../consumer.js'
 import { renderCampaignEmail, type CampaignEmailData } from './render-campaign.js'
 import { renderOrderEmail, type OrderEmailData } from './render-order.js'
+import { renderNoticeEmail, type NoticeEmailData } from './render-notice.js'
 
 /**
  * Consumidor genérico de `email.*`. Recebe QUAL template e OS DADOS; não decide
@@ -18,6 +19,7 @@ import { renderOrderEmail, type OrderEmailData } from './render-order.js'
 export type EmailJob =
   | { template: 'marketing_product'; to: string; recipientId: string; data: CampaignEmailData }
   | { template: 'order_confirmation'; to: string; data: OrderEmailData }
+  | { template: 'notice'; to: string; data: NoticeEmailData }
 
 /**
  * Erros do SES que NÃO adianta repetir: o endereço não existe, a conta está
@@ -67,14 +69,28 @@ const settleCampaignIfDone = async (campaignId: string): Promise<void> => {
   })
 }
 
+/**
+ * Um `case` por template e o `never` no fim: template novo sem `case` é erro de
+ * compilação. Antes era um `if` com fallback, e qualquer template desconhecido
+ * saía renderizado como confirmação de pedido.
+ */
 export const emailSendHandler = async (job: EmailJob): Promise<void> => {
-  if (job.template === 'marketing_product') {
-    await sendCampaignEmail(job)
-    return
+  switch (job.template) {
+    case 'marketing_product':
+      await sendCampaignEmail(job)
+      return
+    case 'order_confirmation':
+      await deliver(await renderOrderEmail(job.data), job.to, job.template)
+      return
+    case 'notice':
+      await deliver(await renderNoticeEmail(job.data), job.to, job.template)
+      return
+    default: {
+      // Mensagem de uma versão mais nova (ou corrompida): retry não a conserta.
+      const unknown: never = job
+      throw permanentError(`template de e-mail desconhecido: ${(unknown as { template?: string }).template}`)
+    }
   }
-
-  const content = await renderOrderEmail(job.data)
-  await deliver(content, job.to, 'order_confirmation')
 }
 
 const sendCampaignEmail = async (

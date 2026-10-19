@@ -27,9 +27,20 @@ export const EVENTS = {
     returned: 'order.returned',
     refunded: 'order.refunded',
     refundRequested: 'order.refund_requested',
-    /** Pedido de cancelamento feito PELO CLIENTE. Não muda estado — o staff decide. */
+    /**
+     * O estorno automático (cancelamento pelo cliente ou pagamento que chegou com
+     * o pedido já cancelado) foi recusado pelo provedor. O pedido segue
+     * cancelado; o staff reembolsa pelo admin.
+     */
+    refundFailed: 'order.refund_failed',
+    /** Pedido de cancelamento feito PELO CLIENTE com o pedido já em separação. A loja decide. */
     cancelRequested: 'order.cancel_requested',
-    /** Mensagem que o cliente escreveu na área da conta. */
+    /** A loja recusou o pedido de cancelamento; a resposta vai pela conversa. */
+    cancelRequestDeclined: 'order.cancel_request_declined',
+    /**
+     * Mensagem que o cliente escreveu na área da conta. Histórico: desde o
+     * atendimento, a mensagem vive em SupportMessage e não vira mais evento.
+     */
     supportMessage: 'order.support_message',
     noteAdded: 'order.note_added',
     paymentFailed: 'order.payment_failed',
@@ -99,6 +110,17 @@ export const EVENTS = {
     passwordReset: 'email.password_reset',
     /** UM destinatário de campanha. O fan-out publica uma destas por pessoa. */
     marketingProduct: 'email.marketing_product',
+    /**
+     * Aviso transacional com o texto já montado pela API (cancelamento, estorno,
+     * resposta do atendimento, alerta para a equipe). O worker só aplica a marca
+     * e envia — um template por aviso seria cinco arquivos com o mesmo layout.
+     */
+    notice: 'email.notice',
+  },
+  /** Atendimento. Só auditoria — o e-mail sai por `email.notice`. */
+  support: {
+    replied: 'support.replied',
+    statusChanged: 'support.status_changed',
   },
   campaign: {
     /** Campanha criada; o orquestrador resolve o fan-out. */
@@ -115,6 +137,8 @@ export const EVENTS = {
   store: {
     /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */
     themeUpdated: 'store.theme_updated',
+    /** Endereço que recebe os e-mails da equipe mudou. Só auditoria. */
+    notificationsUpdated: 'store.notifications_updated',
   },
   /** Banners do carrossel da home. Só auditoria — nenhum consumidor de fila. */
   banner: {
@@ -152,6 +176,7 @@ export const QUEUED_EVENTS = [
   EVENTS.email.boletoIssued,
   EVENTS.email.passwordReset,
   EVENTS.email.marketingProduct,
+  EVENTS.email.notice,
   EVENTS.shipping.labelRequested,
   EVENTS.shipping.trackingSync,
 ] as const

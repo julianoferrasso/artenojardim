@@ -2,9 +2,11 @@ import {
   type AdminTheme,
   type PublicStore,
   type PublicTheme,
+  type StaffNotifications,
   type StoreButtons,
   type StoreTheme,
   type UpdateStoreThemeInput,
+  type UpdateStaffNotificationsData,
 } from '@ecommerce/shared/contracts'
 import { EVENTS } from '@ecommerce/shared/constants'
 import { hexToOklch, oklchToHex } from '@ecommerce/shared/utils'
@@ -140,6 +142,45 @@ export const updateTheme = async (
   }
 
   return getAdminTheme()
+}
+
+// ── Notificações da equipe ───────────────────────────────────────────────────
+
+/** Quem recebe os avisos da equipe agora: o configurado, ou o e-mail da loja. */
+export const getStaffNotifications = async (): Promise<StaffNotifications> => {
+  const [store, setting] = await Promise.all([
+    prisma.store.findUniqueOrThrow({ where: { id: getActiveStoreId() }, select: { email: true } }),
+    getSetting('notifications'),
+  ])
+  return {
+    staffEmail: setting.staffEmail,
+    defaultEmail: store.email,
+    effectiveEmail: setting.staffEmail ?? store.email,
+  }
+}
+
+export const getStaffNotificationEmail = async (): Promise<string> =>
+  (await getStaffNotifications()).effectiveEmail
+
+export const updateStaffNotifications = async (
+  input: UpdateStaffNotificationsData,
+  context: AuditContext,
+): Promise<StaffNotifications> => {
+  const before = await getSetting('notifications')
+  await setSetting('notifications', { staffEmail: input.staffEmail })
+
+  const changes = diff(before, { staffEmail: input.staffEmail })
+  if (Object.keys(changes).length > 0) {
+    await audit({
+      action: EVENTS.store.notificationsUpdated,
+      entityType: 'Store',
+      entityId: getActiveStoreId(),
+      changes,
+      context,
+    })
+  }
+
+  return getStaffNotifications()
 }
 
 /**

@@ -151,8 +151,14 @@ export const canTransitionFulfillment = (
   return true
 }
 
-/** Cancelar depois que o pacote saiu não é cancelar — é devolução. */
-export const CANCELABLE_FULFILLMENTS: readonly FulfillmentStatus[] = ['UNFULFILLED', 'PICKING']
+/**
+ * Cancelar depois que o pacote saiu não é cancelar — é devolução.
+ *
+ * READY_TO_SHIP entra porque o cliente pode pedir o cancelamento até ali, e a
+ * loja precisa conseguir aprovar. Quando a etiqueta passar a ser comprada pelo
+ * sistema, cancelar aqui terá de cancelar a etiqueta também.
+ */
+export const CANCELABLE_FULFILLMENTS: readonly FulfillmentStatus[] = ['UNFULFILLED', 'PICKING', 'READY_TO_SHIP']
 
 export const canCancelOrder = (o: {
   canceledAt: string | Date | null

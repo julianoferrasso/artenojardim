@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express'
-import type { UpdateStoreThemeInput } from '@ecommerce/shared/contracts'
+import type { UpdateStoreThemeInput, UpdateStaffNotificationsData } from '@ecommerce/shared/contracts'
 import { ok } from '../../shared/http.js'
 import * as service from './service.js'
+import { sendStaffTestNotice } from '../notifications/service.js'
 
 const auditContext = (req: Request) => ({
   userId: req.auth?.sub,
@@ -22,4 +23,16 @@ export const getThemeController = async (_req: Request, res: Response): Promise<
 export const updateThemeController = async (req: Request, res: Response): Promise<void> => {
   const theme = await service.updateTheme(req.body as UpdateStoreThemeInput, auditContext(req))
   ok(res, theme)
+}
+
+export const getNotificationsController = async (_req: Request, res: Response): Promise<void> => {
+  ok(res, await service.getStaffNotifications())
+}
+
+export const updateNotificationsController = async (req: Request, res: Response): Promise<void> => {
+  ok(res, await service.updateStaffNotifications(req.body as UpdateStaffNotificationsData, auditContext(req)))
+}
+
+export const testNotificationsController = async (_req: Request, res: Response): Promise<void> => {
+  ok(res, await sendStaffTestNotice())
 }

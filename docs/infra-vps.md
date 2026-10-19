@@ -175,6 +175,18 @@ do loopback — que é o que o `pg_hba.conf` permite.
 em que ele mudar, o banco fica inacessível e consertar exige entrar na VPS — justamente
 quando você quer trabalhar. O túnel não depende do seu IP.
 
+### Backfill que se roda de novo depois do deploy
+
+Migration que **copia** dado do formato antigo para o novo tem uma janela: entre o
+`migrate deploy` e o restart da API, o código antigo ainda grava no formato antigo. Essas
+migrations são escritas idempotentes (`ON CONFLICT DO NOTHING`, id derivado da origem) e o
+bloco de backfill é rodado de novo, à mão, depois do restart:
+
+- `20261019120000_support_threads` — mensagens e pedidos de cancelamento que viviam em
+  `OrderEvent` viram `SupportThread`/`SupportMessage` e `Order.cancelRequestedAt`. Rodar de
+  novo o trecho abaixo de `-- ── Backfill` do `migration.sql`
+  (`sudo -u postgres psql -d artenojardim -f <arquivo com o trecho>`).
+
 ## Bancos e roles
 
 | Banco | Dono | Quem conecta |

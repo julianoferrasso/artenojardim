@@ -13,6 +13,8 @@ import {
   EMAIL_CAMPAIGN_KINDS,
   EMAIL_CAMPAIGN_STATUSES,
   INSTAGRAM_DISPLAY_MODES,
+  SUPPORT_THREAD_STATUSES,
+  SUPPORT_AUTHORS,
 } from '@ecommerce/shared/constants'
 
 /**
@@ -55,6 +57,12 @@ describe('enums: shared/constants vs schema.prisma', () => {
       ($Enums as Record<string, never>)['InstagramDisplayMode'],
       INSTAGRAM_DISPLAY_MODES,
     ],
+    [
+      'SupportThreadStatus',
+      ($Enums as Record<string, never>)['SupportThreadStatus'],
+      SUPPORT_THREAD_STATUSES,
+    ],
+    ['SupportAuthor', ($Enums as Record<string, never>)['SupportAuthor'], SUPPORT_AUTHORS],
   ]
 
   for (const [name, prismaEnum, shared] of cases) {

@@ -1018,10 +1018,37 @@ uso único). `mpOrderId @unique` absorve a corrida. Order órfã (resposta perdi
 `external_reference` = id do pedido.
 
 **Casos de borda tratados:** Pix aberto é cancelado no MP antes de cobrar cartão e quando o pedido
-não pago é cancelado (cliente ou staff); pagamento que chega com o pedido já cancelado vira PAID
-sem baixar estoque nem mandar e-mail, com evento pedindo reembolso; pagamento em duplicidade gera
-nota para o staff. Validade do Pix = `reservation_ttl_minutes.PIX` (mín. 30 min) e a reserva é
-estendida até o vencimento.
+é cancelado (cliente ou staff); pagamento que chega com o pedido já cancelado vira PAID sem baixar
+estoque nem mandar confirmação, e o **estorno total sai sozinho** depois do commit
+(`refundCanceledOrder`, ator `system`) — recusado, vira `order.refund_failed` + e-mail à equipe;
+pagamento em duplicidade gera nota para o staff. Validade do Pix = `reservation_ttl_minutes.PIX`
+(mín. 30 min) e a reserva é estendida até o vencimento.
+
+**Cancelamento pelo cliente (desde 19/10/2026).** O corte é a prateleira, não o dinheiro
+(`customerCancelMode`, puro): antes da separação (`UNFULFILLED`) o cliente cancela sozinho, pago ou
+não — o pago é estornado na hora, total, pelo provedor; com a caixa sendo montada (`PICKING`,
+`READY_TO_SHIP`) ele **pede**, e a loja aprova (cancela + estorna, ADMIN) ou recusa (com resposta,
+que vai pela conversa do atendimento); depois do envio não há cancelamento — a página orienta recusa
+na entrega ou arrependimento em 7 dias (CDC art. 49) pela conversa. Antes de decidir o modo, o
+pagamento pendente é relido no MP (`refreshPendingMercadoPagoPayment(..., { force: true })`): um Pix
+pago há segundos não pode ser cancelado como "não pago". Toda decisão manda e-mail ao cliente na hora
+(Decreto 7.962, art. 5º §4º) e à equipe. O pedido de cancelamento vive em `Order.cancelRequestedAt`
+/ `cancelRequestReason`; recusar zera os dois.
+
+**Corrida pagamento × cancelamento.** `cancelOrderInternal` reivindica o pedido com `updateMany`
+(guardas `canceledAt: null` e a expedição permitida) e **só depois** relê `paymentStatus`, na mesma
+transação; o ramo `paid` de `applyMercadoPagoOrder` lê `canceledAt` **depois** de reivindicar o
+pedido. O claim trava a linha: o webhook ou já gravou PAID (e o cancelamento reestoca e estorna) ou
+espera o commit (e cai em "pago depois do cancelamento", que estorna sozinho). Lidos antes, os dois
+lados decidiam com dado velho — pedido cancelado e pago, sem estorno nem estoque.
+
+**Estorno (`payments/service.ts` → `refundOrderPayment`).** Uma mecânica para os três caminhos
+(Reembolsar do admin, cancelamento do cliente/aprovação, pagamento após cancelamento). Só PEDE ao
+provedor; o status vem dele (regra 6). Chave `refund_<pedido>_<já reembolsado>_<valor>`: o clique
+duplo e os caminhos cruzados pedem o MESMO estorno. Depois de uma recusa registrada
+(`order.refund_failed`, com o erro no metadata), a chave ganha `_r<n>` — o MP guarda a resposta da
+chave, e repetir a mesma devolveria a mesma recusa mesmo com saldo. Estorno exige saldo disponível
+na conta do MP: é a causa mais provável de `refund_failed`.
 
 **Teste (credenciais de teste do app):** Pix com `payer.first_name = "APRO"` é aprovado sozinho em
 segundos — basta o cliente de teste se chamar "APRO …". Cartão: 5480 8328 0103 3311, 11/30, 123,
@@ -1221,6 +1248,9 @@ campaign.dispatch_requested → publicado pelo service da campanha
   └─ campaign-dispatch      → publica email.marketing_product × N       [NO AR]
 
 email.order_confirmation    email.marketing_product                     [NO AR]
+email.notice                (aviso com texto pronto: cancelamento,      [NO AR]
+                            estorno, resposta do atendimento, alertas
+                            à equipe — modules/notifications)
 email.order_shipped         email.order_delivered                       (a fazer)
 email.payment_failed        email.boleto_issued     email.password_reset (a fazer)
                             → email-send.worker (genérico: {template, to, data})
@@ -1230,6 +1260,20 @@ shipping.tracking.sync      → shipping-tracking.worker (cron)           (a faz
 ```
 
 `order.paid` tem um worker **orquestrador** de propósito: um lugar único que responde "o que acontece quando um pedido é pago?". Quando surgir analytics server-side ou ERP, é ali que entra — sem tocar no webhook.
+
+**`email.notice` — um template para todos os avisos transacionais.** O texto de cada aviso é
+montado na API por funções puras (`modules/notifications/domain/notices.ts`, testadas) e viaja
+pronto; o worker só aplica a marca e envia. Um template por aviso seria cinco arquivos com o mesmo
+layout. Os `notify*` rodam depois do commit de quem chama e **nunca lançam** (fila fora = log). Os
+avisos à equipe vão para o Setting `notifications.staffEmail` (configurável em `/configuracoes` no
+admin; vazio = `Store.email`). O `emailSendHandler` é um `switch` exaustivo: template desconhecido
+vai direto para a DLQ (antes, caía renderizado como confirmação de pedido).
+
+**Atendimento (`modules/support`).** A mensagem do cliente ("Falar com a loja" na página do pedido)
+vive em `SupportThread` (uma por pedido, `orderId` único) + `SupportMessage`; antes era só um
+`OrderEvent` que ninguém via. `OPEN` = a vez é da loja. O menu Atendimento do admin lista as
+conversas (fila "aguardando resposta" ordenada por quem espera há mais tempo) e os pedidos de
+cancelamento; a resposta aparece na página do pedido e chega por e-mail ao cliente.
 
 > **O publish do webhook exigiu uma refatoração que vale registrar.** `handleSucceeded` tem
 > dois `return` dentro do callback do `$transaction` — e eles saem do **callback**, não da

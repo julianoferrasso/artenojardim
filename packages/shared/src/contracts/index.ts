@@ -16,6 +16,7 @@ export * from './orders.js'
 // exportar o mesmo nome duas vezes.
 export * from './order-situation.js'
 export * from './order-attachments.js'
+export * from './support.js'
 export * from './customer-orders.js'
 export * from './admin-orders.js'
 export * from './admin-customers.js'

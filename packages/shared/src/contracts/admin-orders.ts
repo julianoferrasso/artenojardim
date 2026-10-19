@@ -4,6 +4,7 @@ import {
   fulfillmentStatusSchema,
   paymentMethodSchema,
   paymentProviderSchema,
+  supportThreadStatusSchema,
 } from '../constants/enums.js'
 import { EVENTS } from '../constants/events.js'
 import { moneySchema } from './common.js'
@@ -34,6 +35,10 @@ export const adminOrderListItemSchema = z.object({
   fulfillmentStatus: fulfillmentStatusSchema,
   canceledAt: z.string().nullable(),
   situation: orderSituationSchema,
+  /** O cliente pediu para cancelar e a loja ainda não decidiu. */
+  cancelRequested: z.boolean(),
+  /** Cancelado com o dinheiro ainda na loja: o estorno automático falhou ou não houve. */
+  refundPending: z.boolean(),
 })
 
 export type AdminOrderListItem = z.infer<typeof adminOrderListItemSchema>
@@ -132,6 +137,11 @@ export const adminOrderSchema = z.object({
   canCancel: z.boolean(),
   refundableAmount: moneySchema,
 
+  /** Pedido de cancelamento do cliente esperando decisão. */
+  cancelRequest: z.object({ requestedAt: z.string(), reason: z.string().nullable() }).nullable(),
+  /** A conversa do atendimento sobre este pedido, se houver. */
+  supportThread: z.object({ id: z.string(), status: supportThreadStatusSchema }).nullable(),
+
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -183,6 +193,16 @@ export const cancelOrderSchema = z.object({
 })
 
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>
+
+/**
+ * Recusar o pedido de cancelamento exige dizer por quê: a mensagem vai para o
+ * cliente pela conversa e por e-mail. Recusa muda é o que vira reclamação.
+ */
+export const declineCancelRequestSchema = z.object({
+  message: z.string().trim().min(10, 'Explique ao cliente em pelo menos 10 caracteres').max(2000),
+})
+
+export type DeclineCancelRequestInput = z.infer<typeof declineCancelRequestSchema>
 
 export const REFUND_REASONS = ['requested_by_customer', 'duplicate', 'fraudulent'] as const
 export const refundReasonSchema = z.enum(REFUND_REASONS)

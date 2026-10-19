@@ -65,6 +65,18 @@ export const SETTING_SCHEMAS = {
     default: { state: null, accessToken: null, refreshToken: null, expiresAt: null },
     cache: false,
   },
+  /**
+   * Para onde vão os e-mails da equipe (mensagem de cliente, cancelamento,
+   * estorno que falhou). Null = o e-mail da loja (`Store.email`).
+   *
+   * SEM cache: quem lê é o worker e a API, e quem escreve é a API — trocar o
+   * endereço no painel precisa valer no próximo aviso, não no próximo restart.
+   */
+  notifications: {
+    schema: z.object({ staffEmail: z.string().email().nullable() }),
+    default: { staffEmail: null },
+    cache: false,
+  },
 } as const
 
 type SettingKey = keyof typeof SETTING_SCHEMAS

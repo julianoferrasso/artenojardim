@@ -12,7 +12,9 @@ import {
   GalleryHorizontalEnd,
   Camera,
   Mail,
+  MessagesSquare,
   Palette,
+  Settings,
   TicketPercent,
   Truck,
   UserRound,
@@ -22,9 +24,17 @@ import {
 import { MANAGE_USERS_MIN_ROLE } from '@ecommerce/shared/contracts'
 import { ROLE_RANK, type UserRole } from '@ecommerce/shared/constants'
 import { useAuth } from '@/lib/auth'
+import { useSupportSummary } from '@/lib/support'
 import { cn } from '@/lib/utils'
 
-type NavItem = { href: string; label: string; icon: LucideIcon; minRole?: UserRole }
+/** `badge` nomeia de onde vem o número do item; hoje só o atendimento tem. */
+type NavItem = {
+  href: string
+  label: string
+  icon: LucideIcon
+  minRole?: UserRole
+  badge?: 'support'
+}
 
 /**
  * Ordem = frequência de uso no dia a dia da loja. O Dashboard mora em `/` porque
@@ -33,6 +43,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon; minRole?: UserRo
 const NAV: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/pedidos', label: 'Pedidos', icon: ShoppingCart },
+  { href: '/atendimento', label: 'Atendimento', icon: MessagesSquare, badge: 'support' },
   // Logo depois de Pedidos: o atendimento abre o cliente a partir do pedido.
   { href: '/clientes', label: 'Clientes', icon: UserRound },
   { href: '/produtos', label: 'Produtos', icon: Package },
@@ -52,6 +63,8 @@ const NAV: NavItem[] = [
   // Mexe na cara da loja inteira: mesmo piso de cargo da gestão de usuários.
   { href: '/aparencia', label: 'Aparência', icon: Palette, minRole: 'ADMIN' },
   { href: '/usuarios', label: 'Usuários', icon: Users, minRole: MANAGE_USERS_MIN_ROLE },
+  // Para onde vão os e-mails da equipe: mesmo piso da rota na API.
+  { href: '/configuracoes', label: 'Configurações', icon: Settings, minRole: 'ADMIN' },
 ]
 
 /**
@@ -77,6 +90,8 @@ const isBare = (pathname: string): boolean =>
 const isActive = (pathname: string, href: string): boolean =>
   href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`)
 
+const badgeText = (count: number): string => (count > 99 ? '99+' : String(count))
+
 /**
  * Casca compartilhada do admin: sidebar de navegação + topo com usuário/logout.
  * Antes cada página repetia o próprio header inline — a casca centraliza isso e
@@ -86,6 +101,13 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const nav = visibleNav(user?.role)
+  const { data: summary } = useSupportSummary()
+
+  // Conversa esperando resposta + cancelamento esperando decisão: o que pede alguém agora.
+  const counts: Record<NonNullable<NavItem['badge']>, number> = {
+    support: summary?.needsAction ?? 0,
+  }
+  const countOf = (item: NavItem): number => (item.badge ? counts[item.badge] : 0)
 
   if (isBare(pathname)) return <>{children}</>
 
@@ -99,6 +121,7 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
           {nav.map((item) => {
             const active = isActive(pathname, item.href)
             const Icon = item.icon
+            const count = countOf(item)
             return (
               <Link
                 key={item.href}
@@ -112,6 +135,11 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
               >
                 <Icon className="size-4" />
                 {item.label}
+                {count > 0 && (
+                  <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-xs leading-none font-semibold text-destructive-foreground tabular-nums">
+                    {badgeText(count)}
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -124,19 +152,25 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
           <nav className="flex items-center gap-1 md:hidden">
             {nav.map((item) => {
               const Icon = item.icon
+              const count = countOf(item)
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  aria-label={item.label}
+                  aria-label={count > 0 ? `${item.label} (${count} pendentes)` : item.label}
                   className={cn(
-                    'rounded-md p-2',
+                    'relative rounded-md p-2',
                     isActive(pathname, item.href)
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground hover:bg-accent',
                   )}
                 >
                   <Icon className="size-4" />
+                  {count > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-xs leading-none font-semibold text-destructive-foreground tabular-nums">
+                      {badgeText(count)}
+                    </span>
+                  )}
                 </Link>
               )
             })}

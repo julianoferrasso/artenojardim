@@ -2,7 +2,7 @@
 
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Printer, ClipboardList, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Printer, ClipboardList, ExternalLink, MessagesSquare } from 'lucide-react'
 import type { AdminOrder } from '@ecommerce/shared/contracts'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,6 +12,8 @@ import { OrderSituationBadge } from '@/components/order-situation-badge'
 import { OrderActions } from '@/components/order-actions'
 import { OrderTimeline } from '@/components/order-timeline'
 import { CopyButton } from '@/components/copy-button'
+import { CancelRequestCard } from '@/components/cancel-request-card'
+import { SupportStatusBadge } from '@/components/support-status-badge'
 import { useOrder, useSetInternalNote } from '@/lib/orders'
 import {
   PAYMENT_STATUS_LABEL,
@@ -94,6 +96,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
+      {/* O estorno automático falhou ou não houve: o dinheiro ainda está com a loja. */}
+      {order.canceledAt && order.refundableAmount > 0 && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm no-print">
+          <strong className="text-destructive">Cancelado com estorno pendente.</strong>{' '}
+          {formatBRL(order.refundableAmount)} ainda não foi devolvido ao cliente — use “Reembolsar”
+          em Ações.
+        </div>
+      )}
+
+      {order.cancelRequest && (
+        <CancelRequestCard
+          orderId={order.id}
+          cancelRequest={order.cancelRequest}
+          refundableAmount={order.refundableAmount}
+        />
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="flex min-w-0 flex-col gap-6">
           <ItemsCard order={order} />
@@ -125,6 +144,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </dl>
           </section>
 
+          {order.supportThread && <ConversationCard thread={order.supportThread} />}
           <CustomerCard order={order} />
           <AddressCard order={order} />
           <PaymentCard order={order} />
@@ -197,6 +217,24 @@ const Row = ({ label, value }: { label: string; value: string }) => (
     <dt className="text-muted-foreground">{label}</dt>
     <dd>{value}</dd>
   </div>
+)
+
+const ConversationCard = ({ thread }: { thread: NonNullable<AdminOrder['supportThread']> }) => (
+  <section className="rounded-lg border border-border bg-card p-4 no-print">
+    <div className="flex items-center justify-between gap-2">
+      <h2 className="text-sm font-semibold">Conversa</h2>
+      <SupportStatusBadge status={thread.status} />
+    </div>
+    <p className="mt-1 text-xs text-muted-foreground">
+      Mensagens do cliente sobre este pedido e as respostas da loja.
+    </p>
+    <Button variant="outline" size="sm" className="mt-3 w-full" asChild>
+      <Link href={`/atendimento/${thread.id}`}>
+        <MessagesSquare className="size-4" />
+        Abrir conversa
+      </Link>
+    </Button>
+  </section>
 )
 
 const CustomerCard = ({ order }: { order: AdminOrder }) => (

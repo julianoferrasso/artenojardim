@@ -36,17 +36,27 @@ describe('whitelist de eventos', () => {
     }
   })
 
-  it('nota interna e pedido de reembolso nunca chegam ao cliente', () => {
+  it('nota interna, reembolso pedido e estorno recusado nunca chegam ao cliente', () => {
     const { entries } = buildCustomerTimeline(
       [
         event(EVENTS.order.noteAdded, '2026-01-02T10:00:00Z', 'cliente é chato, cobrar adiantado'),
         event(EVENTS.order.refundRequested, '2026-01-03T10:00:00Z', 'estorno pedido ao Stripe'),
+        event(EVENTS.order.refundFailed, '2026-01-03T11:00:00Z', 'saldo insuficiente no MP'),
         event(EVENTS.order.created, '2026-01-01T10:00:00Z'),
       ],
       { canceled: false },
     )
 
     expect(entries.map((e) => e.type)).toEqual([EVENTS.order.created])
+  })
+
+  it('a mensagem de suporte antiga sai da timeline: ela vive na conversa', () => {
+    const { entries } = buildCustomerTimeline(
+      [event(EVENTS.order.supportMessage, '2026-01-02T10:00:00Z', '[Entrega] chegou faltando uma vela')],
+      { canceled: false },
+    )
+
+    expect(entries).toEqual([])
   })
 })
 
@@ -64,11 +74,21 @@ describe('texto dos eventos', () => {
 
   it('expõe o texto quando foi o próprio cliente que escreveu', () => {
     const { entries } = buildCustomerTimeline(
-      [event(EVENTS.order.supportMessage, '2026-01-02T10:00:00Z', 'chegou faltando uma vela')],
+      [event(EVENTS.order.cancelRequested, '2026-01-02T10:00:00Z', 'Comprei por engano: era o aroma errado')],
       { canceled: false },
     )
 
-    expect(entries[0]?.detail).toBe('chegou faltando uma vela')
+    expect(entries[0]?.detail).toBe('Comprei por engano: era o aroma errado')
+  })
+
+  it('a recusa do cancelamento aparece, mas a justificativa da loja não', () => {
+    const { entries } = buildCustomerTimeline(
+      [event(EVENTS.order.cancelRequestDeclined, '2026-01-03T10:00:00Z', 'já está no caminhão, desculpe')],
+      { canceled: false },
+    )
+
+    expect(entries[0]?.label).toBe('Cancelamento não aprovado')
+    expect(entries[0]?.detail).toBeNull()
   })
 })
 

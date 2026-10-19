@@ -2,9 +2,11 @@ import { z } from 'zod'
 import { paymentMethodSchema, paymentStatusSchema } from '../constants/enums.js'
 import type { PaymentStatus, FulfillmentStatus } from '../constants/enums.js'
 import { EVENTS } from '../constants/events.js'
+import { CANCEL_REASON_LABEL } from '../constants/order-labels.js'
 import { moneySchema } from './common.js'
 import { orderItemSchema, orderSchema } from './orders.js'
 import { orderSituationSchema } from './order-situation.js'
+import { customerSupportThreadSchema } from './support.js'
 
 /**
  * Área do cliente > Meus pedidos.
@@ -155,17 +157,23 @@ export const CUSTOMER_EVENT_VIEW: Record<string, EventView> = {
   [EVENTS.order.canceled]: { label: 'Pedido cancelado' },
   [EVENTS.order.refunded]: { label: 'Reembolso efetuado' },
   [EVENTS.order.cancelRequested]: { label: 'Cancelamento solicitado', showText: true },
-  [EVENTS.order.supportMessage]: { label: 'Mensagem enviada ao suporte', showText: true },
+  // Sem texto: a justificativa da loja é escrita por staff e vai pela conversa.
+  [EVENTS.order.cancelRequestDeclined]: { label: 'Cancelamento não aprovado' },
 }
 
 /**
  * Eventos deliberadamente ocultos do cliente. Existe para o teste conseguir
  * exigir uma DECISÃO sobre cada tipo novo: sem esta lista, esquecer de
  * whitelistar e escolher esconder seriam indistinguíveis.
+ *
+ * `supportMessage` saiu da timeline quando o atendimento nasceu: a mensagem
+ * aparece na conversa, e mostrá-la nos dois lugares duplicaria o histórico.
  */
 export const CUSTOMER_HIDDEN_EVENTS: readonly string[] = [
   EVENTS.order.noteAdded,
   EVENTS.order.refundRequested,
+  EVENTS.order.refundFailed,
+  EVENTS.order.supportMessage,
 ]
 
 export const customerOrderEventSchema = z.object({
@@ -250,14 +258,23 @@ export const customerCancelModeSchema = z.enum(CUSTOMER_CANCEL_MODES)
 export type CustomerCancelMode = z.infer<typeof customerCancelModeSchema>
 
 /**
- * Quanto o cliente pode fazer sozinho.
+ * Quanto o cliente pode fazer sozinho. O corte é a PRATELEIRA, não o dinheiro:
  *
- * IMMEDIATE só quando não há dinheiro nem trabalho envolvido: nada foi pago e
- * ninguém tirou o produto da prateleira. Aí cancelar é seguro e instantâneo —
- * a reserva volta para o estoque e ninguém precisa ser acordado.
+ * IMMEDIATE enquanto ninguém começou a separar (UNFULFILLED), pago ou não. Não
+ * pago: a reserva volta e o Pix em aberto morre. Pago: o estoque volta e o
+ * estorno total sai automático no provedor — é o "cancelar até antes de
+ * embalar" das lojas de referência, e o direito do Decreto 7.962 de se
+ * arrepender pelo mesmo canal em que comprou.
  *
- * Pago ou já em separação vira REQUEST: existe estorno a decidir ou uma caixa
- * meio montada no depósito. O staff resolve no admin.
+ * REQUEST com a caixa já sendo montada (PICKING, READY_TO_SHIP): a loja decide,
+ * e aprovar estorna do mesmo jeito.
+ *
+ * NONE quando o pacote saiu: aí o caminho é recusar a entrega ou, depois de
+ * receber, a devolução por arrependimento — conversa, não botão.
+ *
+ * Reembolso parcial também fecha a porta: alguém da loja já mexeu no dinheiro
+ * deste pedido, e um estorno automático por cima disso é decisão que não se
+ * toma sem olhar.
  */
 export const customerCancelMode = (o: {
   canceledAt: string | Date | null
@@ -265,35 +282,62 @@ export const customerCancelMode = (o: {
   fulfillmentStatus: FulfillmentStatus
 }): CustomerCancelMode => {
   if (o.canceledAt) return 'NONE'
-  if (o.fulfillmentStatus === 'DELIVERED' || o.fulfillmentStatus === 'RETURNED') return 'NONE'
   if (o.paymentStatus === 'REFUNDED' || o.paymentStatus === 'PARTIALLY_REFUNDED') return 'NONE'
 
-  const unpaid = o.paymentStatus === 'PENDING' || o.paymentStatus === 'FAILED'
-  if (unpaid && o.fulfillmentStatus === 'UNFULFILLED') return 'IMMEDIATE'
-
-  return 'REQUEST'
+  switch (o.fulfillmentStatus) {
+    case 'UNFULFILLED':
+      return 'IMMEDIATE'
+    case 'PICKING':
+    case 'READY_TO_SHIP':
+      return 'REQUEST'
+    case 'SHIPPED':
+    case 'DELIVERED':
+    case 'RETURNED':
+      return 'NONE'
+  }
 }
 
-export const customerCancelSchema = z.object({
-  reason: z.string().trim().min(5, 'Conte o motivo em pelo menos 5 caracteres').max(500),
-})
+/**
+ * Motivo numa lista: dá estatística ("quantos desistem por prazo?") sem ler
+ * texto livre um por um. O código vai no metadata do evento; a frase legível,
+ * em `cancelReason`.
+ */
+export const CUSTOMER_CANCEL_REASONS = [
+  'CHANGED_MIND',
+  'ORDERED_BY_MISTAKE',
+  'WRONG_ADDRESS_OR_ITEM',
+  'FOUND_BETTER_PRICE',
+  'DELIVERY_TOO_SLOW',
+  'PAYMENT_ISSUE',
+  'OTHER',
+] as const
+export const customerCancelReasonSchema = z.enum(CUSTOMER_CANCEL_REASONS)
+export type CustomerCancelReason = z.infer<typeof customerCancelReasonSchema>
+
+/**
+ * `reasonCode` tem default e `reason` é opcional por compatibilidade: durante o
+ * deploy, a loja antiga em cache manda só `{ reason }` — e continua válida.
+ * Em "Outro", o texto é o motivo, então passa a ser obrigatório.
+ */
+export const customerCancelSchema = z
+  .object({
+    reasonCode: customerCancelReasonSchema.default('OTHER'),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.reasonCode !== 'OTHER' || (v.reason?.length ?? 0) >= 5, {
+    message: 'Conte o motivo em pelo menos 5 caracteres',
+    path: ['reason'],
+  })
 
 export type CustomerCancelInput = z.infer<typeof customerCancelSchema>
 
-// ---------------------------------------------------------------------------
-// Suporte
-// ---------------------------------------------------------------------------
-
-export const SUPPORT_TOPICS = ['DELIVERY', 'PAYMENT', 'PRODUCT', 'CANCELLATION', 'OTHER'] as const
-export const supportTopicSchema = z.enum(SUPPORT_TOPICS)
-export type SupportTopic = z.infer<typeof supportTopicSchema>
-
-export const supportMessageSchema = z.object({
-  topic: supportTopicSchema.default('OTHER'),
-  message: z.string().trim().min(10, 'Descreva com pelo menos 10 caracteres').max(1000),
-})
-
-export type SupportMessageInput = z.infer<typeof supportMessageSchema>
+/** A frase que vai para `cancelReason`: "Comprei por engano: era o aroma errado". */
+export const cancelReasonText = (input: CustomerCancelInput): string => {
+  const detail = input.reason?.trim()
+  if (input.reasonCode === 'OTHER') return detail || CANCEL_REASON_LABEL.OTHER
+  const label = CANCEL_REASON_LABEL[input.reasonCode]
+  return detail ? `${label}: ${detail}` : label
+}
 
 // ---------------------------------------------------------------------------
 // Comprar de novo
@@ -377,6 +421,14 @@ export const customerOrderSchema = orderSchema.extend({
   /** Derivados, para o front não repetir a regra de guarda. */
   cancelMode: customerCancelModeSchema,
   cancelRequestedAt: z.string().nullable(),
+  /**
+   * Quanto volta se cancelar agora: o pago menos o já reembolsado. Calculado na
+   * API (regra 5) — a loja só mostra. Zero quando não há pagamento.
+   */
+  cancelRefundAmount: moneySchema,
+
+  /** A conversa com a loja sobre este pedido. Null até a primeira mensagem. */
+  support: customerSupportThreadSchema.nullable(),
 })
 
 export type CustomerOrder = z.infer<typeof customerOrderSchema>

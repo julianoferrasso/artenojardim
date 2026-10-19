@@ -11,6 +11,7 @@ import {
 } from '@ecommerce/shared/contracts'
 import { EVENTS } from '@ecommerce/shared/constants'
 import { Prisma } from '@prisma/client'
+import { CUSTOMER_THREAD_SELECT, toCustomerThread } from '../support/service.js'
 
 /**
  * Projeções e tradução linha → DTO da área do cliente.
@@ -90,6 +91,7 @@ export const CUSTOMER_ORDER_SELECT = {
   fulfillmentStatus: true,
   canceledAt: true,
   cancelReason: true,
+  cancelRequestedAt: true,
   email: true,
   subtotal: true,
   discountTotal: true,
@@ -139,25 +141,25 @@ export const CUSTOMER_ORDER_SELECT = {
     orderBy: { createdAt: 'asc' },
     select: { id: true, type: true, description: true, metadataJson: true, createdAt: true },
   },
+  supportThread: { select: CUSTOMER_THREAD_SELECT },
 } satisfies Prisma.OrderSelect
 
 export type CustomerOrderRow = Prisma.OrderGetPayload<{ select: typeof CUSTOMER_ORDER_SELECT }>
 
 /**
- * O motivo do cancelamento só volta ao cliente quando foi ELE que escreveu.
- * Quando quem cancelou foi o staff, `cancelReason` é anotação operacional
- * ("suspeita de fraude", "cliente sumiu") — texto que nunca foi endereçado a
- * ele.
+ * O motivo do cancelamento só volta ao cliente quando foi ELE que escreveu —
+ * cancelando sozinho, ou pedindo e a loja aprovando (o motivo segue sendo o
+ * dele). Quando o staff cancelou por conta própria, `cancelReason` é anotação
+ * operacional ("suspeita de fraude", "cliente sumiu") — texto que nunca foi
+ * endereçado a ele.
  */
 const customerVisibleCancelReason = (row: CustomerOrderRow): string | null => {
   if (!row.cancelReason) return null
   const canceledEvent = row.events.find((e) => e.type === EVENTS.order.canceled)
   const meta = canceledEvent?.metadataJson
-  const byCustomer =
-    typeof meta === 'object' && meta !== null && !Array.isArray(meta)
-      ? (meta as Record<string, unknown>).by === 'customer'
-      : false
-  return byCustomer ? row.cancelReason : null
+  if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return null
+  const { by, approvedRequest } = meta as Record<string, unknown>
+  return by === 'customer' || approvedRequest === true ? row.cancelReason : null
 }
 
 export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
@@ -169,7 +171,6 @@ export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
   )
   const payment = paidPayment ?? row.payments[0]
   const shippedEvent = row.events.find((e) => e.type === EVENTS.order.shipped)
-  const cancelRequest = row.events.find((e) => e.type === EVENTS.order.cancelRequested)
 
   return {
     id: row.id,
@@ -225,7 +226,9 @@ export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
     invoiceUrl: attachments.invoiceUrl,
     invoiceNumber: attachments.invoiceNumber,
     cancelMode: customerCancelMode(row),
-    cancelRequestedAt: cancelRequest?.createdAt.toISOString() ?? null,
+    cancelRequestedAt: row.cancelRequestedAt && !row.canceledAt ? row.cancelRequestedAt.toISOString() : null,
+    cancelRefundAmount: paidPayment ? Math.max(0, paidPayment.amount - paidPayment.refundedAmount) : 0,
+    support: toCustomerThread(row.supportThread),
     customerNote: row.customerNote,
     createdAt: row.createdAt.toISOString(),
   }

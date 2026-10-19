@@ -107,6 +107,22 @@ enum CouponType {
   FREE_SHIPPING
 }
 
+/// Situação de uma conversa do atendimento. OPEN = a vez é da loja.
+/// Espelha SUPPORT_THREAD_STATUSES em constants.
+enum SupportThreadStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
+/// Quem escreveu a mensagem. SYSTEM = texto gerado pela própria API (ex.:
+/// "cancelamento aprovado"). Espelha SUPPORT_AUTHORS em constants.
+enum SupportAuthor {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -145,6 +161,7 @@ model Store {
   banners               Banner[]
   instagramPosts        InstagramPost[]
   coupons               Coupon[]
+  supportThreads        SupportThread[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -239,13 +256,14 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store         Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  refreshTokens RefreshToken[]
-  tokens        CustomerToken[]
-  carts         Cart[]
-  addresses     Address[]
-  orders        Order[]
-  productViews  CustomerProductView[]
+  store          Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  refreshTokens  RefreshToken[]
+  tokens         CustomerToken[]
+  carts          Cart[]
+  addresses      Address[]
+  orders         Order[]
+  productViews   CustomerProductView[]
+  supportThreads SupportThread[]
 
   @@unique([storeId, email])
   @@index([storeId])
@@ -821,10 +839,14 @@ model Order {
   email      String
   phone      String?
 
-  paymentStatus     PaymentStatus     @default(PENDING)
-  fulfillmentStatus FulfillmentStatus @default(UNFULFILLED)
-  canceledAt        DateTime?
-  cancelReason      String?
+  paymentStatus       PaymentStatus     @default(PENDING)
+  fulfillmentStatus   FulfillmentStatus @default(UNFULFILLED)
+  canceledAt          DateTime?
+  cancelReason        String?
+  /// Pedido de cancelamento do cliente esperando decisão da loja (pedido já em
+  /// separação). Zera quando a loja recusa; aprovar preenche `canceledAt`.
+  cancelRequestedAt   DateTime?
+  cancelRequestReason String?
 
   /// Tudo em centavos. Recalculado no backend, do banco — o front nunca decide.
   subtotal      Int
@@ -848,13 +870,14 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store    Store        @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
   /// Restrict: cupom que já foi usado não se apaga — desativa-se.
-  coupon   Coupon?      @relation(fields: [couponId], references: [id], onDelete: Restrict)
-  items    OrderItem[]
-  events   OrderEvent[]
-  payments Payment[]
+  coupon        Coupon?        @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  items         OrderItem[]
+  events        OrderEvent[]
+  payments      Payment[]
+  supportThread SupportThread?
 
   @@unique([storeId, number])
   @@index([storeId, paymentStatus])
@@ -931,6 +954,48 @@ model OrderEvent {
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
+}
+
+/// Conversa do atendimento. Uma por pedido (`orderId` único); a mensagem nova
+/// sobre o mesmo pedido entra na conversa que já existe. `orderId` é opcional
+/// só para não amarrar o modelo — hoje toda conversa nasce de um pedido.
+model SupportThread {
+  id                    String              @id @default(cuid())
+  storeId               String
+  customerId            String
+  orderId               String?             @unique
+  status                SupportThreadStatus @default(OPEN)
+  lastMessageAt         DateTime            @default(now())
+  /// Quanto tempo o cliente espera: ordena a fila "aguardando resposta".
+  lastCustomerMessageAt DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  store    Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  order    Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([storeId, status, lastMessageAt])
+  @@index([customerId])
+}
+
+model SupportMessage {
+  id        String        @id @default(cuid())
+  threadId  String
+  author    SupportAuthor
+  /// Funcionário que respondeu. Sem relação com User, como OrderEvent.userId: a
+  /// mensagem sobrevive ao funcionário desligado.
+  userId    String?
+  /// SUPPORT_TOPICS do contrato. String e não enum: assunto novo não pede migration.
+  topic     String?
+  body      String
+  createdAt DateTime      @default(now())
+
+  thread SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
 }
 
 /// Tentativa de pagamento de um pedido: um PaymentIntent do Stripe ou uma order do
