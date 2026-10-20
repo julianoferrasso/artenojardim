@@ -43,6 +43,7 @@ import { decideMercadoPagoTransition, mpPaymentMethod } from './domain/mercadopa
 import {
   refundableOf,
   refundIdempotencyKey,
+  refundMovesOrder,
   type AutoRefundOutcome,
   type RefundActor,
 } from './domain/refund.js'
@@ -911,6 +912,24 @@ export const applyMercadoPagoOrder = async (snapshot: MpOrderSnapshot): Promise<
           },
         })
         if (claimed.count === 0) return currentState(tx, payment.id)
+
+        // Estorno da cópia de um pagamento em duplicidade: o original segue
+        // capturado, então o pedido continua pago — só fica o registro.
+        const others = await tx.payment.findMany({
+          where: { orderId: payment.orderId, id: { not: payment.id } },
+          select: { status: true },
+        })
+        if (!refundMovesOrder(others.map((p) => p.status))) {
+          await tx.orderEvent.create({
+            data: {
+              orderId: payment.orderId,
+              type: EVENTS.order.noteAdded,
+              description: 'Estorno do pagamento em duplicidade confirmado — o pedido segue pago.',
+              metadataJson: { mpOrderId: snapshot.id, amountRefunded: decision.refundedAmount },
+            },
+          })
+          return { orderId: payment.orderId, paymentStatus: decision.status }
+        }
 
         // Como no Stripe: só sai de PAID/PARTIALLY_REFUNDED — um pedido que nunca
         // chegou a pago não retrocede para "reembolsado".

@@ -4,6 +4,7 @@ import { prisma } from '../../config/prisma.js'
 import { logger } from '../../config/logger.js'
 import { retrievePaymentIntent, type StripeWebhookEvent } from '../../integrations/stripe/index.js'
 import { settleOrderReservations } from '../inventory/service.js'
+import { refundMovesOrder } from '../payments/domain/refund.js'
 import { publish } from '../../shared/publish.js'
 
 /**
@@ -148,9 +149,26 @@ const handleRefunded = async (
       data: { status, refundedAmount: event.amountRefunded, refundedAt: new Date() },
     })
 
-    const payment = await tx.payment.findFirst({ where, select: { orderId: true } })
+    const payment = await tx.payment.findFirst({ where, select: { id: true, orderId: true } })
     if (!payment) {
       logger.warn({ charge: event.chargeId }, 'webhook Stripe: refunded sem pagamento casado')
+      return
+    }
+
+    // Estorno da cópia de um pagamento em duplicidade: o pedido segue pago.
+    const others = await tx.payment.findMany({
+      where: { orderId: payment.orderId, id: { not: payment.id } },
+      select: { status: true },
+    })
+    if (!refundMovesOrder(others.map((p) => p.status))) {
+      await tx.orderEvent.create({
+        data: {
+          orderId: payment.orderId,
+          type: EVENTS.order.noteAdded,
+          description: 'Estorno do pagamento em duplicidade confirmado — o pedido segue pago.',
+          metadataJson: { chargeId: event.chargeId, amountRefunded: event.amountRefunded },
+        },
+      })
       return
     }
 

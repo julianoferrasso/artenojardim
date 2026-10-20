@@ -1,10 +1,22 @@
-import type { PaymentMethod } from '@ecommerce/shared/constants'
+import type { PaymentMethod, PaymentStatus } from '@ecommerce/shared/constants'
 
 /**
  * Regras puras do reembolso. Sem Prisma e sem provedor: o service decide QUANDO
  * reembolsar; aqui fica o que tem de ser igual em todo caminho que reembolsa
  * (admin, cancelamento do cliente, pagamento que chegou com o pedido cancelado).
  */
+
+/** Tentativas que ainda seguram dinheiro do cliente. */
+const STILL_CAPTURED: readonly PaymentStatus[] = ['PAID', 'PARTIALLY_REFUNDED']
+
+/**
+ * O estorno de UMA tentativa só leva o pedido junto quando nenhuma outra
+ * tentativa do mesmo pedido ainda segura dinheiro. No pagamento em duplicidade,
+ * estornar a cópia não é reembolsar o pedido: o pagamento original continua
+ * capturado, e marcar o pedido como reembolsado o tiraria das vendas.
+ */
+export const refundMovesOrder = (otherPaymentStatuses: readonly PaymentStatus[]): boolean =>
+  !otherPaymentStatuses.some((status) => STILL_CAPTURED.includes(status))
 
 /** O reembolsável é do PAGAMENTO que pagou, não do total do pedido. */
 export const refundableOf = (payment: { amount: number; refundedAmount: number }): number =>

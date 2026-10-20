@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { refundableOf, refundIdempotencyKey } from '../src/modules/payments/domain/refund.js'
+import { refundableOf, refundIdempotencyKey, refundMovesOrder } from '../src/modules/payments/domain/refund.js'
 
 /**
  * A chave de idempotência é o que impede dois estornos do mesmo dinheiro: o
@@ -35,5 +35,21 @@ describe('refundableOf', () => {
 
   it('nunca fica negativo', () => {
     expect(refundableOf({ amount: 5000, refundedAmount: 6000 })).toBe(0)
+  })
+})
+
+describe('refundMovesOrder', () => {
+  it('o estorno da única tentativa paga leva o pedido junto', () => {
+    expect(refundMovesOrder([])).toBe(true)
+    expect(refundMovesOrder(['FAILED', 'PROCESSING'])).toBe(true)
+  })
+
+  it('estornar a cópia de um pagamento em duplicidade não reembolsa o pedido', () => {
+    expect(refundMovesOrder(['PAID'])).toBe(false)
+    expect(refundMovesOrder(['FAILED', 'PARTIALLY_REFUNDED'])).toBe(false)
+  })
+
+  it('outra tentativa já estornada por inteiro não segura o pedido', () => {
+    expect(refundMovesOrder(['REFUNDED'])).toBe(true)
   })
 })
