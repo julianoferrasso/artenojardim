@@ -16,7 +16,15 @@ import type { VisitDevice, VisitSource } from '@ecommerce/shared/contracts'
 const BOT_RE =
   /[a-z]bot[/;-]|\bbot\b|crawl|spider|slurp|headless|lighthouse|preview|facebookexternalhit|\+https?:\/\//i
 
-export const isBot = (userAgent: string): boolean => userAgent.trim() === '' || BOT_RE.test(userAgent)
+/**
+ * Todo navegador — inclusive o embutido do Instagram — se apresenta como
+ * "Mozilla/5.0". Quem não começa assim é script (curl, bibliotecas HTTP): o
+ * beacon é JavaScript de página, então isso é visita forjada, não pessoa.
+ */
+const BROWSER_RE = /^Mozilla\//
+
+export const isBot = (userAgent: string): boolean =>
+  !BROWSER_RE.test(userAgent.trim()) || BOT_RE.test(userAgent)
 
 /**
  * Android sem "Mobile" é tablet — é a convenção que o próprio Google documenta

@@ -34,6 +34,12 @@ describe('isBot', () => {
     expect(isBot('')).toBe(true)
   })
 
+  it('script que não se passa por navegador não é visita', () => {
+    expect(isBot('curl/8.5.0')).toBe(true)
+    expect(isBot('python-requests/2.32.3')).toBe(true)
+    expect(isBot('node')).toBe(true)
+  })
+
   it('não confunde navegador de gente com robô', () => {
     expect(isBot(IPHONE_SAFARI)).toBe(false)
     expect(isBot(WINDOWS_CHROME)).toBe(false)
