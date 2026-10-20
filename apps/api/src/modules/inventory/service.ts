@@ -14,7 +14,7 @@ import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import { withRunningBalance, countDelta, movementBlocker } from './domain/ledger.js'
 import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
-import { notifyStockChanges, type StockChange } from '../notifications/service.js'
+import { notifyBackInStock, notifyStockChanges, type StockChange } from '../notifications/service.js'
 import { visibleStockChanged } from './domain/availability.js'
 
 /**
@@ -151,6 +151,10 @@ export const afterStockChange = async (changes: StockChange[]): Promise<void> =>
   const drops = changes.filter((c) => after(c) < c.before)
   if (drops.length > 0) await notifyStockChanges(drops)
   if (changes.some((c) => visibleStockChanged(c.before, after(c)))) void revalidateStorefront()
+
+  // Saiu do zero: quem pediu "Avise-me quando chegar" recebe o aviso.
+  const restocked = changes.filter((c) => c.before <= 0 && after(c) > 0).map((c) => c.variantId)
+  if (restocked.length > 0) await notifyBackInStock(restocked)
 }
 
 /**
@@ -457,6 +461,7 @@ export const listStock = async (params: {
       product: { select: { name: true } },
       optionValues: { select: { optionValue: { select: { value: true } } } },
       level: { select: { onHand: true, reserved: true } },
+      _count: { select: { stockNotifications: true } },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -473,6 +478,7 @@ export const listStock = async (params: {
       onHand,
       reserved,
       available: onHand - reserved,
+      waitingCount: v._count.stockNotifications,
     }
   })
 

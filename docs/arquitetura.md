@@ -1893,8 +1893,19 @@ Portanto:
 - **Carrinho:** cada linha traz o motivo (`unavailableReason`) e a saída: "Ajustar para N" no parcial,
   "Remova para continuar" nos outros. "Finalizar compra" vira `<button disabled>` enquanto houver
   item bloqueado.
-- **Referências:** Baymard (não deixar beco sem saída), o tema Dawn da Shopify (um selo por card,
-  "Esgotado" vence "Promoção") e o Google merchant listing (`availability` igual à tela).
+- **Avise-me quando chegar:**
+  - **Onde:** o formulário fica no painel do esgotado (`#avise-me`, destino do "Avise-me" dos cards
+    `showcase`). É **sem login** e vem pré-preenchido para quem está logado.
+  - **API:** `POST /stock-notifications` é pública, com limite de 10/h por IP, e responde **sempre
+    204**. Grava `StockNotification` (variação + e-mail, unique) só se a variação está mesmo esgotada.
+  - **Envio:** quando a variação sai do zero, o `afterStockChange` chama `notifyBackInStock`. Cada
+    inscrição é reivindicada apagando a linha e vira **um** e-mail pelo `email.notice` que já existe,
+    sem fila nova.
+  - **Uso único:** a retenção é mínima, e a anonimização LGPD apaga as inscrições pelo e-mail original.
+  - **Admin:** a coluna "Aguardando" em `/estoque` é a demanda que espera a próxima produção.
+- **Referências:** Baymard (não deixar beco sem saída, aviso de reposição sem exigir conta), o tema
+  Dawn da Shopify (um selo por card, "Esgotado" vence "Promoção") e o Google merchant listing
+  (`availability` igual à tela).
 
 **Checkout** — **página única com seções que se revelam**, não wizard de 4 telas: cada navegação é um ponto de abandono. Cliente logado com endereço padrão vê frete e pagamento já prontos. Resumo sticky. Sem header de navegação — nada deve tirar o cliente daqui.
 

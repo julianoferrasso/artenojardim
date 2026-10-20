@@ -54,6 +54,9 @@ function StockView() {
                   <th className="p-3 text-right">Em estoque</th>
                   <th className="p-3 text-right">Reservado</th>
                   <th className="p-3 text-right">Disponível</th>
+                  <th className="p-3 text-right" title="Clientes que pediram aviso de reposição na loja">
+                    Aguardando
+                  </th>
                   <th className="p-3"></th>
                 </tr>
               </thead>
@@ -71,6 +74,16 @@ function StockView() {
                     <td className="p-3 text-right text-muted-foreground">{item.reserved}</td>
                     <td className={cn('p-3 text-right font-medium', item.available <= 0 && 'text-warning')}>
                       {item.available}
+                    </td>
+                    {/* Quem pediu "Avise-me quando chegar": a demanda que espera a próxima produção. */}
+                    <td className="p-3 text-right">
+                      {item.waitingCount > 0 ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                          {item.waitingCount}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="p-3 text-right">
                       <button

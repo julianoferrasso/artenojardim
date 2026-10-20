@@ -21,12 +21,15 @@ export const ProductCard = ({
   showcase?: boolean
 }) => {
   const { min, max } = product.priceRange
-  // Esgotado continua clicável: a página dele tem as alternativas (e o Avise-me).
+  // Esgotado continua clicável: a página dele tem o Avise-me e as alternativas.
   const soldOut = product.stockStatus === 'OUT_OF_STOCK'
+  // O "Avise-me" do formato showcase leva direto ao formulário; na grade o card
+  // não promete ação nenhuma e abre a página do topo.
+  const href = `/produtos/${product.slug}${showcase && soldOut ? '#avise-me' : ''}`
 
   return (
     <Link
-      href={`/produtos/${product.slug}`}
+      href={href}
       className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-all duration-300 hover:-translate-y-0.5 hover:shadow-card"
     >
       <div className="relative aspect-square overflow-hidden bg-muted">
@@ -58,7 +61,7 @@ export const ProductCard = ({
         )}
         {showcase && (
           <span className="mt-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-primary-ink underline-offset-4 group-hover:underline">
-            {soldOut ? 'Ver produto' : 'Comprar'}
+            {soldOut ? 'Avise-me' : 'Comprar'}
           </span>
         )}
       </div>

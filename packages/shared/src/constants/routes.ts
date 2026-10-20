@@ -257,6 +257,9 @@ export const ROUTES = {
     unsubscribe: `${base}/newsletter/unsubscribe`,
   },
 
+  /** "Avise-me quando chegar" (pública, painel do produto esgotado). */
+  stockNotifications: `${base}/stock-notifications`,
+
   /** Métricas do painel (staff). */
   dashboard: {
     overview: `${base}/dashboard/overview`,

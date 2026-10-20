@@ -24,6 +24,7 @@ import { dashboardRoutes } from './modules/dashboard/routes.js'
 import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
 import { adminAlertRoutes } from './modules/alerts/routes.js'
 import { newsletterRoutes } from './modules/newsletter/routes.js'
+import { stockNotificationRoutes } from './modules/stock-notifications/routes.js'
 import { bannerRoutes } from './modules/banners/routes.js'
 import { instagramPostRoutes } from './modules/instagram/routes.js'
 import { adminCouponRoutes, couponRoutes } from './modules/coupons/routes.js'
@@ -79,6 +80,7 @@ apiRoutes.use('/visits', visitRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
 apiRoutes.use('/store', storeRoutes)
 apiRoutes.use('/newsletter', newsletterRoutes)
+apiRoutes.use('/stock-notifications', stockNotificationRoutes)
 // Banners do carrossel da home. Leitura pública; escrita de staff.
 apiRoutes.use('/cms/banners', bannerRoutes)
 // Posts da seção "No Instagram" da home. Mesmo desenho de banners.

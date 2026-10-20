@@ -11,6 +11,7 @@ import { VariantSelector } from './variant-selector'
 import { ShippingCalculator } from './shipping-calculator'
 import { FavoriteButton } from './favorite-button'
 import { StockStatusLine } from './stock-status'
+import { BackInStockForm } from './back-in-stock-form'
 import { Button, buttonVariants } from './ui/button'
 
 /**
@@ -60,19 +61,6 @@ export const ProductPurchasePanel = ({
     }
   }
 
-  const favorite = (
-    // icon-lg pareia com o size="lg" do botão ao lado: antes o alinhamento
-    // dependia de alguém escrever 12 nos dois lugares.
-    <FavoriteButton
-      product={{ id: product.id, slug: product.slug }}
-      className={cn(
-        buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'iconLg' }),
-        'shrink-0',
-      )}
-      iconClassName="size-5"
-    />
-  )
-
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{product.name}</h1>
@@ -104,12 +92,8 @@ export const ProductPurchasePanel = ({
         />
       )}
 
-      {soldOut ? (
-        <SoldOutPanel
-          wholeProduct={product.stockStatus === 'OUT_OF_STOCK'}
-          hasAlternatives={hasAlternatives}
-          favorite={favorite}
-        />
+      {current && soldOut ? (
+        <SoldOutPanel product={product} variantId={current.id} hasAlternatives={hasAlternatives} />
       ) : (
         <>
           <div className="mt-2 flex items-center gap-2">
@@ -121,7 +105,16 @@ export const ProductPurchasePanel = ({
             >
               {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
             </Button>
-            {favorite}
+            {/* icon-lg pareia com o size="lg" do botão ao lado: antes o alinhamento
+                dependia de alguém escrever 12 nos dois lugares. */}
+            <FavoriteButton
+              product={{ id: product.id, slug: product.slug }}
+              className={cn(
+                buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'iconLg' }),
+                'shrink-0',
+              )}
+              iconClassName="size-5"
+            />
           </div>
           {feedback && (
             <p role="alert" className="text-sm text-destructive">
@@ -142,42 +135,52 @@ export const ProductPurchasePanel = ({
 /**
  * No lugar do "Adicionar": o que aconteceu e qual a saída. Só "esgotado", sem
  * caminho, faz uma parte dos clientes desistir da loja inteira (Baymard) — por
- * isso as alternativas, ou a outra opção do mesmo produto.
+ * isso o aviso de reposição, as alternativas e a outra opção do mesmo produto.
+ * O `id` é o destino do "Avise-me" dos cards da vitrine.
  */
 const SoldOutPanel = ({
-  wholeProduct,
+  product,
+  variantId,
   hasAlternatives,
-  favorite,
 }: {
-  /** Todas as variações esgotaram, e não só a escolhida. */
-  wholeProduct: boolean
+  product: Product
+  variantId: string
   hasAlternatives: boolean
-  favorite: React.ReactNode
-}) => (
-  <div className="mt-2 flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4">
-    <div>
-      <p className="font-display text-xl font-semibold">
-        {wholeProduct ? 'Esta peça esgotou' : 'Esta opção esgotou'}
-      </p>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {wholeProduct
-          ? 'Produzimos em pequenos lotes, à mão. Guarde nos favoritos para encontrá-la quando voltar.'
-          : 'Escolha outra opção acima, ou guarde esta nos favoritos.'}
-      </p>
+}) => {
+  // Todas as variações esgotaram, e não só a escolhida.
+  const wholeProduct = product.stockStatus === 'OUT_OF_STOCK'
+  return (
+    <div
+      id="avise-me"
+      className="mt-2 flex scroll-mt-24 flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-display text-xl font-semibold">
+            {wholeProduct ? 'Esta peça esgotou' : 'Esta opção esgotou'}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {wholeProduct
+              ? 'Produzimos em pequenos lotes, à mão. Deixe seu e-mail e avisamos quando ela voltar.'
+              : 'Escolha outra opção acima, ou deixe seu e-mail e avisamos quando esta voltar.'}
+          </p>
+        </div>
+        <FavoriteButton
+          product={{ id: product.id, slug: product.slug }}
+          className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'icon' }), 'shrink-0')}
+          iconClassName="size-4.5"
+        />
+      </div>
+      {/* `key`: outra variação esgotada é outro pedido, e o formulário recomeça. */}
+      <BackInStockForm key={variantId} variantId={variantId} />
+      {wholeProduct && hasAlternatives && (
+        <a
+          href="#alternativas"
+          className="self-start text-sm font-medium text-primary-ink underline-offset-4 hover:underline"
+        >
+          Ver alternativas
+        </a>
+      )}
     </div>
-    <div className="flex items-center gap-2">
-      <Button size="lg" variant="neutral" disabled className="flex-1">
-        Esgotado
-      </Button>
-      {favorite}
-    </div>
-    {wholeProduct && hasAlternatives && (
-      <a
-        href="#alternativas"
-        className="self-start text-sm font-medium text-primary-ink underline-offset-4 hover:underline"
-      >
-        Ver alternativas
-      </a>
-    )}
-  </div>
-)
+  )
+}

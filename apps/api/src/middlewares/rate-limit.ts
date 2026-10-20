@@ -181,6 +181,12 @@ export const checkoutConfirmLimiter = build({ name: 'checkout-confirm', windowMs
 export const newsletterLimiter = build({ name: 'newsletter', windowMs: 60 * 60_000, max: 5 })
 
 /**
+ * "Avise-me quando chegar": público e grava no banco. Mais folgado que o
+ * newsletter porque quem está escolhendo presente pede aviso de várias peças.
+ */
+export const stockNotificationLimiter = build({ name: 'stock-notification', windowMs: 60 * 60_000, max: 10 })
+
+/**
  * Descadastro. Mais folgado que a inscrição de propósito: sair da lista não pode
  * ser mais difícil que entrar. Quem clica duas vezes no link, ou volta ao e-mail
  * antigo semanas depois, precisa conseguir — um 429 aqui empurra a pessoa direto

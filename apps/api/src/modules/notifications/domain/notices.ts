@@ -96,6 +96,32 @@ export const customerCanceledNotice = (p: {
   }
 }
 
+/**
+ * Reposição do "Avise-me quando chegar". Transacional (a pessoa pediu este
+ * aviso, e só este): sem link de newsletter, e o texto diz que não vem outro —
+ * a inscrição é apagada no envio.
+ */
+export const customerBackInStockNotice = (p: {
+  productName: string
+  /** Opções da variação ("Lavanda / 300 g"). Null quando o produto não tem variação. */
+  variantLabel: string | null
+  productUrl: string
+}): NoticeContent => {
+  const name = p.variantLabel ? `${p.productName} (${p.variantLabel})` : p.productName
+  return {
+    subject: `Voltou: ${name}`,
+    heading: 'Voltou ao estoque',
+    paragraphs: [
+      `Olá! ${name} está disponível de novo na loja.`,
+      'Produzimos em pequenos lotes, então as unidades podem acabar rápido.',
+      'Este é o único aviso que você vai receber sobre esta peça.',
+    ],
+    ctaLabel: 'Ver o produto',
+    ctaUrl: p.productUrl,
+    footerNote: 'Você recebeu este e-mail porque pediu para ser avisado quando o produto voltasse.',
+  }
+}
+
 export const customerCancelRequestNotice = (p: {
   order: NoticeOrder
   refundAmount: number

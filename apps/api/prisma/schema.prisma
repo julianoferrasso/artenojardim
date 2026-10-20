@@ -179,6 +179,7 @@ model Store {
   orders                Order[]
   storeVisits           StoreVisit[]
   newsletterSubscribers NewsletterSubscriber[]
+  stockNotifications    StockNotification[]
   emailCampaigns        EmailCampaign[]
   banners               Banner[]
   instagramPosts        InstagramPost[]
@@ -648,15 +649,16 @@ model ProductVariant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  store        Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  product      Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
-  optionValues VariantOptionValue[]
-  images       ProductImage[]
-  level        InventoryLevel?
-  movements    InventoryMovement[]
-  reservations InventoryReservation[]
-  cartItems    CartItem[]
-  orderItems   OrderItem[]
+  store              Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product            Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  optionValues       VariantOptionValue[]
+  images             ProductImage[]
+  level              InventoryLevel?
+  movements          InventoryMovement[]
+  reservations       InventoryReservation[]
+  cartItems          CartItem[]
+  orderItems         OrderItem[]
+  stockNotifications StockNotification[]
 
   @@unique([storeId, sku])
   @@index([productId])
@@ -1123,6 +1125,24 @@ model NewsletterSubscriber {
 
   @@unique([storeId, email])
   @@index([storeId])
+}
+
+/// "Avise-me quando chegar": quem pediu aviso da reposição de uma variação
+/// esgotada. USO ÚNICO: avisou, a linha é apagada (retenção mínima, LGPD), e a
+/// pessoa pode pedir de novo. A contagem por variação é o sinal de demanda que
+/// o admin mostra na tela de estoque.
+model StockNotification {
+  id        String   @id @default(cuid())
+  storeId   String
+  variantId String
+  email     String
+  createdAt DateTime @default(now())
+
+  store   Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, email])
+  @@index([storeId, variantId])
 }
 
 /// Idempotência dos consumidores de fila (arquitetura §12). A PK é o `id` do

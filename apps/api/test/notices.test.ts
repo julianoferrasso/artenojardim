@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  customerBackInStockNotice,
   customerCanceledNotice,
   customerCancelRequestNotice,
   customerReplyNotice,
@@ -232,5 +233,25 @@ describe('alertas da equipe', () => {
     const up = staffSiteUpNotice({ targets: [{ name: 'Loja', downMinutes: 1 }], storeUrl: 'https://loja.test' })
     expect(up.heading).toBe('Loja de volta ao ar')
     expect(up.paragraphs[0]).toContain('cerca de 1 minuto fora')
+  })
+})
+
+describe('aviso de reposição (Avise-me)', () => {
+  const productUrl = 'https://loja.test/produtos/vela-1'
+
+  it('assunto com o produto e a variação, e botão para a página', () => {
+    const notice = customerBackInStockNotice({ productName: 'Vela Jardim', variantLabel: 'Lavanda', productUrl })
+    expect(notice.subject).toBe('Voltou: Vela Jardim (Lavanda)')
+    expect(notice.ctaUrl).toBe(productUrl)
+  })
+
+  it('produto sem variação não ganha parênteses', () => {
+    const notice = customerBackInStockNotice({ productName: 'Vela Jardim', variantLabel: null, productUrl })
+    expect(notice.subject).toBe('Voltou: Vela Jardim')
+  })
+
+  it('diz que é o único aviso — a inscrição some no envio', () => {
+    const notice = customerBackInStockNotice({ productName: 'Vela Jardim', variantLabel: null, productUrl })
+    expect(notice.paragraphs.join(' ')).toContain('único aviso')
   })
 })

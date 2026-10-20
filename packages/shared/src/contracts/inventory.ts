@@ -77,6 +77,8 @@ export const stockItemSchema = z.object({
   onHand: z.number().int(),
   reserved: z.number().int(),
   available: z.number().int(),
+  /** Quantos pediram "Avise-me quando chegar" nesta variação — demanda para a produção. */
+  waitingCount: z.number().int(),
 })
 
 export type StockItem = z.infer<typeof stockItemSchema>

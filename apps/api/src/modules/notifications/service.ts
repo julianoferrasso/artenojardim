@@ -10,6 +10,7 @@ import type { NoticeContent } from '../../integrations/email/index.js'
 import type { AutoRefundOutcome } from '../payments/domain/refund.js'
 import { raiseAlert, type AlertContent, type AlertTypes } from '../alerts/service.js'
 import {
+  customerBackInStockNotice,
   customerCanceledNotice,
   customerCancelRequestNotice,
   customerRefundedNotice,
@@ -315,6 +316,64 @@ export const notifyStockChanges = (changes: StockChange[]): Promise<void> =>
       ['LOW_STOCK'],
       staffLowStockNotice({ items, threshold: lowStockThreshold, stockUrl: adminStockUrl() }),
     )
+  })
+
+// ── Reposição ("Avise-me quando chegar") ─────────────────────────────────────
+
+/** A opção implícita do produto sem variação: detalhe interno, nunca vai ao cliente. */
+const IMPLICIT_OPTION_VALUE = 'Default Title'
+
+/**
+ * As variações voltaram a ter estoque: um e-mail para cada pedido de aviso, e a
+ * inscrição some (uso único).
+ *
+ * Cada linha é REIVINDICADA apagando-a (`deleteMany` pelo id): só envia quem
+ * apagou, então duas reposições seguidas — ou a API e o job do worker ao mesmo
+ * tempo — não mandam o mesmo aviso duas vezes. Se a fila falhar depois de
+ * apagar, o aviso se perde; é preferível a avisar em dobro, e a pessoa pode
+ * pedir de novo.
+ */
+export const notifyBackInStock = (variantIds: string[]): Promise<void> =>
+  safely('reposição', { variants: variantIds }, async () => {
+    if (variantIds.length === 0) return
+
+    const requests = await prisma.stockNotification.findMany({
+      where: { storeId: getActiveStoreId(), variantId: { in: variantIds } },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        email: true,
+        variant: {
+          select: {
+            isActive: true,
+            optionValues: { select: { optionValue: { select: { value: true } } } },
+            product: { select: { name: true, slug: true, status: true, deletedAt: true } },
+          },
+        },
+      },
+    })
+
+    for (const request of requests) {
+      const { variant } = request
+      // Despublicado no meio do caminho: o aviso espera a próxima reposição.
+      if (!variant.isActive || variant.product.status !== 'ACTIVE' || variant.product.deletedAt) continue
+
+      const claimed = await prisma.stockNotification.deleteMany({ where: { id: request.id } })
+      if (claimed.count === 0) continue
+
+      const label = variant.optionValues
+        .map((o) => o.optionValue.value)
+        .filter((value) => value !== IMPLICIT_OPTION_VALUE)
+        .join(' / ')
+      await enqueue(
+        request.email,
+        customerBackInStockNotice({
+          productName: variant.product.name,
+          variantLabel: label || null,
+          productUrl: storeUrl(`/produtos/${variant.product.slug}`),
+        }),
+      )
+    }
   })
 
 // ── Sistema ──────────────────────────────────────────────────────────────────
