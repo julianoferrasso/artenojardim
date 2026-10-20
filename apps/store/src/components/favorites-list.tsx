@@ -8,9 +8,10 @@ import { ROUTES } from '@ecommerce/shared/constants'
 import { useFavorites, type FavoriteEntry } from '@/lib/favorites'
 import { clientFetch } from '@/lib/client'
 import { ApiError } from '@/lib/api'
-import { formatBRL } from '@/lib/utils'
+import { formatBRL, cn } from '@/lib/utils'
 import { ProductImage } from './product-image'
 import { FavoriteButton } from './favorite-button'
+import { SOLD_OUT_IMAGE_CLASS, SoldOutBadge } from './stock-status'
 import { Skeleton } from './ui/skeleton'
 import { buttonVariants } from './ui/button'
 
@@ -81,6 +82,7 @@ export const FavoritesList = () => {
 const FavoriteCard = ({ fav, product }: { fav: FavoriteEntry; product: Product }) => {
   const { min, max } = product.priceRange
   const image = product.images[0]
+  const soldOut = product.stockStatus === 'OUT_OF_STOCK'
 
   return (
     <Link
@@ -93,8 +95,9 @@ const FavoriteCard = ({ fav, product }: { fav: FavoriteEntry; product: Product }
           alt={product.name}
           fit="cover"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="transition-transform duration-500 group-hover:scale-105"
+          className={cn('transition-transform duration-500 group-hover:scale-105', soldOut && SOLD_OUT_IMAGE_CLASS)}
         />
+        {soldOut && <SoldOutBadge className="absolute left-2.5 top-2.5" />}
         <FavoriteButton
           product={{ id: fav.id, slug: fav.slug }}
           className="absolute right-2.5 top-2.5 size-9 bg-card/90 shadow-soft backdrop-blur-sm"
@@ -104,9 +107,9 @@ const FavoriteCard = ({ fav, product }: { fav: FavoriteEntry; product: Product }
       <div className="flex flex-col gap-1 p-3.5">
         <h3 className="line-clamp-2 text-sm font-medium">{product.name}</h3>
         {min === max ? (
-          <p className="text-base font-semibold">{formatBRL(min)}</p>
+          <p className={cn('text-base font-semibold', soldOut && 'text-muted-foreground')}>{formatBRL(min)}</p>
         ) : (
-          <p className="text-base font-semibold">
+          <p className={cn('text-base font-semibold', soldOut && 'text-muted-foreground')}>
             <span className="text-xs font-normal text-muted-foreground">a partir de </span>
             {formatBRL(min)}
           </p>

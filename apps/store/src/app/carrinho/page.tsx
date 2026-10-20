@@ -4,10 +4,11 @@ import Link from 'next/link'
 import { useCart } from '@/lib/cart'
 import { formatBRL } from '@/lib/utils'
 import { cn } from '@/lib/utils'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ShippingCalculator } from '@/components/shipping-calculator'
 import { ProductImage } from '@/components/product-image'
 import { QuantityStepper } from '@/components/quantity-stepper'
+import { CartItemIssue } from '@/components/stock-status'
 
 export default function CartPage() {
   const { cart, loading, setQuantity, remove } = useCart()
@@ -34,7 +35,10 @@ export default function CartPage() {
     )
   }
 
-  const hasUnpurchasable = items.some((i) => !i.purchasable)
+  // O checkout recusa o carrinho inteiro com um item bloqueado: melhor resolver
+  // aqui, linha a linha, do que descobrir depois do frete e do endereço.
+  const blocked = items.some((i) => !i.purchasable)
+  const canCheckout = !blocked && (cart?.itemCount ?? 0) > 0
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
@@ -46,7 +50,9 @@ export default function CartPage() {
             key={item.id}
             className={cn(
               'flex gap-4 rounded-xl border border-border bg-card p-3.5 shadow-soft',
-              !item.purchasable && 'opacity-60',
+              // Parcial ainda é compra (é só ajustar): esmaece só o que não tem saída.
+              (item.unavailableReason === 'OUT_OF_STOCK' || item.unavailableReason === 'UNAVAILABLE') &&
+                'opacity-60',
             )}
           >
             <Link href={`/produtos/${item.productSlug}`} className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-muted">
@@ -67,11 +73,7 @@ export default function CartPage() {
               )}
               <span className="mt-1 text-sm">{formatBRL(item.unitPrice)}</span>
 
-              {!item.purchasable && (
-                <span className="mt-1 text-xs text-destructive">
-                  {item.available === 0 ? 'Esgotado' : 'Indisponível'}
-                </span>
-              )}
+              <CartItemIssue item={item} onAdjust={(quantity) => void setQuantity(item.id, quantity)} />
 
               <div className="mt-2 flex items-center gap-3">
                 <QuantityStepper
@@ -93,9 +95,9 @@ export default function CartPage() {
         ))}
       </ul>
 
-      {hasUnpurchasable && (
-        <p className="mt-4 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
-          Alguns itens ficaram indisponíveis e não entram no total.
+      {blocked && (
+        <p role="status" className="mt-4 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+          Alguns itens mudaram desde que você os adicionou. Ajuste ou remova os destacados para finalizar a compra.
         </p>
       )}
 
@@ -116,17 +118,17 @@ export default function CartPage() {
         Frete confirmado no checkout.
       </p>
 
-      <Link
-        href="/checkout"
-        aria-disabled={(cart?.itemCount ?? 0) === 0}
-        className={cn(
-          buttonVariants({ size: 'lg' }),
-          'mt-6 w-full',
-          (cart?.itemCount ?? 0) === 0 && 'pointer-events-none opacity-50',
-        )}
-      >
-        Finalizar compra
-      </Link>
+      {/* Bloqueado é um <button disabled>, não um Link apagado: o
+          pointer-events-none ainda deixava o teclado abrir o checkout. */}
+      {canCheckout ? (
+        <Link href="/checkout" className={cn(buttonVariants({ size: 'lg' }), 'mt-6 w-full')}>
+          Finalizar compra
+        </Link>
+      ) : (
+        <Button size="lg" disabled className="mt-6 w-full">
+          Finalizar compra
+        </Button>
+      )}
     </main>
   )
 }

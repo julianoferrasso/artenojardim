@@ -154,7 +154,7 @@ Postgres e RabbitMQ escutam **apenas em 127.0.0.1**. UFW libera somente 22, 80, 
 | Busca | Server Component dinâmico | Query string infinita, cache inútil |
 | Carrinho, checkout, conta | Client Component + TanStack Query | Por usuário, nunca cacheável |
 
-**Invalidação: aviso direto + TTL de 60s.** Nada de fila de revalidação. Toda mutação de produto na API chama `POST {STORE_URL}/api/revalidate` com token secreto (`integrations/storefront/revalidate.ts`), que faz `revalidatePath('/', 'layout')` na loja. Fire-and-forget: se o aviso falhar, o TTL de 60s ainda resolve. Nasceu porque o stale-while-revalidate do ISR entregava o produto arquivado à 1ª visita mesmo depois dos 60s.
+**Invalidação: aviso direto + TTL de 60s.** Nada de fila de revalidação. Toda mutação de produto na API chama `POST {STORE_URL}/api/revalidate` com token secreto (`integrations/storefront/revalidate.ts`), que faz `revalidatePath('/', 'layout')` na loja. A mudança de estoque também chama, mas só quando o que a vitrine MOSTRA muda. Isso inclui a reserva do checkout, o movimento do admin e o cancelamento, e passa por `afterStockChange` em `inventory/service.ts`. "Últimas 2" → "Última unidade" → "Esgotado" revalidam; 10 → 9 não, porque cada aviso derruba o cache da loja inteira. Fire-and-forget: se o aviso falhar, o TTL de 60s ainda resolve. Nasceu porque o stale-while-revalidate do ISR entregava o produto arquivado à 1ª visita mesmo depois dos 60s.
 
 ### Autenticação entre domínios
 
@@ -823,7 +823,16 @@ pagamento tardio não achar o que liquidar, e a peça seria vendida duas vezes.
 
 O ledger registra **fatos físicos**. Reserva é **intenção**. Misturá-los polui o histórico com eventos que nunca ocorreram e destrói qualquer relatório de vendas.
 
-`available = onHand - reserved` — é o número que a loja mostra e o carrinho valida.
+`available = onHand - reserved` — é o número que o carrinho valida. A loja não recebe o número: recebe a
+**situação**. Com a quantidade exata, qualquer um mediria o ritmo de vendas fazendo polling.
+
+- Por variação, `stockStatus` vale `IN_STOCK`, `LOW_STOCK` (1–2 unidades) ou `OUT_OF_STOCK`.
+- `lowStockRemaining` traz a contagem, mas só em `LOW_STOCK`.
+- O produto e o item de listagem levam o agregado das variações à venda.
+- A regra é pura, em `inventory/domain/availability.ts` (limite `LOW_STOCK_DISPLAY_THRESHOLD = 2`).
+- O disponível nunca sai negativo para a vitrine.
+- O detalhe público não leva `costPrice` nem variações inativas, que são as aposentadas, guardadas pelo
+  histórico de pedidos.
 
 Com Pix e boleto a reserva ganha peso: o boleto leva até 3 dias. **TTL por método** via `Setting`: cartão 30 min, Pix 60 min, boleto 3 dias — ajustável sem deploy.
 
@@ -1542,6 +1551,14 @@ GET /products?category=vasos&minPrice=5000&maxPrice=20000
 
 - Prefixo `-` = descendente.
 - **Allowlist de campos ordenáveis** no Zod. `sort` livre permite ordenar por coluna sem índice e derrubar o banco.
+- **Vitrine pública: disponíveis primeiro (out/2026).**
+  - Sem auth, a listagem vira dois segmentos paginados como um só: os com estoque e depois os
+    esgotados, cada um na ordem do `sort`, com `id` de desempate.
+  - Os esgotados vão para o fim e não somem: a página deles segue indexada.
+  - A conta de quanto ler de cada segmento é `splitPage` (`products/domain/list-order.ts`). O filtro
+    "tem estoque" é uma referência de campo do Prisma (`onHand > reserved`) dentro de
+    `variants.some`.
+  - O `inStock=true` do exemplo acima não foi implementado: com os esgotados no fim, não fez falta.
 - Todo filtro é declarado no Zod e traduzido explicitamente para Prisma. **Nunca** repassar query params direto para o `where` — é injeção de filtro.
 
 ### Validação
@@ -1859,6 +1876,25 @@ Portanto:
 ### Páginas que merecem nota
 
 **Produto** — Server Component com ISR. Galeria, seletor de variação (troca preço, SKU, imagem e disponibilidade **sem reload**), calculadora de frete por CEP (a mesma rota do checkout — reduz o abandono por surpresa no frete), estoque baixo ("últimas 2"), relacionados. `generateMetadata` com SEO e OG. JSON-LD `Product` + `Offer`.
+
+**Esgotado (out/2026).** Tudo que desenha estoque mora em `components/stock-status.tsx`.
+
+- **Card:** o selo "Esgotado" em vidro fosco fica no canto oposto ao coração; a foto vem esmaecida
+  (`opacity-70 saturate-50`, sem P&B) e o preço, apagado. O "Últimas unidades" fica fora do card:
+  numa loja de 1–2 peças por item, apareceria em quase todos.
+- **Página do produto:**
+  - A linha de situação tem bolinha estática e `role="status"`.
+  - Opção esgotada aparece tracejada e riscada, nunca `disabled`, com `sr-only` ", esgotado".
+  - A seleção inicial é a primeira variação com estoque.
+  - Variação esgotada troca o "Adicionar" pelo painel "Esta peça/opção esgotou", e o frete some.
+  - Com o produto inteiro esgotado, "Você também pode gostar" (#alternativas) vem logo abaixo da
+    área de compra: disponíveis da mesma categoria ou, sem nenhum, da loja.
+  - O JSON-LD diz o mesmo que a tela.
+- **Carrinho:** cada linha traz o motivo (`unavailableReason`) e a saída: "Ajustar para N" no parcial,
+  "Remova para continuar" nos outros. "Finalizar compra" vira `<button disabled>` enquanto houver
+  item bloqueado.
+- **Referências:** Baymard (não deixar beco sem saída), o tema Dawn da Shopify (um selo por card,
+  "Esgotado" vence "Promoção") e o Google merchant listing (`availability` igual à tela).
 
 **Checkout** — **página única com seções que se revelam**, não wizard de 4 telas: cada navegação é um ponto de abandono. Cliente logado com endereço padrão vê frete e pagamento já prontos. Resumo sticky. Sem header de navegação — nada deve tirar o cliente daqui.
 

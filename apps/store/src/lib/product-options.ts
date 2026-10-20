@@ -39,3 +39,21 @@ export const matchVariant = (
   selected: Record<string, string>,
 ): Variant | undefined =>
   variants.find((v) => v.options.every((o) => selected[o.option] === o.value))
+
+export type OptionValueState = 'available' | 'sold-out' | 'missing'
+
+/**
+ * Como fica a variação se o cliente trocar SÓ esta opção, mantendo as outras.
+ * Com Aroma × Tamanho, "Rosa" pode ter estoque no P e não no G: o estado de um
+ * valor depende do que já está escolhido nas demais opções.
+ */
+export const optionValueState = (
+  variants: Variant[],
+  selected: Record<string, string>,
+  option: string,
+  value: string,
+): OptionValueState => {
+  const variant = matchVariant(variants, { ...selected, [option]: value })
+  if (!variant) return 'missing'
+  return variant.stockStatus === 'OUT_OF_STOCK' ? 'sold-out' : 'available'
+}

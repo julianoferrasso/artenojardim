@@ -6,6 +6,12 @@ import type {
   ProductListItem,
 } from '@ecommerce/shared/contracts'
 import { storage } from '../../integrations/storage/index.js'
+import {
+  aggregateAvailable,
+  availableOf,
+  lowStockRemainingOf,
+  stockStatusOf,
+} from '../inventory/domain/availability.js'
 
 /**
  * repository.ts EXISTE aqui (ao contrário de categories) porque a query de
@@ -59,6 +65,7 @@ export const PRODUCT_SELECT = {
       position: true,
       isActive: true,
       imageId: true,
+      level: { select: { onHand: true, reserved: true } },
       optionValues: {
         select: {
           optionValue: {
@@ -83,25 +90,34 @@ const toImage = (img: ProductRow['images'][number]): ProductImage => ({
   height: img.upload.height,
 })
 
-const toVariant = (v: ProductRow['variants'][number]): Variant => ({
-  id: v.id,
-  sku: v.sku,
-  barcode: v.barcode,
-  price: v.price,
-  compareAtPrice: v.compareAtPrice,
-  costPrice: v.costPrice,
-  weight: v.weight,
-  length: v.length,
-  width: v.width,
-  height: v.height,
-  position: v.position,
-  isActive: v.isActive,
-  imageId: v.imageId,
-  options: v.optionValues.map((ov) => ({
-    option: ov.optionValue.option.name,
-    value: ov.optionValue.value,
-  })),
-})
+/** Quem pergunta: o público (a loja) ou o staff (o admin). Muda o que sai. */
+type Audience = { publicOnly: boolean }
+
+const toVariant = (v: ProductRow['variants'][number], { publicOnly }: Audience): Variant => {
+  const available = availableOf(v.level)
+  return {
+    id: v.id,
+    sku: v.sku,
+    barcode: v.barcode,
+    price: v.price,
+    compareAtPrice: v.compareAtPrice,
+    // Custo é margem da loja: nunca sai para quem não é staff.
+    costPrice: publicOnly ? null : v.costPrice,
+    weight: v.weight,
+    length: v.length,
+    width: v.width,
+    height: v.height,
+    position: v.position,
+    isActive: v.isActive,
+    imageId: v.imageId,
+    options: v.optionValues.map((ov) => ({
+      option: ov.optionValue.option.name,
+      value: ov.optionValue.value,
+    })),
+    stockStatus: stockStatusOf(available),
+    lowStockRemaining: lowStockRemainingOf(available),
+  }
+}
 
 const priceRange = (variants: Variant[]): { min: number; max: number } => {
   const prices = variants.filter((v) => v.isActive).map((v) => v.price)
@@ -109,8 +125,13 @@ const priceRange = (variants: Variant[]): { min: number; max: number } => {
   return { min: Math.min(...prices), max: Math.max(...prices) }
 }
 
-export const toProductDTO = (row: ProductRow): Product => {
-  const variants = row.variants.map(toVariant)
+/**
+ * Para o público, só as variações à venda: as inativas são as aposentadas,
+ * guardadas porque há pedido apontando para elas.
+ */
+export const toProductDTO = (row: ProductRow, audience: Audience): Product => {
+  const rows = audience.publicOnly ? row.variants.filter((v) => v.isActive) : row.variants
+  const variants = rows.map((v) => toVariant(v, audience))
   return {
     id: row.id,
     name: row.name,
@@ -130,6 +151,7 @@ export const toProductDTO = (row: ProductRow): Product => {
     images: row.images.map(toImage),
     variants,
     priceRange: priceRange(variants),
+    stockStatus: stockStatusOf(aggregateAvailable(rows.filter((v) => v.isActive).map((v) => v.level))),
   }
 }
 
@@ -152,7 +174,7 @@ export const LIST_SELECT = {
   },
   variants: {
     where: { isActive: true },
-    select: { price: true },
+    select: { price: true, level: { select: { onHand: true, reserved: true } } },
   },
 } satisfies Prisma.ProductSelect
 
@@ -173,5 +195,6 @@ export const toListItem = (row: ListRow): ProductListItem => {
     variantCount: row.variants.length,
     isFeatured: row.isFeatured,
     updatedAt: row.updatedAt.toISOString(),
+    stockStatus: stockStatusOf(aggregateAvailable(row.variants.map((v) => v.level))),
   }
 }

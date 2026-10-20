@@ -7,9 +7,10 @@ import { X } from 'lucide-react'
 import { useCart } from '@/lib/cart'
 import { formatBRL, cn } from '@/lib/utils'
 import { useBodyScrollLock, useEscapeKey, useFocusTrap } from '@/lib/overlay'
-import { buttonVariants } from './ui/button'
+import { Button, buttonVariants } from './ui/button'
 import { ProductImage } from './product-image'
 import { QuantityStepper } from './quantity-stepper'
+import { CartItemIssue } from './stock-status'
 
 /**
  * Minicarrinho. Abre ao adicionar um produto e pelo ícone do header — o cliente
@@ -30,6 +31,7 @@ export const MiniCart = () => {
   if (!mounted || !isOpen) return null
 
   const items = cart?.items ?? []
+  const blocked = items.some((i) => !i.purchasable)
 
   return createPortal(
     <div className="fixed inset-0 z-50">
@@ -78,7 +80,11 @@ export const MiniCart = () => {
             {items.map((item) => (
               <li
                 key={item.id}
-                className={cn('flex gap-3', !item.purchasable && 'opacity-60')}
+                className={cn(
+                  'flex gap-3',
+                  (item.unavailableReason === 'OUT_OF_STOCK' || item.unavailableReason === 'UNAVAILABLE') &&
+                    'opacity-60',
+                )}
               >
                 <Link
                   href={`/produtos/${item.productSlug}`}
@@ -106,11 +112,7 @@ export const MiniCart = () => {
                   )}
                   <span className="mt-0.5 text-sm">{formatBRL(item.unitPrice)}</span>
 
-                  {!item.purchasable && (
-                    <span className="text-xs text-destructive">
-                      {item.available === 0 ? 'Esgotado' : 'Indisponível'}
-                    </span>
-                  )}
+                  <CartItemIssue item={item} onAdjust={(quantity) => void setQuantity(item.id, quantity)} />
 
                   <div className="mt-1.5 flex items-center gap-2">
                     <QuantityStepper
@@ -140,13 +142,24 @@ export const MiniCart = () => {
             </div>
             <p className="mt-1 text-xs text-muted-foreground">Frete calculado no checkout.</p>
 
-            <Link
-              href="/checkout"
-              onClick={closeCart}
-              className={cn(buttonVariants({ size: 'lg' }), 'mt-3 w-full')}
-            >
-              Finalizar compra
-            </Link>
+            {blocked ? (
+              <>
+                <Button size="lg" disabled className="mt-3 w-full">
+                  Finalizar compra
+                </Button>
+                <p role="status" className="mt-2 text-xs text-warning-foreground">
+                  Ajuste ou remova os itens destacados para finalizar.
+                </p>
+              </>
+            ) : (
+              <Link
+                href="/checkout"
+                onClick={closeCart}
+                className={cn(buttonVariants({ size: 'lg' }), 'mt-3 w-full')}
+              >
+                Finalizar compra
+              </Link>
+            )}
             <Link
               href="/carrinho"
               onClick={closeCart}

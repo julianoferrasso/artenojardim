@@ -21,6 +21,7 @@ import { revalidateStorefront } from '../../integrations/storefront/revalidate.j
 import { recordInitialStock } from '../inventory/service.js'
 import { deriveOptions, validateVariants, optionKey } from './domain/variants.js'
 import { publishBlockers, BLOCKER_MESSAGES } from './domain/publish.js'
+import { splitPage } from './domain/list-order.js'
 import { PRODUCT_SELECT, LIST_SELECT, toProductDTO, toListItem } from './repository.js'
 
 const DEFAULT_OPTION_VALUE = 'Default Title'
@@ -205,7 +206,7 @@ export const createProduct = async (
   // Fire-and-forget: a loja demorar (ou estar fora) não segura a resposta do admin.
   void revalidateStorefront()
 
-  return toProductDTO(created)
+  return toProductDTO(created, { publicOnly: false })
 }
 
 /** Produto sem opções: injeta a opção implícita "Default Title" na variante. */
@@ -251,7 +252,7 @@ export const getProduct = async (
     select: PRODUCT_SELECT,
   })
   if (!row) throw notFound('Produto')
-  return toProductDTO(row)
+  return toProductDTO(row, opts)
 }
 
 /**
@@ -266,6 +267,42 @@ const parseSort = (sort?: string): Prisma.ProductOrderByWithRelationInput => {
   const field = desc ? sort.slice(1) : sort
   if (!SORTABLE.has(field)) return { updatedAt: 'desc' }
   return { [field]: desc ? 'desc' : 'asc' }
+}
+
+/** Variação à venda com estoque livre: `onHand > reserved` (o disponível > 0). */
+const IN_STOCK_VARIANT = {
+  isActive: true,
+  level: { is: { onHand: { gt: prisma.inventoryLevel.fields.reserved } } },
+} satisfies Prisma.ProductVariantWhereInput
+
+/**
+ * A vitrine pública: os com estoque primeiro, os esgotados no fim (ver
+ * `splitPage`). O `id` desempata para a fronteira entre páginas não repetir nem
+ * pular produto com o mesmo `updatedAt`.
+ */
+const listInStockFirst = async (
+  where: Prisma.ProductWhereInput,
+  orderBy: Prisma.ProductOrderByWithRelationInput,
+  query: ProductListQuery,
+): Promise<[Prisma.ProductGetPayload<{ select: typeof LIST_SELECT }>[], number]> => {
+  const inStock: Prisma.ProductWhereInput = { AND: [where, { variants: { some: IN_STOCK_VARIANT } }] }
+  const soldOut: Prisma.ProductWhereInput = { AND: [where, { variants: { none: IN_STOCK_VARIANT } }] }
+
+  const [inCount, total] = await Promise.all([
+    prisma.product.count({ where: inStock }),
+    prisma.product.count({ where }),
+  ])
+  const page = splitPage({ page: query.page, perPage: query.perPage, inCount })
+  const read = (segment: Prisma.ProductWhereInput, skip: number, take: number) =>
+    take > 0
+      ? prisma.product.findMany({ where: segment, select: LIST_SELECT, orderBy: [orderBy, { id: 'asc' }], skip, take })
+      : Promise.resolve([])
+
+  const [first, rest] = await Promise.all([
+    read(inStock, page.in.skip, page.in.take),
+    read(soldOut, page.out.skip, page.out.take),
+  ])
+  return [[...first, ...rest], total]
 }
 
 export const listProducts = async (
@@ -285,16 +322,19 @@ export const listProducts = async (
     ...(query.featured === 'true' ? { isFeatured: true } : {}),
   }
 
-  const [rows, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      select: LIST_SELECT,
-      orderBy: parseSort(query.sort),
-      skip: (query.page - 1) * query.perPage,
-      take: query.perPage,
-    }),
-    prisma.product.count({ where }),
-  ])
+  const orderBy = parseSort(query.sort)
+  const [rows, total] = opts.publicOnly
+    ? await listInStockFirst(where, orderBy, query)
+    : await Promise.all([
+        prisma.product.findMany({
+          where,
+          select: LIST_SELECT,
+          orderBy,
+          skip: (query.page - 1) * query.perPage,
+          take: query.perPage,
+        }),
+        prisma.product.count({ where }),
+      ])
 
   return {
     items: rows.map(toListItem),
@@ -398,7 +438,7 @@ export const updateProduct = async (
 
   void revalidateStorefront()
 
-  return toProductDTO(updated)
+  return toProductDTO(updated, { publicOnly: false })
 }
 
 /**
@@ -677,7 +717,7 @@ export const addVariant = async (
 
   void revalidateStorefront()
 
-  return toProductDTO(created)
+  return toProductDTO(created, { publicOnly: false })
 }
 
 /**

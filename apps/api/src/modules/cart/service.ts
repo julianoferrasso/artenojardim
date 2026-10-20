@@ -11,6 +11,8 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { storage } from '../../integrations/storage/index.js'
 import { generateOpaqueToken } from '../../utils/crypto.js'
+import { availableOf } from '../inventory/domain/availability.js'
+import { cartItemIssue } from './domain/item-issue.js'
 
 /**
  * Carrinho. Regras da arquitetura §6:
@@ -98,10 +100,13 @@ type ItemRow = Prisma.CartItemGetPayload<{ select: typeof ITEM_SELECT }>
 
 const toCartItem = (row: ItemRow): CartItem => {
   const v = row.variant
-  const available = Math.max(0, (v.level?.onHand ?? 0) - (v.level?.reserved ?? 0))
+  const available = availableOf(v.level)
   // Comprável = variante ativa, produto publicado e não apagado, e há estoque.
-  const purchasable =
-    v.isActive && v.product.status === 'ACTIVE' && !v.product.deletedAt && available >= row.quantity
+  const unavailableReason = cartItemIssue({
+    active: v.isActive && v.product.status === 'ACTIVE' && !v.product.deletedAt,
+    available,
+    quantity: row.quantity,
+  })
 
   // Mesma ordem de resolução que a galeria da loja usa — foto da variação
   // primeiro, foto do produto depois. Sem `take: 1` no select porque essa
@@ -120,7 +125,8 @@ const toCartItem = (row: ItemRow): CartItem => {
     quantity: row.quantity,
     lineTotal: v.price * row.quantity,
     available,
-    purchasable,
+    purchasable: unavailableReason === null,
+    unavailableReason,
   }
 }
 
@@ -173,7 +179,7 @@ const checkPurchasable = async (
   const active = variant.isActive && variant.product.status === 'ACTIVE' && !variant.product.deletedAt
   if (!active) return { ok: false, reason: 'UNAVAILABLE', available: 0 }
 
-  const available = Math.max(0, (variant.level?.onHand ?? 0) - (variant.level?.reserved ?? 0))
+  const available = availableOf(variant.level)
   if (available < quantity) return { ok: false, reason: 'OUT_OF_STOCK', available }
 
   return { ok: true, available }
@@ -302,14 +308,17 @@ export const updateItem = async (
 ): Promise<Cart> => {
   const item = await prisma.cartItem.findFirst({
     where: { id: itemId, cartId },
-    select: { variantId: true },
+    select: { variantId: true, quantity: true },
   })
   if (!item) throw notFound('Item do carrinho')
 
   if (quantity === 0) {
     await prisma.cartItem.delete({ where: { id: itemId } })
   } else {
-    await assertPurchasable(item.variantId, quantity)
+    // Só a subida é validada. Com 3 no carrinho e 1 em estoque, o "−" para 2
+    // ainda não fecha a conta, mas é quem está se ajustando: recusar deixava o
+    // cliente preso, com o "Remover" como única saída.
+    if (quantity > item.quantity) await assertPurchasable(item.variantId, quantity)
     await prisma.cartItem.update({ where: { id: itemId }, data: { quantity } })
   }
   await touch(cartId)

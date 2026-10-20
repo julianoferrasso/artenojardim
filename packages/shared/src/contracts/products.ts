@@ -7,6 +7,17 @@ import { productStatusSchema } from '../constants/enums.js'
  * SKU, peso e dimensões vivem SEMPRE na variante.
  */
 
+// ── Disponibilidade ───────────────────────────────────────────────────────────
+
+/**
+ * O que a vitrine sabe do estoque: a SITUAÇÃO, nunca o número. A quantidade
+ * exata deixaria qualquer um medir o ritmo de vendas fazendo polling — o mesmo
+ * tipo de vazamento do custo. A faixa é decisão da API; a loja só desenha.
+ */
+export const STOCK_STATUSES = ['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK'] as const
+export const stockStatusSchema = z.enum(STOCK_STATUSES)
+export type StockStatus = z.infer<typeof stockStatusSchema>
+
 // ── Variante ──────────────────────────────────────────────────────────────────
 
 /** Combinação de opções desta variante: [{option:"Cor", value:"Verde"}, ...]. */
@@ -109,6 +120,9 @@ export const variantSchema = z.object({
   /** @deprecated Use `ProductImage.variantId`. Mantido só para não quebrar clientes antigos. */
   imageId: z.string().nullable(),
   options: z.array(variantOptionSchema),
+  stockStatus: stockStatusSchema,
+  /** Quantas restam, só em LOW_STOCK ("Últimas 2 unidades"); null nas demais. */
+  lowStockRemaining: z.number().int().positive().nullable(),
 })
 
 export type Variant = z.infer<typeof variantSchema>
@@ -251,6 +265,8 @@ export const productSchema = z.object({
   // Faixa de preço: min e max entre as variantes. O card da vitrine mostra "a
   // partir de X" sem ter que carregar todas as variantes.
   priceRange: z.object({ min: z.number().int(), max: z.number().int() }),
+  /** Somado entre as variações à venda: OUT_OF_STOCK só quando nenhuma tem estoque. */
+  stockStatus: stockStatusSchema,
 })
 
 export type Product = z.infer<typeof productSchema>
@@ -266,6 +282,8 @@ export const productListItemSchema = z.object({
   variantCount: z.number().int(),
   isFeatured: z.boolean(),
   updatedAt: z.string(),
+  /** Mesmo agregado do `Product`: o card marca "Esgotado" sem abrir as variações. */
+  stockStatus: stockStatusSchema,
 })
 
 export type ProductListItem = z.infer<typeof productListItemSchema>

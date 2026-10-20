@@ -1,20 +1,25 @@
 'use client'
 
-import type { DerivedOption } from '@/lib/product-options'
+import type { DerivedOption, OptionValueState } from '@/lib/product-options'
 import { cn } from '@/lib/utils'
 
 /**
  * Só os botões de opção. Controlado: quem sabe qual variação está escolhida é o
  * painel de compra, porque a galeria também depende dessa informação.
+ *
+ * O valor esgotado continua clicável (nunca `disabled`): escolhê-lo mostra a
+ * situação e a saída — e, riscado, já avisa antes do clique.
  */
 export const VariantSelector = ({
   options,
   value,
   onChange,
+  stateOf,
 }: {
   options: DerivedOption[]
   value: Record<string, string>
   onChange: (selected: Record<string, string>) => void
+  stateOf: (option: string, value: string) => OptionValueState
 }) => (
   <>
     {options.map((opt) => (
@@ -23,6 +28,7 @@ export const VariantSelector = ({
         <div className="flex flex-wrap gap-2">
           {opt.values.map((optionValue) => {
             const active = value[opt.name] === optionValue
+            const soldOut = stateOf(opt.name, optionValue) === 'sold-out'
             return (
               <button
                 key={optionValue}
@@ -34,9 +40,12 @@ export const VariantSelector = ({
                   active
                     ? 'border-primary bg-primary text-primary-foreground shadow-soft'
                     : 'border-border bg-card hover:border-primary/40 hover:bg-accent',
+                  soldOut && 'line-through',
+                  soldOut && !active && 'border-dashed text-muted-foreground',
                 )}
               >
                 {optionValue}
+                {soldOut && <span className="sr-only">, esgotado</span>}
               </button>
             )
           })}

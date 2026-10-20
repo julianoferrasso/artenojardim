@@ -1,14 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import type { Product, Variant } from '@ecommerce/shared/contracts'
-import type { DerivedOption } from '@/lib/product-options'
+import { useRouter } from 'next/navigation'
+import { ERROR_CODES, type Product, type Variant } from '@ecommerce/shared/contracts'
+import { optionValueState, type DerivedOption } from '@/lib/product-options'
 import { formatBRL, cn } from '@/lib/utils'
 import { useCart } from '@/lib/cart'
 import { ApiError } from '@/lib/api'
 import { VariantSelector } from './variant-selector'
 import { ShippingCalculator } from './shipping-calculator'
 import { FavoriteButton } from './favorite-button'
+import { StockStatusLine } from './stock-status'
 import { Button, buttonVariants } from './ui/button'
 
 /**
@@ -22,16 +24,21 @@ export const ProductPurchasePanel = ({
   selected,
   onSelect,
   current,
+  hasAlternatives,
 }: {
   product: Product
   options: DerivedOption[]
   selected: Record<string, string>
   onSelect: (selected: Record<string, string>) => void
   current: Variant | undefined
+  hasAlternatives: boolean
 }) => {
+  const router = useRouter()
   const { add, openCart } = useCart()
   const [adding, setAdding] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
+
+  const soldOut = current?.stockStatus === 'OUT_OF_STOCK'
 
   const onAdd = async () => {
     if (!current) return
@@ -44,62 +51,133 @@ export const ProductPurchasePanel = ({
       // A API é a barreira: estoque insuficiente, produto indisponível → mostra
       // o motivo em vez de reimplementar a regra aqui.
       setFeedback(e instanceof ApiError ? e.message : 'Não foi possível adicionar.')
+      // Esgotou com a página aberta: relê o produto, e o painel vira "Esgotado"
+      // sem recarregar. O mesmo code também cobre "você já tem todas as
+      // unidades no carrinho" — aí a releitura não muda nada e a mensagem fica.
+      if (e instanceof ApiError && e.code === ERROR_CODES.INSUFFICIENT_STOCK) router.refresh()
     } finally {
       setAdding(false)
     }
   }
+
+  const favorite = (
+    // icon-lg pareia com o size="lg" do botão ao lado: antes o alinhamento
+    // dependia de alguém escrever 12 nos dois lugares.
+    <FavoriteButton
+      product={{ id: product.id, slug: product.slug }}
+      className={cn(
+        buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'iconLg' }),
+        'shrink-0',
+      )}
+      iconClassName="size-5"
+    />
+  )
 
   return (
     <div className="flex flex-col gap-4">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{product.name}</h1>
 
       {current ? (
-        <p className="text-2xl font-semibold">
-          {formatBRL(current.price)}
-          {current.compareAtPrice && current.compareAtPrice > current.price && (
-            <span className="ml-2 text-base font-normal text-muted-foreground line-through">
-              {formatBRL(current.compareAtPrice)}
-            </span>
-          )}
-        </p>
+        <div className="flex flex-col gap-1.5">
+          <p className={cn('text-2xl font-semibold', soldOut && 'text-muted-foreground')}>
+            {formatBRL(current.price)}
+            {current.compareAtPrice && current.compareAtPrice > current.price && (
+              <span className="ml-2 text-base font-normal text-muted-foreground line-through">
+                {formatBRL(current.compareAtPrice)}
+              </span>
+            )}
+          </p>
+          <StockStatusLine status={current.stockStatus} remaining={current.lowStockRemaining} />
+        </div>
       ) : (
-        <p className="text-muted-foreground">Combinação indisponível</p>
+        <p className="text-muted-foreground">
+          {product.variants.length === 0 ? 'Indisponível' : 'Combinação indisponível'}
+        </p>
       )}
 
       {options.length > 0 && (
-        <VariantSelector options={options} value={selected} onChange={onSelect} />
-      )}
-
-      <div className="mt-2 flex items-center gap-2">
-        <Button
-          onClick={() => void onAdd()}
-          disabled={!current || !current.isActive || adding}
-          size="lg"
-          className="flex-1"
-        >
-          {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
-        </Button>
-        {/* icon-lg pareia com o size="lg" do botão ao lado: antes o alinhamento
-            dependia de alguém escrever 12 nos dois lugares. */}
-        <FavoriteButton
-          product={{ id: product.id, slug: product.slug }}
-          className={cn(
-            buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'iconLg' }),
-            'shrink-0',
-          )}
-          iconClassName="size-5"
+        <VariantSelector
+          options={options}
+          value={selected}
+          onChange={onSelect}
+          stateOf={(option, value) => optionValueState(product.variants, selected, option, value)}
         />
-      </div>
-      {feedback && (
-        <p role="alert" className="text-sm text-destructive">
-          {feedback}
-        </p>
       )}
 
-      <ShippingCalculator
-        items={current ? [{ variantId: current.id, quantity: 1 }] : []}
-        disabled={!current}
-      />
+      {soldOut ? (
+        <SoldOutPanel
+          wholeProduct={product.stockStatus === 'OUT_OF_STOCK'}
+          hasAlternatives={hasAlternatives}
+          favorite={favorite}
+        />
+      ) : (
+        <>
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              onClick={() => void onAdd()}
+              disabled={!current || !current.isActive || adding}
+              size="lg"
+              className="flex-1"
+            >
+              {adding ? 'Adicionando…' : 'Adicionar ao carrinho'}
+            </Button>
+            {favorite}
+          </div>
+          {feedback && (
+            <p role="alert" className="text-sm text-destructive">
+              {feedback}
+            </p>
+          )}
+
+          <ShippingCalculator
+            items={current ? [{ variantId: current.id, quantity: 1 }] : []}
+            disabled={!current}
+          />
+        </>
+      )}
     </div>
   )
 }
+
+/**
+ * No lugar do "Adicionar": o que aconteceu e qual a saída. Só "esgotado", sem
+ * caminho, faz uma parte dos clientes desistir da loja inteira (Baymard) — por
+ * isso as alternativas, ou a outra opção do mesmo produto.
+ */
+const SoldOutPanel = ({
+  wholeProduct,
+  hasAlternatives,
+  favorite,
+}: {
+  /** Todas as variações esgotaram, e não só a escolhida. */
+  wholeProduct: boolean
+  hasAlternatives: boolean
+  favorite: React.ReactNode
+}) => (
+  <div className="mt-2 flex flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4">
+    <div>
+      <p className="font-display text-xl font-semibold">
+        {wholeProduct ? 'Esta peça esgotou' : 'Esta opção esgotou'}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {wholeProduct
+          ? 'Produzimos em pequenos lotes, à mão. Guarde nos favoritos para encontrá-la quando voltar.'
+          : 'Escolha outra opção acima, ou guarde esta nos favoritos.'}
+      </p>
+    </div>
+    <div className="flex items-center gap-2">
+      <Button size="lg" variant="neutral" disabled className="flex-1">
+        Esgotado
+      </Button>
+      {favorite}
+    </div>
+    {wholeProduct && hasAlternatives && (
+      <a
+        href="#alternativas"
+        className="self-start text-sm font-medium text-primary-ink underline-offset-4 hover:underline"
+      >
+        Ver alternativas
+      </a>
+    )}
+  </div>
+)

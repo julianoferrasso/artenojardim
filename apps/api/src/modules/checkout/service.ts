@@ -18,7 +18,8 @@ import { resolveCart, getCart } from '../cart/service.js'
 import { getAddress } from '../addresses/service.js'
 import { quoteShipping } from '../shipping/service.js'
 import { getOrder } from '../orders/service.js'
-import { notifyOrderCreated, notifyStockChanges, type StockChange } from '../notifications/service.js'
+import { notifyOrderCreated, type StockChange } from '../notifications/service.js'
+import { afterStockChange } from '../inventory/service.js'
 import { resolveCoupon, claimCouponUse, type CheckoutCoupon } from '../coupons/service.js'
 import { computeCouponDiscount } from '../coupons/domain/rules.js'
 import { calculateTotals, type Totals } from './domain/totals.js'
@@ -281,7 +282,7 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
       })
 
       await notifyOrderCreated(orderId)
-      await notifyStockChanges(stock)
+      await afterStockChange(stock)
       return getOrder(customerId, orderId)
     } catch (err) {
       // Colisão no número: tenta de novo com o próximo. Outros erros sobem —

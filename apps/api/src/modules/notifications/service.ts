@@ -266,7 +266,7 @@ export const notifyOrderCreated = (orderId: string): Promise<void> =>
 
 // ── Estoque ──────────────────────────────────────────────────────────────────
 
-/** Uma variante cujo disponível acabou de cair. `onHand`/`reserved` são os de DEPOIS. */
+/** Uma variante cujo disponível acabou de mudar. `before` é o disponível de ANTES; `onHand`/`reserved`, os de DEPOIS. */
 export type StockChange = { variantId: string; before: number; onHand: number; reserved: number }
 
 /**

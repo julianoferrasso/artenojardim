@@ -11,16 +11,28 @@ import { ProductPurchasePanel } from './product-purchase-panel'
  * precisam. Só isso: o resto é delegado. A descrição ficou no Server Component,
  * fora do bundle do cliente.
  */
-export const ProductDetail = ({ product }: { product: Product }) => {
+export const ProductDetail = ({
+  product,
+  hasAlternatives,
+}: {
+  product: Product
+  /** A página achou alternativas para o produto esgotado (a seção #alternativas existe). */
+  hasAlternatives: boolean
+}) => {
   const options = useMemo(() => deriveOptions(product.variants), [product.variants])
   const hasOptions = options.length > 0
 
-  const firstActive = product.variants.find((v) => v.isActive) ?? product.variants[0]
+  // Abre na primeira variação que dá para comprar: abrir no "Esgotado" quando a
+  // outra cor tem estoque faria o cliente achar que o produto inteiro acabou.
+  const initial =
+    product.variants.find((v) => v.isActive && v.stockStatus !== 'OUT_OF_STOCK') ??
+    product.variants.find((v) => v.isActive) ??
+    product.variants[0]
   const [selected, setSelected] = useState<Record<string, string>>(() =>
-    Object.fromEntries(firstActive?.options.map((o) => [o.option, o.value]) ?? []),
+    Object.fromEntries(initial?.options.map((o) => [o.option, o.value]) ?? []),
   )
 
-  const current = hasOptions ? matchVariant(product.variants, selected) : firstActive
+  const current = hasOptions ? matchVariant(product.variants, selected) : initial
 
   return (
     <div className="grid gap-8 md:grid-cols-2">
@@ -36,6 +48,7 @@ export const ProductDetail = ({ product }: { product: Product }) => {
         selected={selected}
         onSelect={setSelected}
         current={current}
+        hasAlternatives={hasAlternatives}
       />
     </div>
   )

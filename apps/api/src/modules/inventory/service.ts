@@ -13,7 +13,9 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import { withRunningBalance, countDelta, movementBlocker } from './domain/ledger.js'
-import { notifyStockChanges } from '../notifications/service.js'
+import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
+import { notifyStockChanges, type StockChange } from '../notifications/service.js'
+import { visibleStockChanged } from './domain/availability.js'
 
 /**
  * Estoque como livro-razão. Duas regras não-negociáveis:
@@ -123,14 +125,32 @@ export const recordMovement = async (
     context: ctx,
   })
 
-  // Contagem que achou menos peças, quebra, ajuste: também pode cruzar o limite.
-  if (quantity < 0) {
-    await notifyStockChanges([
+  // Entrada ou baixa: a vitrine pode mudar ("Esgotado" ↔ à venda), e a baixa
+  // (contagem que achou menos, quebra, ajuste) pode cruzar o limite do alerta.
+  if (quantity !== 0) {
+    await afterStockChange([
       { variantId: input.variantId, before: level.available - quantity, onHand: level.onHand, reserved: level.reserved },
     ])
   }
 
   return level
+}
+
+/**
+ * Depois do commit de qualquer mudança no disponível — reserva do checkout,
+ * movimento do admin, cancelamento: o alerta de estoque baixo da equipe e a
+ * vitrine. Sem isto o produto que esgotou seguia "à venda" até o cache de 60s
+ * vencer, e a primeira visita depois dele ainda recebia a página velha.
+ *
+ * A vitrine só é revalidada quando o que ela MOSTRA muda (ver
+ * `visibleStockChanged`): a revalidação derruba o cache da loja inteira. Nunca
+ * lança — o fato já está gravado.
+ */
+export const afterStockChange = async (changes: StockChange[]): Promise<void> => {
+  const after = (c: StockChange): number => c.onHand - c.reserved
+  const drops = changes.filter((c) => after(c) < c.before)
+  if (drops.length > 0) await notifyStockChanges(drops)
+  if (changes.some((c) => visibleStockChanged(c.before, after(c)))) void revalidateStorefront()
 }
 
 /**
@@ -296,22 +316,26 @@ export const extendOrderReservations = async (
 export const releaseOrderReservations = async (
   tx: Prisma.TransactionClient,
   orderId: string,
-): Promise<void> => {
+): Promise<StockChange[]> => {
   const reservations = await tx.inventoryReservation.findMany({
     where: { orderId, releasedAt: null },
     select: { id: true, variantId: true, quantity: true },
   })
 
+  const changes: StockChange[] = []
   for (const r of reservations) {
-    await tx.inventoryLevel.update({
+    const level = await tx.inventoryLevel.update({
       where: { variantId: r.variantId },
       data: { reserved: { decrement: r.quantity } },
+      select: { onHand: true, reserved: true },
     })
     await tx.inventoryReservation.update({
       where: { id: r.id },
       data: { releasedAt: new Date() },
     })
+    changes.push({ variantId: r.variantId, before: level.onHand - level.reserved - r.quantity, ...level })
   }
+  return changes
 }
 
 /**
@@ -328,14 +352,14 @@ export const restockCanceledOrder = async (
   storeId: string,
   orderId: string,
   userId?: string,
-): Promise<void> => {
+): Promise<StockChange[]> => {
   const reference = `order:${orderId}`
 
   const already = await tx.inventoryMovement.findFirst({
     where: { storeId, reference, type: 'CANCELLATION' },
     select: { id: true },
   })
-  if (already) return
+  if (already) return []
 
   // Base = o que realmente saiu por este pedido (os SALE), não os itens do
   // pedido: se um item nunca chegou a ser liquidado, devolvê-lo criaria estoque
@@ -345,6 +369,7 @@ export const restockCanceledOrder = async (
     select: { variantId: true, quantity: true },
   })
 
+  const changes: StockChange[] = []
   for (const s of sales) {
     const quantity = Math.abs(s.quantity)
     if (quantity === 0) continue
@@ -360,11 +385,14 @@ export const restockCanceledOrder = async (
         userId: userId ?? null,
       },
     })
-    await tx.inventoryLevel.update({
+    const level = await tx.inventoryLevel.update({
       where: { variantId: s.variantId },
       data: { onHand: { increment: quantity } },
+      select: { onHand: true, reserved: true },
     })
+    changes.push({ variantId: s.variantId, before: level.onHand - level.reserved - quantity, ...level })
   }
+  return changes
 }
 
 // ── Leitura ───────────────────────────────────────────────────────────────────

@@ -69,7 +69,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     setCart(await call<Cart>(ROUTES.cart.items, { method: 'POST', body: JSON.stringify(input) }))
   }
   const setQuantity = async (itemId: string, quantity: number) => {
-    setCart(await call<Cart>(ROUTES.cart.item(itemId), { method: 'PATCH', body: JSON.stringify({ quantity }) }))
+    try {
+      setCart(await call<Cart>(ROUTES.cart.item(itemId), { method: 'PATCH', body: JSON.stringify({ quantity }) }))
+    } catch {
+      // Recusado porque o estoque mudou no meio: o carrinho relido já traz, na
+      // linha, o motivo e a saída ("Só restam N" + ajustar). Antes o erro sumia
+      // num `void` e o stepper parecia quebrado.
+      await refresh()
+    }
   }
   const remove = async (itemId: string) => {
     setCart(await call<Cart>(ROUTES.cart.item(itemId), { method: 'DELETE' }))

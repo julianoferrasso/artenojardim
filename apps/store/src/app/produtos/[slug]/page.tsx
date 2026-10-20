@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { getProduct } from '@/lib/catalog'
+import type { Product, ProductListItem } from '@ecommerce/shared/contracts'
+import { getProduct, listProducts } from '@/lib/catalog'
 import { ApiError } from '@/lib/api'
 import { ProductDetail } from '@/components/product-detail'
+import { ProductCard } from '@/components/product-card'
 import { ProductViewBeacon } from './product-view-beacon'
 import { formatBRL } from '@/lib/utils'
 
@@ -15,6 +17,26 @@ const load = async (slug: string) => {
     // Produto inexistente ou DRAFT (a API devolve 404 ao público) → página 404.
     if (err instanceof ApiError && err.status === 404) return null
     throw err
+  }
+}
+
+const ALTERNATIVES = 4
+
+/**
+ * O que mostrar quando o produto inteiro esgotou: disponíveis da mesma
+ * categoria — a mesma URL da página de categoria, então o mesmo cache —, ou da
+ * loja toda quando a categoria não tem nenhum. Nunca um beco sem saída.
+ */
+const loadAlternatives = async (product: Product): Promise<ProductListItem[]> => {
+  const pick = (items: ProductListItem[]) =>
+    items.filter((p) => p.id !== product.id && p.stockStatus !== 'OUT_OF_STOCK').slice(0, ALTERNATIVES)
+  try {
+    const categoryId = product.categoryIds[0]
+    const fromCategory = categoryId ? pick((await listProducts({ category: categoryId })).data) : []
+    return fromCategory.length > 0 ? fromCategory : pick((await listProducts({})).data)
+  } catch {
+    // Alternativa é bônus: a página do produto não pode cair por causa dela.
+    return []
   }
 }
 
@@ -44,9 +66,13 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
   const product = await load(slug)
   if (!product) notFound()
 
+  const soldOut = product.stockStatus === 'OUT_OF_STOCK'
+  const alternatives = soldOut ? await loadAlternatives(product) : []
+
   // JSON-LD Product/Offer: é o que faz o Google mostrar preço e disponibilidade
-  // direto no resultado de busca. `lowPrice/highPrice` da faixa de variantes.
-  const inStock = product.variants.some((v) => v.isActive)
+  // direto no resultado de busca. `lowPrice/highPrice` da faixa de variantes. A
+  // disponibilidade tem que ser a mesma que a tela mostra — divergir vira aviso
+  // no Search Console e tira o produto dos resultados ricos.
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -58,9 +84,7 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
       priceCurrency: 'BRL',
       lowPrice: (product.priceRange.min / 100).toFixed(2),
       highPrice: (product.priceRange.max / 100).toFixed(2),
-      availability: inStock
-        ? 'https://schema.org/InStock'
-        : 'https://schema.org/OutOfStock',
+      availability: soldOut ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
     },
   }
 
@@ -79,7 +103,20 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
 
       <ProductViewBeacon slug={product.slug} />
 
-      <ProductDetail product={product} />
+      <ProductDetail product={product} hasAlternatives={alternatives.length > 0} />
+
+      {/* Logo abaixo da área de compra, e não depois da descrição: quem achou o
+          produto esgotado precisa ver a saída sem rolar a página inteira. */}
+      {alternatives.length > 0 && (
+        <section id="alternativas" className="mt-12 scroll-mt-24">
+          <h2 className="font-display text-2xl font-semibold tracking-tight">Você também pode gostar</h2>
+          <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {alternatives.map((item) => (
+              <ProductCard key={item.id} product={item} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Descrição fica no Server Component: é texto longo e estático, não
           precisa viajar como JS dentro do payload do cliente. */}

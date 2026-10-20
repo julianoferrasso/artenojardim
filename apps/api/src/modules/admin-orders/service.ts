@@ -24,7 +24,7 @@ import { notFound, conflict } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import { formatBRL } from '../../utils/money.js'
-import { releaseOrderReservations, restockCanceledOrder } from '../inventory/service.js'
+import { afterStockChange, releaseOrderReservations, restockCanceledOrder } from '../inventory/service.js'
 import { releaseCouponUse } from '../coupons/service.js'
 import {
   cancelPendingMercadoPagoPayments,
@@ -299,7 +299,7 @@ export const cancelOrderInternal = async (
   const storeId = getActiveStoreId()
   const userId = actor.kind === 'staff' ? (actor.userId ?? null) : null
 
-  const paidAtCancel = await prisma.$transaction(async (tx) => {
+  const { paidAtCancel, stock } = await prisma.$transaction(async (tx) => {
     // updateMany com as guardas no where, e não update: entre o findOrThrow
     // acima e esta linha cabem um segundo clique e o staff mudando a expedição.
     // Cancelar duas vezes reestocaria duas vezes o mesmo pedido.
@@ -337,8 +337,9 @@ export const cancelOrderInternal = async (
       fresh.paymentStatus === 'PARTIALLY_REFUNDED' ||
       fresh.paymentStatus === 'REFUNDED'
 
-    if (wasPaid) await restockCanceledOrder(tx, storeId, id, userId ?? undefined)
-    else await releaseOrderReservations(tx, id)
+    const stock = wasPaid
+      ? await restockCanceledOrder(tx, storeId, id, userId ?? undefined)
+      : await releaseOrderReservations(tx, id)
 
     // Pedido cancelado deixa de ser uso do cupom, pago ou não: a vaga volta.
     if (order.couponId) await releaseCouponUse(tx, order.couponId)
@@ -360,13 +361,18 @@ export const cancelOrderInternal = async (
     })
 
     // Só o que foi PAGO de fato tem o que estornar; REFUNDED já voltou.
-    return fresh.paymentStatus === 'PAID' || fresh.paymentStatus === 'PARTIALLY_REFUNDED'
+    return {
+      paidAtCancel: fresh.paymentStatus === 'PAID' || fresh.paymentStatus === 'PARTIALLY_REFUNDED',
+      stock,
+    }
   })
 
   // Fora da transação (é chamada externa) e depois do commit: o Pix em aberto
   // no Mercado Pago continuaria pagável para um pedido que não existe mais.
   // Roda mesmo com o pedido pago — só mexe em tentativas ainda em aberto.
   await cancelPendingMercadoPagoPayments(id)
+  // A peça voltou: a vitrine deixa de mostrá-la esgotada.
+  await afterStockChange(stock)
 
   return { paidAtCancel }
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { reorderSkipReasonSchema } from './customer-orders.js'
 
 /**
  * Contratos do carrinho. O cliente manda variantId + quantidade; NUNCA preço.
@@ -36,6 +37,12 @@ export const cartItemSchema = z.object({
   available: z.number().int(),
   /** false quando a variante saiu do ar ou o estoque zerou desde que foi adicionada. */
   purchasable: z.boolean(),
+  /**
+   * Por que não dá para comprar — o mesmo vocabulário do "comprar de novo". O
+   * front escolhe a frase e a saída por aqui: remover (UNAVAILABLE, OUT_OF_STOCK)
+   * ou ajustar a quantidade ao que resta (PARTIAL). null = comprável.
+   */
+  unavailableReason: reorderSkipReasonSchema.nullable(),
 })
 
 export type CartItem = z.infer<typeof cartItemSchema>
