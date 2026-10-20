@@ -1868,7 +1868,15 @@ Portanto:
 
 ### Telas que merecem nota
 
-**Dashboard** (Fase 2) — não é enfeite: vendas hoje/semana/mês vs. período anterior, ticket médio, **pedidos aguardando separação** (a fila de trabalho real), estoque baixo (query `available < minStock`, não evento), últimos pedidos, top produtos. Se as agregações ficarem lentas, uma tabela `DailyMetric` por job resolve — **quando** ficarem.
+**Dashboard** (no ar desde out/2026) — página única, referência Shopify/Nuvemshop. Em cima, a faixa **"Agora"**, que não depende de período: pedidos a separar, atendimentos aguardando, estoque baixo — cada número é o `meta.total` da própria lista que ele abre. Abaixo, a barra de filtros (fixa ao rolar) escopa tudo: **período** (presets + calendário, até 731 dias), **comparação** (período anterior / ano anterior / nenhuma) e **agrupamento** (hora/dia/semana/mês). O estado mora na **URL** (`?periodo=thisMonth&comparar=ano`, `?de=…&ate=…`): F5 e link compartilhado mantêm a visão. Cinco tiles (receita, pedidos pagos, ticket, visitas, conversão) com variação e sparkline são as abas do gráfico; seguem composição da receita, funil, meios de pagamento, produtos (vendidos **e** vistos, com conversão; aba de categorias), origem das visitas, clientes novos × recorrentes, estados, cupons e os últimos pedidos do período.
+
+As definições moram em `apps/api/src/modules/dashboard/domain/` (puro, testado) e valem para todo número do admin:
+- **Venda** = `isSale` (contracts): pago ou parcialmente reembolsado, não cancelado. O LTV da tela de clientes usa o mesmo recorte.
+- **Receita** = Σ(total − reembolso parcial), pela **data de criação** do pedido e com o status atual — um estorno de hoje reduz o período original (modelo Nuvemshop; bate com o filtro de data da lista de Pedidos).
+- **Comparação**: o admin resolve presets e período comparado com `utils/date-range` (o mesmo código da API) e manda datas prontas. Na série, o comparado é **projetado** no dia equivalente (não alinhado por índice de balde). Se o período termina hoje, os totais do comparado são **cortados na mesma hora de agora** — "hoje às 10h" contra "ontem inteiro" seria queda falsa.
+- **Visitas** (`StoreVisit`): uma por sessão do navegador (30 min parada ou virada do dia), contada pelo beacon da loja. Rollup por hora/origem/dispositivo, **sem identificar ninguém** (nem IP, nem UA, nem id). Fora de produção não grava — o banco de dev é o de produção. Conversão = pedidos pagos ÷ visitas, só dos dias com visita contada.
+
+Consulta ao vivo: a loja é pequena e o número precisa estar fresco. O `logger.warn` acima de 1,5 s avisa antes do gatilho do `DailyMetric` (apêndice).
 
 **Pedido (detalhe)** — a tela mais importante, onde a operação vive. Cliente, itens com foto e SKU, totais, pagamento (método, status, id do Stripe, link para o dashboard, botão de reembolso), envio (endereço, serviço, etiqueta, rastreio), **timeline** (`OrderEvent`), notas interna e do cliente, e as ações: separar, comprar etiqueta, marcar enviado, cancelar, reembolsar.
 
@@ -1940,7 +1948,7 @@ Só depois de vendas reais, porque agora existe dado para saber o que importa.
 
 - **Cupons** — a primeira alavanca de venda de verdade (Black Friday, primeira compra, recuperação).
 - **CMS: `Page` + `Banner` + `Menu`** — as páginas legais migram dos componentes estáticos para `Page`; o header passa a ler `Menu`. **Sem blog.**
-- **Dashboard** — vendas, ticket médio, top produtos, estoque baixo, pedidos a separar.
+- **Dashboard** — ✅ out/2026 (§20): períodos customizados, comparação, visitas e conversão.
 - **Relatórios** — vendas por período/produto/categoria, margem (`costPrice` já existe), export CSV.
 - **SEO** — sitemap dinâmico, robots, JSON-LD (`Product`, `Offer`, `BreadcrumbList`), OG, canonical.
 - **Busca → FTS** — `tsvector` + GIN + `ts_rank`, **se** o gatilho de §16 tiver sido atingido.
@@ -2084,5 +2092,6 @@ Toda decisão de "não agora" tem um gatilho explícito. É o que separa simplic
 | **Tema** | Tokens do shadcn/ui | Fase 4: `themeJson` sobrescreve (~10 linhas) |
 | **Feature flags** | Chave em `Setting`, teto de 5 | Passar de 5 → remova antes de criar |
 | Árvore de categorias | Adjacency list | > 10k categorias ou > 6 níveis |
-| Métricas do dashboard | Query agregada ao vivo | Dashboard > 2s |
+| Métricas do dashboard | Query agregada ao vivo | Dashboard > 2s (o log avisa em 1,5 s) |
+| Visitas da loja | Rollup `StoreVisit` sem identificador | Precisar de funil por sessão ou de atribuição de campanha → GA4/server-side (Fase 3) |
 | **Cartão de débito** | **Fora** (o Brick exclui `debit_card`; ver §10) | Integrar 3DS no Orders API — aí reabre o débito |
