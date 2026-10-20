@@ -3,16 +3,20 @@
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Ban, CircleCheck, CircleX, Clock, LoaderCircle, TriangleAlert, type LucideIcon } from 'lucide-react'
 import type { CustomerOrder, OrderPayment } from '@ecommerce/shared/contracts'
-import { PAYMENT_STATUS_LABEL as PAYMENT_LABEL } from '@ecommerce/shared/constants'
 import { useAuth } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
 import { getOrder, getOrderPayment, getOrderStatus } from '@/lib/checkout'
 import { OrderItemList, OrderDeliveryCard, OrderTotals } from '@/components/order-summary'
+import { OrderSituationBadge } from '@/components/order-situation-badge'
+import { CheckoutSteps } from '@/components/checkout-steps'
+import { Card } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { StripePayment } from './stripe-payment'
 import { MercadoPagoPayment } from './mercadopago-payment'
 import { buttonVariants } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, formatBRL } from '@/lib/utils'
 
 /**
  * Tela do pedido — o FUNIL DE PAGAMENTO, não um recibo. O pedido nasce PENDING
@@ -35,6 +39,107 @@ type Phase =
   | 'canceled'
   | 'unavailable'
   | 'notfound'
+
+const GRID = 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-10'
+
+const PageSkeleton = () => (
+  <main className="mx-auto max-w-6xl px-4 py-8 lg:py-10" aria-busy="true">
+    <Skeleton className="h-6 w-64" />
+    <div className={cn(GRID, 'mt-6')}>
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-72" />
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+      </div>
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-40" />
+        <Skeleton className="h-56" />
+      </div>
+    </div>
+    <span className="sr-only">Carregando…</span>
+  </main>
+)
+
+const PhaseNotice = ({
+  icon: Icon,
+  title,
+  tone = 'muted',
+  spin = false,
+  live = false,
+  action,
+  children,
+}: {
+  icon: LucideIcon
+  title: string
+  tone?: 'muted' | 'destructive'
+  spin?: boolean
+  live?: boolean
+  action?: React.ReactNode
+  children?: React.ReactNode
+}) => (
+  <Card
+    role={live ? 'status' : undefined}
+    className={cn('flex gap-4 p-5', tone === 'destructive' && 'border-destructive/40 bg-destructive/5')}
+  >
+    <span
+      className={cn(
+        'grid size-10 shrink-0 place-items-center rounded-full',
+        tone === 'destructive' ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground',
+      )}
+    >
+      <Icon className={cn('size-5', spin && 'animate-spin motion-reduce:animate-none')} aria-hidden />
+    </span>
+    <div className="min-w-0 text-sm">
+      <p className={cn('font-medium', tone === 'destructive' ? 'text-destructive' : 'text-foreground')}>{title}</p>
+      {children && <p className="mt-1 text-muted-foreground">{children}</p>}
+      {action && <div className="mt-3">{action}</div>}
+    </div>
+  </Card>
+)
+
+const OrderActions = ({ orderId, className }: { orderId: string; className?: string }) => (
+  <div className={cn('flex flex-col gap-3 sm:flex-row', className)}>
+    <Link href={`/conta/pedidos/${orderId}`} className={buttonVariants()}>
+      Acompanhar pedido
+    </Link>
+    <Link href="/" className={buttonVariants({ variant: 'neutral', emphasis: 'quiet' })}>
+      Continuar comprando
+    </Link>
+  </div>
+)
+
+const PaidHero = ({ order }: { order: CustomerOrder }) => {
+  const headingRef = useRef<HTMLHeadingElement>(null)
+
+  // O pagamento muda a tela inteira sem navegação: o foco no título faz o leitor
+  // de tela anunciar a confirmação e traz a página para o topo.
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [])
+
+  return (
+    <Card className="flex flex-col items-center px-6 py-8 text-center">
+      <span className="grid size-14 place-items-center rounded-full bg-success/10 text-success">
+        <CircleCheck className="size-7" aria-hidden />
+      </span>
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="mt-4 font-display text-3xl font-semibold tracking-tight outline-none md:text-4xl"
+      >
+        Pagamento confirmado!
+      </h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Pedido #{order.number} · você vai receber a confirmação em{' '}
+        <span className="font-medium text-foreground">{order.email}</span>.
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Estoque garantido — em breve preparamos seu envio.
+      </p>
+      <OrderActions orderId={order.id} className="mt-6 w-full sm:w-auto" />
+    </Card>
+  )
+}
 
 export default function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -139,9 +244,7 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     }
   }, [phase, id, markPaid])
 
-  if (authLoading || phase === 'loading') {
-    return <main className="mx-auto max-w-2xl px-4 py-12 text-center text-muted-foreground">Carregando…</main>
-  }
+  if (authLoading || phase === 'loading') return <PageSkeleton />
   if (phase === 'notfound') {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16 text-center">
@@ -154,116 +257,132 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
   }
   if (!order) return null
 
-  const a = order.shippingAddress
   const paid = phase === 'paid'
   const returnUrl =
     typeof window !== 'undefined' ? `${window.location.origin}/checkout/pedido/${id}` : ''
+  const itemCount = order.items.reduce((n, i) => n + i.quantity, 0)
+  const reload = () => window.location.reload()
+  const retry = () => {
+    startedPolling.current = false
+    setPhase('loading')
+    router.replace(`/checkout/pedido/${id}`)
+    // Recarrega para reabrir o pagamento do zero.
+    setTimeout(() => window.location.reload(), 0)
+  }
+  const retryButton = (label: string, onClick: () => void) => (
+    <button onClick={onClick} className={buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' })}>
+      {label}
+    </button>
+  )
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6 rounded-xl border border-border bg-card p-6 text-center shadow-soft">
-        <p className="text-3xl">{paid ? '✓' : '🛒'}</p>
-        <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
-          {paid ? `Pedido #${order.number} confirmado` : `Pedido #${order.number}`}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {phase === 'canceled' ? 'Pedido cancelado' : PAYMENT_LABEL[paid ? 'PAID' : order.paymentStatus]}
-        </p>
-      </div>
+    <main className="mx-auto max-w-6xl px-4 py-8 lg:py-10">
+      {!paid && <CheckoutSteps current="payment" />}
 
-      {/* Bloco de pagamento — o miolo do funil. */}
-      {phase === 'pay' && payment && (
-        <section className="mb-4 rounded-xl border border-border bg-card p-5 shadow-soft">
-          <h2 className="mb-4 font-medium">Pagamento</h2>
-          {payment.provider === 'MERCADO_PAGO' ? (
-            <MercadoPagoPayment
-              orderId={id}
-              payment={payment}
-              onPaid={markPaid}
-              onProcessing={waitConfirmation}
-            />
+      <div className={cn(GRID, !paid && 'mt-6')}>
+        <div className="flex min-w-0 flex-col gap-6">
+          {paid ? (
+            <PaidHero order={order} />
           ) : (
-            payment.clientSecret && <StripePayment payment={payment} returnUrl={returnUrl} />
+            <header>
+              <h1 className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
+                Finalize o pagamento
+              </h1>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span>Pedido #{order.number}</span>
+                <OrderSituationBadge situation={order.situation} />
+              </div>
+            </header>
           )}
-        </section>
-      )}
 
-      {phase === 'confirming' && (
-        <section className="mb-4 rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
-          <p className="animate-pulse">Confirmando seu pagamento…</p>
-          <p className="mt-1">Isso costuma levar poucos segundos. Você pode deixar esta página aberta.</p>
-        </section>
-      )}
+          {/* Bloco de pagamento — o miolo do funil. */}
+          {phase === 'pay' && payment && (
+            <section aria-labelledby="payment-title" className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h2 id="payment-title" className="text-lg font-medium">
+                  Forma de pagamento
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Total <span className="text-base font-semibold text-foreground">{formatBRL(order.total)}</span>
+                </p>
+              </div>
+              {payment.provider === 'MERCADO_PAGO' ? (
+                <MercadoPagoPayment
+                  orderId={id}
+                  payment={payment}
+                  onPaid={markPaid}
+                  onProcessing={waitConfirmation}
+                />
+              ) : (
+                payment.clientSecret && (
+                  <Card className="p-5">
+                    <StripePayment payment={payment} returnUrl={returnUrl} />
+                  </Card>
+                )
+              )}
+            </section>
+          )}
 
-      {phase === 'failed' && (
-        <section className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 p-5 text-sm">
-          <p className="text-destructive">Seu pagamento não foi aprovado.</p>
-          <button
-            onClick={() => {
-              startedPolling.current = false
-              setPhase('loading')
-              router.replace(`/checkout/pedido/${id}`)
-              // Recarrega para reabrir o pagamento do zero.
-              setTimeout(() => window.location.reload(), 0)
-            }}
-            className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet', size: 'sm' }), 'mt-3')}
-          >
-            Tentar novamente
-          </button>
-        </section>
-      )}
+          {phase === 'confirming' && (
+            <PhaseNotice icon={LoaderCircle} spin live title="Confirmando seu pagamento…">
+              Isso costuma levar poucos segundos. Você pode deixar esta página aberta.
+            </PhaseNotice>
+          )}
 
-      {phase === 'timeout' && (
-        <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
-          Ainda não recebemos a confirmação do pagamento. Assim que ele for aprovado, seu pedido
-          será atualizado — você pode recarregar esta página para verificar.
-        </section>
-      )}
+          {phase === 'failed' && (
+            <PhaseNotice
+              icon={CircleX}
+              tone="destructive"
+              title="Seu pagamento não foi aprovado."
+              action={retryButton('Tentar novamente', retry)}
+            />
+          )}
 
-      {phase === 'unavailable' && (
-        <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
-          O pagamento está indisponível no momento. Tente de novo em alguns minutos — seu pedido
-          continua reservado por enquanto.
-        </section>
-      )}
+          {phase === 'timeout' && (
+            <PhaseNotice
+              icon={Clock}
+              title="Ainda não recebemos a confirmação do pagamento."
+              action={retryButton('Atualizar', reload)}
+            >
+              Assim que ele for aprovado, seu pedido será atualizado — você pode recarregar esta página para
+              verificar.
+            </PhaseNotice>
+          )}
 
-      {phase === 'canceled' && (
-        <section className="mb-4 rounded-lg bg-muted p-4 text-center text-sm text-muted-foreground">
-          Este pedido foi cancelado e não pode mais ser pago.
-        </section>
-      )}
+          {phase === 'unavailable' && (
+            <PhaseNotice
+              icon={TriangleAlert}
+              title="O pagamento está indisponível no momento."
+              action={retryButton('Tentar novamente', reload)}
+            >
+              Tente de novo em alguns minutos — seu pedido continua reservado por enquanto.
+            </PhaseNotice>
+          )}
 
-      {paid && (
-        <section className="mb-4 rounded-lg bg-success/10 p-4 text-center text-sm text-success">
-          Pagamento confirmado e estoque garantido. Em breve preparamos seu envio.
-        </section>
-      )}
+          {/* Também se chega aqui por ORDER_NOT_PAYABLE ao abrir o pagamento, que
+              não é só cancelamento: o texto não afirma o motivo. */}
+          {phase === 'canceled' && <PhaseNotice icon={Ban} title="Este pedido não pode mais ser pago." />}
 
-      <div className="mb-6 flex flex-col gap-4">
-        <OrderItemList items={order.items} />
-        <OrderDeliveryCard address={a} method={order.shippingMethod} />
-        <OrderTotals
-          subtotal={order.subtotal}
-          shippingTotal={order.shippingTotal}
-          discountTotal={order.discountTotal}
-          total={order.total}
-          couponCode={order.couponCodeSnapshot}
-        />
-      </div>
+          {(phase === 'failed' || phase === 'timeout' || phase === 'unavailable' || phase === 'canceled') && (
+            <OrderActions orderId={order.id} />
+          )}
+        </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <Link
-          href={`/conta/pedidos/${order.id}`}
-          className={cn(buttonVariants(), 'flex-1')}
-        >
-          Acompanhar pedido
-        </Link>
-        <Link
-          href="/"
-          className={cn(buttonVariants({ variant: 'neutral', emphasis: 'quiet' }), 'flex-1')}
-        >
-          Continuar comprando
-        </Link>
+        <aside aria-label="Resumo do pedido" className="flex min-w-0 flex-col gap-4">
+          <OrderTotals
+            subtotal={order.subtotal}
+            shippingTotal={order.shippingTotal}
+            discountTotal={order.discountTotal}
+            total={order.total}
+            couponCode={order.couponCodeSnapshot}
+          />
+          {/* Sem link para o produto: no meio do pagamento, todo link é uma saída. */}
+          <OrderItemList
+            items={order.items.map((i) => ({ ...i, productSlug: null }))}
+            title={`Itens (${itemCount})`}
+          />
+          <OrderDeliveryCard address={order.shippingAddress} method={order.shippingMethod} />
+        </aside>
       </div>
     </main>
   )

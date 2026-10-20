@@ -1,4 +1,5 @@
 import { Barcode, CreditCard, QrCode } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 /**
  * Formas de pagamento do rodapé. Chips monocromáticos com tokens do tema —
@@ -32,5 +33,16 @@ export const PaymentMethods = () => (
       <CreditCard className="size-3.5" aria-hidden />
       ELO
     </li>
+  </ul>
+)
+
+/** Bandeiras aceitas no cartão, no mesmo chip do rodapé. */
+export const CardBrands = ({ className }: { className?: string }) => (
+  <ul className={cn('flex flex-wrap gap-1.5', className)} aria-label="Bandeiras aceitas">
+    {['VISA', 'MASTERCARD', 'ELO', 'AMEX'].map((brand) => (
+      <li key={brand} className={CHIP}>
+        {brand}
+      </li>
+    ))}
   </ul>
 )

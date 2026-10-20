@@ -4,6 +4,8 @@ import { getStore, getCategoryTree } from '@/lib/catalog'
 import { SiteHeader } from '@/components/site-header'
 import { SiteFooter } from '@/components/site-footer'
 import { AnnouncementBar } from '@/components/announcement-bar'
+import { CheckoutFooter, CheckoutHeader } from '@/components/checkout-chrome'
+import { StoreChrome } from '@/components/store-chrome'
 import { Providers } from '@/components/providers'
 import { ThemeStyle } from '@/components/theme-style'
 import './globals.css'
@@ -56,11 +58,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       {store?.theme && <ThemeStyle theme={store.theme} />}
       <body className={`${cormorant.variable} ${figtree.variable} flex min-h-svh flex-col font-sans`}>
         <Providers>
-          {/* Fora do header sticky de propósito: a barra rola com a página. */}
-          <AnnouncementBar />
-          <SiteHeader storeName={storeName} logoUrl={logoUrl} categories={categories} />
-          <div className="flex-1">{children}</div>
-          <SiteFooter store={store} logoUrl={logoUrl} />
+          <StoreChrome
+            header={
+              <>
+                {/* Fora do header sticky de propósito: a barra rola com a página. */}
+                <AnnouncementBar />
+                <SiteHeader storeName={storeName} logoUrl={logoUrl} categories={categories} />
+              </>
+            }
+            footer={<SiteFooter store={store} logoUrl={logoUrl} />}
+            checkoutHeader={<CheckoutHeader storeName={storeName} logoUrl={logoUrl} />}
+            checkoutFooter={<CheckoutFooter store={store} />}
+          >
+            {children}
+          </StoreChrome>
         </Providers>
       </body>
     </html>

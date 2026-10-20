@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronDown, Lock, MessageSquare, Plus, TicketPercent } from 'lucide-react'
 import type { Address, AppliedCoupon, ShippingOption } from '@ecommerce/shared/contracts'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
@@ -13,6 +14,10 @@ import { validateCoupon, couponErrorMessage, isCouponError } from '@/lib/coupons
 import { formatBRL, cn, maskCep } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
 import { buttonVariants } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { RadioCard } from '@/components/ui/radio-card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { CheckoutSteps } from '@/components/checkout-steps'
 import { ProductImage } from '@/components/product-image'
 import { AddressForm } from '@/components/address-form'
 
@@ -30,6 +35,26 @@ import { AddressForm } from '@/components/address-form'
 const pickAddress = (list: Address[], cep: string | null): Address | undefined =>
   list.find((a) => a.zipCode === cep) ?? list.find((a) => a.isDefault) ?? list[0]
 
+const GRID = 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start lg:gap-10'
+
+const SectionTitle = ({ id, step, children }: { id: string; step: number; children: React.ReactNode }) => (
+  <h2 id={id} className="mb-4 flex items-center gap-2.5 text-lg font-medium">
+    <span
+      className="grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
+      aria-hidden
+    >
+      {step}
+    </span>
+    {children}
+  </h2>
+)
+
+const EmptyNote = ({ children }: { children: React.ReactNode }) => (
+  <p className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+    {children}
+  </p>
+)
+
 export default function CheckoutPage() {
   const { customer, loading: authLoading } = useAuth()
   const { cart, loading: cartLoading } = useCart()
@@ -46,10 +71,12 @@ export default function CheckoutPage() {
   const [options, setOptions] = useState<ShippingOption[] | null>(null)
   const [serviceId, setServiceId] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  const [noteOpen, setNoteOpen] = useState(false)
   const [quoting, setQuoting] = useState(false)
   const [quoteError, setQuoteError] = useState<string | null>(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [couponOpen, setCouponOpen] = useState(false)
   const [couponInput, setCouponInput] = useState('')
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
   const [couponError, setCouponError] = useState<string | null>(null)
@@ -167,6 +194,7 @@ export default function CheckoutPage() {
       : coupon.discountCents
   const total = subtotal + shippingPrice - couponDiscount
   const freeShippingAlready = coupon?.type === 'FREE_SHIPPING' && !!selectedShipping && shippingPrice === 0
+  const itemCount = items.reduce((n, i) => n + i.quantity, 0)
 
   const applyCoupon = async () => {
     const code = couponInput.trim()
@@ -200,6 +228,7 @@ export default function CheckoutPage() {
       // resumo para o cliente ver o total novo antes de confirmar de novo.
       if (isCouponError(err)) {
         setCoupon(null)
+        setCouponOpen(true)
         setCouponError(couponErrorMessage(err))
         setError('O cupom não pôde ser usado e foi removido. Confira o novo total.')
       } else {
@@ -210,219 +239,312 @@ export default function CheckoutPage() {
   }
 
   if (authLoading || cartLoading) {
-    return <main className="mx-auto max-w-2xl px-4 py-12 text-center text-muted-foreground">Carregando…</main>
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-8 lg:py-10" aria-busy="true">
+        <Skeleton className="h-6 w-64" />
+        <div className={cn(GRID, 'mt-6')}>
+          <div className="flex flex-col gap-4">
+            <Skeleton className="h-10 w-60" />
+            <Skeleton className="h-20" />
+            <Skeleton className="h-20" />
+          </div>
+          <Skeleton className="h-96" />
+        </div>
+        <span className="sr-only">Carregando…</span>
+      </main>
+    )
   }
   if (!customer || items.length === 0) return null
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10">
-      <h1 className="mb-6 font-display text-3xl font-semibold tracking-tight">Finalizar compra</h1>
+    <main className="mx-auto max-w-6xl px-4 py-8 lg:py-10">
+      <CheckoutSteps current="delivery" />
+      <h1 className="mt-6 font-display text-3xl font-semibold tracking-tight md:text-4xl">Finalizar compra</h1>
 
-      {/* Endereço */}
-      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
-        <h2 className="mb-3 font-medium">Endereço de entrega</h2>
-        {!addresses ? (
-          <p className="text-sm text-muted-foreground">Carregando endereços…</p>
-        ) : formOpen ? (
-          <AddressForm
-            key={formKey}
-            defaults={formDefaults}
-            minimal
-            submitLabel="Usar este endereço"
-            onSaved={onAddressSaved}
-            onZipCodeChange={setFormZip}
-            onCancel={addresses.length > 0 ? cancelForm : undefined}
-          />
-        ) : (
-          <>
-            <ul className="flex flex-col gap-2">
-              {addresses.map((a) => (
-                <li key={a.id}>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-secondary/40">
-                    <input
-                      type="radio"
+      <div className={cn(GRID, 'mt-6')}>
+        <div className="flex min-w-0 flex-col gap-8">
+          {/* Endereço */}
+          <section aria-labelledby="address-title">
+            <SectionTitle id="address-title" step={1}>
+              Endereço de entrega
+            </SectionTitle>
+            {!addresses ? (
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-20" />
+                <Skeleton className="h-20" />
+              </div>
+            ) : formOpen ? (
+              <Card className="p-5">
+                <AddressForm
+                  key={formKey}
+                  defaults={formDefaults}
+                  minimal
+                  submitLabel="Usar este endereço"
+                  onSaved={onAddressSaved}
+                  onZipCodeChange={setFormZip}
+                  onCancel={addresses.length > 0 ? cancelForm : undefined}
+                />
+              </Card>
+            ) : (
+              <>
+                <fieldset className="flex min-w-0 flex-col gap-3">
+                  <legend className="sr-only">Endereço de entrega</legend>
+                  {addresses.map((a) => (
+                    <RadioCard
+                      key={a.id}
                       name="address"
                       checked={addressId === a.id}
-                      onChange={() => selectAddress(a)}
-                      className="mt-0.5"
+                      onSelect={() => selectAddress(a)}
+                      title={a.label || a.recipient}
+                      description={
+                        <>
+                          {a.street}, {a.number}
+                          {a.complement ? ` — ${a.complement}` : ''} · {a.district}
+                          <br />
+                          {a.city}/{a.state} · CEP {maskCep(a.zipCode)}
+                        </>
+                      }
                     />
-                    <span>
-                      <span className="font-medium">{a.label || a.recipient}</span>
-                      <span className="block text-muted-foreground">
-                        {a.street}, {a.number}
-                        {a.complement ? ` — ${a.complement}` : ''} · {a.district} · {a.city}/{a.state} ·{' '}
-                        {maskCep(a.zipCode)}
-                      </span>
+                  ))}
+                </fieldset>
+                <button
+                  type="button"
+                  onClick={() => openForm(unmatchedCep)}
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary-ink hover:underline"
+                >
+                  <Plus className="size-4" aria-hidden />
+                  {unmatchedCep ? `Entregar no CEP ${maskCep(unmatchedCep)}` : 'Entregar em outro endereço'}
+                </button>
+              </>
+            )}
+          </section>
+
+          {/* Frete */}
+          <section aria-labelledby="shipping-title">
+            <SectionTitle id="shipping-title" step={2}>
+              Forma de entrega
+            </SectionTitle>
+            {quoting ? (
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-16" />
+                <Skeleton className="h-16" />
+                <span className="sr-only" role="status">
+                  Calculando frete…
+                </span>
+              </div>
+            ) : quoteError ? (
+              <p role="alert" className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {quoteError}
+              </p>
+            ) : !options ? (
+              <EmptyNote>
+                {formOpen ? 'Informe o CEP para ver o frete.' : 'Escolha um endereço para ver o frete.'}
+              </EmptyNote>
+            ) : options.length === 0 ? (
+              <EmptyNote>Nenhuma opção de frete para este endereço.</EmptyNote>
+            ) : (
+              <fieldset className="flex min-w-0 flex-col gap-3">
+                <legend className="sr-only">Forma de entrega</legend>
+                {options.map((o) => (
+                  <RadioCard
+                    key={o.id}
+                    name="shipping"
+                    checked={serviceId === o.id}
+                    onSelect={() => setServiceId(o.id)}
+                    title={`${o.carrier} · ${o.service}`}
+                    description={`Chega em até ${o.deliveryDays} ${o.deliveryDays === 1 ? 'dia útil' : 'dias úteis'}`}
+                    aside={
+                      o.priceCents === 0 ? (
+                        <span className="font-medium text-success">Grátis</span>
+                      ) : (
+                        <span className="font-medium">{formatBRL(o.priceCents)}</span>
+                      )
+                    }
+                  />
+                ))}
+              </fieldset>
+            )}
+          </section>
+
+          {/* Observação */}
+          <div className="rounded-lg border border-border bg-card">
+            <button
+              type="button"
+              onClick={() => setNoteOpen((v) => !v)}
+              aria-expanded={noteOpen}
+              aria-controls="order-note"
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium"
+            >
+              <MessageSquare className="size-4 shrink-0 text-primary-ink" aria-hidden />
+              Adicionar observação para a loja
+              <span className="font-normal text-muted-foreground">(opcional)</span>
+              <ChevronDown
+                className={cn('ml-auto size-4 shrink-0 text-muted-foreground transition-transform', noteOpen && 'rotate-180')}
+                aria-hidden
+              />
+            </button>
+            <div id="order-note" hidden={!noteOpen} className="border-t border-border p-4">
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                maxLength={500}
+                aria-label="Observação para a loja"
+                placeholder="Ex.: é para presente, embalar com cuidado."
+                className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Resumo */}
+        <aside aria-labelledby="summary-title" className="lg:sticky lg:top-8">
+          <Card className="p-5">
+            <h2 id="summary-title" className="text-lg font-medium">
+              Resumo do pedido
+            </h2>
+
+            {/* pt-2/pr-2: o selo de quantidade sai da miniatura e a rolagem o cortaria. */}
+            <ul className="mt-2 flex max-h-64 flex-col gap-3 overflow-y-auto pr-2 pt-2 text-sm">
+              {items.map((i) => (
+                <li key={i.id} className="flex items-center gap-3">
+                  <div className="relative shrink-0">
+                    <div className="relative size-14 overflow-hidden rounded-lg bg-muted">
+                      <ProductImage src={i.imageUrl} alt={i.productName} fit="cover" sizes="56px" />
+                    </div>
+                    <span className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-btn-primary text-xs font-semibold text-btn-primary-foreground">
+                      {i.quantity}
                     </span>
-                  </label>
+                  </div>
+                  <span className="line-clamp-2 min-w-0 flex-1">{i.productName}</span>
+                  <span className="shrink-0 font-medium">{formatBRL(i.lineTotal)}</span>
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              onClick={() => openForm(unmatchedCep)}
-              className="mt-3 text-sm text-primary-ink hover:underline"
-            >
-              {unmatchedCep ? `Entregar no CEP ${maskCep(unmatchedCep)}` : 'Entregar em outro endereço'}
-            </button>
-          </>
-        )}
-      </section>
 
-      {/* Frete */}
-      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
-        <h2 className="mb-3 font-medium">Frete</h2>
-        {quoting ? (
-          <p className="text-sm text-muted-foreground">Calculando frete…</p>
-        ) : quoteError ? (
-          <p className="text-sm text-destructive">{quoteError}</p>
-        ) : !options ? (
-          <p className="text-sm text-muted-foreground">
-            {formOpen ? 'Informe o CEP para ver o frete.' : 'Escolha um endereço para ver o frete.'}
-          </p>
-        ) : options.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma opção de frete para este endereço.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {options.map((o) => (
-              <li key={o.id}>
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-secondary/40">
-                  <span className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name="shipping"
-                      checked={serviceId === o.id}
-                      onChange={() => setServiceId(o.id)}
-                    />
-                    {o.carrier} · {o.service}
+            <div className="mt-4 border-t border-border pt-4">
+              {coupon ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm">
+                  <span className="flex items-center gap-1.5">
+                    <TicketPercent className="size-4 shrink-0 text-success" aria-hidden />
+                    Cupom <span className="font-medium">{coupon.code}</span> aplicado
                   </span>
-                  <span className="whitespace-nowrap text-muted-foreground">
-                    {formatBRL(o.priceCents)} · {o.deliveryDays} dias
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Resumo */}
-      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-soft">
-        <h2 className="mb-3 font-medium">Resumo</h2>
-        <ul className="mb-3 flex flex-col gap-3 text-sm">
-          {items.map((i) => (
-            <li key={i.id} className="flex items-center gap-3">
-              <div className="relative size-12 shrink-0 overflow-hidden rounded-md bg-muted">
-                <ProductImage src={i.imageUrl} alt={i.productName} fit="cover" sizes="48px" />
-              </div>
-              <span className="min-w-0 flex-1 text-muted-foreground">
-                {i.quantity}× {i.productName}
-              </span>
-              <span>{formatBRL(i.lineTotal)}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mb-3 border-t border-border pt-3">
-          {coupon ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-success/10 px-3 py-2 text-sm">
-              <span>
-                Cupom <span className="font-medium">{coupon.code}</span> aplicado
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setCoupon(null)
-                  setCouponError(null)
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-              >
-                Remover
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCoupon(null)
+                      setCouponError(null)
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ) : couponOpen ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void applyCoupon()
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                    placeholder="Código do cupom"
+                    aria-label="Cupom de desconto"
+                    autoComplete="off"
+                    autoFocus
+                    maxLength={30}
+                    className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-sm uppercase outline-none transition-colors placeholder:normal-case focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!couponInput.trim() || applyingCoupon}
+                    className={buttonVariants({ variant: 'neutral', emphasis: 'quiet' })}
+                  >
+                    {applyingCoupon ? 'Aplicando…' : 'Aplicar'}
+                  </button>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setCouponOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-ink hover:underline"
+                >
+                  <TicketPercent className="size-4" aria-hidden />
+                  Tem um cupom de desconto?
+                </button>
+              )}
+              {couponError && (
+                <p role="alert" className="mt-1.5 text-xs text-destructive">
+                  {couponError}
+                </p>
+              )}
+              {freeShippingAlready && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  O frete deste pedido já é grátis, então o cupom não muda o total.
+                </p>
+              )}
             </div>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void applyCoupon()
-              }}
-              className="flex gap-2"
+
+            <dl className="mt-4 flex flex-col gap-1.5 border-t border-border pt-4 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">
+                  Subtotal ({itemCount} {itemCount === 1 ? 'item' : 'itens'})
+                </dt>
+                <dd>{formatBRL(subtotal)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Frete</dt>
+                <dd>
+                  {!selectedShipping ? (
+                    '—'
+                  ) : shippingPrice === 0 ? (
+                    <span className="text-success">Grátis</span>
+                  ) : (
+                    formatBRL(shippingPrice)
+                  )}
+                </dd>
+              </div>
+              {coupon && couponDiscount > 0 && (
+                <div className="flex justify-between gap-3 text-success">
+                  <dt>Desconto ({coupon.code})</dt>
+                  <dd>−{formatBRL(couponDiscount)}</dd>
+                </div>
+              )}
+              <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-border pt-3">
+                <dt className="font-medium">Total</dt>
+                <dd className="text-xl font-semibold tracking-tight">{formatBRL(total)}</dd>
+              </div>
+            </dl>
+
+            {error && (
+              <p role="alert" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            <button
+              onClick={() => void place()}
+              disabled={!addressId || !serviceId || placing || formOpen}
+              className={cn(buttonVariants({ size: 'lg' }), 'mt-5 w-full')}
             >
-              <input
-                value={couponInput}
-                onChange={(e) => setCouponInput(e.target.value)}
-                placeholder="Cupom de desconto"
-                aria-label="Cupom de desconto"
-                autoComplete="off"
-                maxLength={30}
-                className="h-10 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-sm uppercase outline-none transition-colors placeholder:normal-case focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-              />
-              <button
-                type="submit"
-                disabled={!couponInput.trim() || applyingCoupon}
-                className={buttonVariants({ variant: 'neutral', emphasis: 'quiet' })}
-              >
-                {applyingCoupon ? 'Aplicando…' : 'Aplicar'}
-              </button>
-            </form>
-          )}
-          {couponError && (
-            <p role="alert" className="mt-1.5 text-xs text-destructive">
-              {couponError}
+              {placing ? 'Finalizando…' : 'Ir para o pagamento'}
+            </button>
+            <p className="mt-3 flex items-start justify-center gap-1.5 text-center text-xs text-muted-foreground">
+              {formOpen ? (
+                'Salve o endereço de entrega para continuar.'
+              ) : (
+                <>
+                  <Lock className="mt-px size-3.5 shrink-0" aria-hidden />
+                  Na próxima etapa: Pix ou cartão de crédito, em ambiente seguro.
+                </>
+              )}
             </p>
-          )}
-          {freeShippingAlready && (
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              O frete deste pedido já é grátis, então o cupom não muda o total.
-            </p>
-          )}
-        </div>
-
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Subtotal</span>
-          <span>{formatBRL(subtotal)}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Frete</span>
-          <span>{selectedShipping ? formatBRL(selectedShipping.priceCents) : '—'}</span>
-        </div>
-        {coupon && couponDiscount > 0 && (
-          <div className="flex justify-between text-sm text-success">
-            <span>Desconto ({coupon.code})</span>
-            <span>−{formatBRL(couponDiscount)}</span>
-          </div>
-        )}
-        <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-semibold">
-          <span>Total</span>
-          <span>{formatBRL(total)}</span>
-        </div>
-
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={2}
-          maxLength={500}
-          placeholder="Observação para a loja (opcional)"
-          className="mt-4 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
-        />
-      </section>
-
-      {error && (
-        <p role="alert" className="mb-4 rounded-lg bg-destructive/10 px-4 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      <button
-        onClick={() => void place()}
-        disabled={!addressId || !serviceId || placing || formOpen}
-        className={cn(buttonVariants({ size: 'lg' }), 'w-full')}
-      >
-        {placing ? 'Finalizando…' : `Confirmar pedido · ${formatBRL(total)}`}
-      </button>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        {formOpen ? 'Salve o endereço de entrega para continuar.' : 'O pagamento entra na próxima etapa.'}
-      </p>
+          </Card>
+        </aside>
+      </div>
     </main>
   )
 }

@@ -112,7 +112,7 @@ export const OrderTotals = ({
     </div>
     <div className="mt-1 flex justify-between">
       <span className="text-muted-foreground">Frete</span>
-      <span>{formatBRL(shippingTotal)}</span>
+      {shippingTotal === 0 ? <span className="text-success">Grátis</span> : <span>{formatBRL(shippingTotal)}</span>}
     </div>
     {/* Só aparece quando houve desconto: uma linha "Desconto R$ 0,00" é ruído
         que faz o cliente procurar um desconto que não existe. */}
