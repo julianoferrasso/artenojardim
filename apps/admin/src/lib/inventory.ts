@@ -15,6 +15,17 @@ export const useStock = (lowStock: boolean) =>
       apiFetchPaginated<StockItem>(`${ROUTES.inventory.list}?perPage=100${lowStock ? '&lowStock=true' : ''}`),
   })
 
+/**
+ * Quantas variações estão com estoque baixo — a mesma régua da tela de Estoque
+ * (`lowStock`), para o número do painel bater com a lista que ele abre.
+ */
+export const useLowStockCount = () =>
+  useQuery({
+    queryKey: ['inventory', 'low-stock-count'],
+    queryFn: () => apiFetchPaginated<StockItem>(`${ROUTES.inventory.list}?perPage=1&lowStock=true`),
+    select: (result) => result.meta.total,
+  })
+
 /** Estoque é contagem de peças: inteiro, nunca negativo. */
 export const toStock = (raw: string): number => Math.max(0, Math.trunc(Number(raw) || 0))
 

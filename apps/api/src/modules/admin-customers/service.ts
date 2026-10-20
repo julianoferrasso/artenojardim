@@ -15,7 +15,7 @@ import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { conflict, notFound } from '../../shared/errors.js'
 import { revokeAllSessions } from '../../shared/refresh-tokens.js'
 import { anonymizeCustomerData } from '../../shared/anonymize-customer.js'
-import { ERROR_CODES } from '@ecommerce/shared/contracts'
+import { ERROR_CODES, SALE_PAYMENT_STATUSES } from '@ecommerce/shared/contracts'
 import {
   ADDRESS_SELECT,
   DETAIL_SELECT,
@@ -24,6 +24,16 @@ import {
   toListItem,
   type DetailRow,
 } from './repository.js'
+
+/**
+ * O recorte de venda do dashboard: pago (inclusive parcialmente reembolsado) e
+ * não cancelado. Antes o pedido pago e depois cancelado entrava no "gastou" do
+ * cliente. O total aqui é bruto — o reembolso parcial só o painel desconta.
+ */
+const SALE_WHERE = {
+  paymentStatus: { in: [...SALE_PAYMENT_STATUSES] },
+  canceledAt: null,
+} satisfies Prisma.OrderWhereInput
 
 /** Só dígitos — para buscar CPF/telefone que podem estar gravados com máscara. */
 const onlyDigits = (value: string): string => value.replace(/\D/g, '')
@@ -89,7 +99,7 @@ const statsFor = async (customerIds: string[]): Promise<Map<string, AdminCustome
     where: {
       storeId: getActiveStoreId(),
       customerId: { in: customerIds },
-      paymentStatus: 'PAID',
+      ...SALE_WHERE,
     },
     _sum: { total: true },
     _count: { _all: true },
@@ -154,7 +164,7 @@ export const getCustomer = async (id: string): Promise<AdminCustomer> => {
 
   const [agg, addresses, views, activeSessions, lastSession, cart, newsletter] = await Promise.all([
     prisma.order.aggregate({
-      where: { storeId, customerId: id, paymentStatus: 'PAID' },
+      where: { storeId, customerId: id, ...SALE_WHERE },
       _sum: { total: true },
       _count: { _all: true },
       _max: { createdAt: true },

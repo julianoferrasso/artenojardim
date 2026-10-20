@@ -205,6 +205,13 @@ export const campaignSendLimiter = build({ name: 'campaign-send', windowMs: 60 *
 export const productViewLimiter = build({ name: 'product-view', windowMs: 60_000, max: 60 })
 
 /**
+ * Abertura de sessão na loja. Um navegador manda no máximo uma a cada 30 min, então
+ * o teto só aperta para quem forja visitas — e ainda cabe um escritório inteiro
+ * atrás do mesmo NAT abrindo a loja ao mesmo tempo.
+ */
+export const visitLimiter = build({ name: 'visit', windowMs: 60_000, max: 30 })
+
+/**
  * Ações do cliente sobre o próprio pedido.
  *
  * Escopo por CLIENTE e não por IP: estas rotas estão atrás de

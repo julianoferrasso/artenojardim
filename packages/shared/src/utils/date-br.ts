@@ -58,6 +58,17 @@ const WEEKDAY_INDEX: Record<string, number> = {
 export const spDayKey = (instant: Date): DayKey => KEY_FORMATTER.format(instant)
 
 /**
+ * 'YYYY-MM-DDTHH': o dia E a hora da parede brasileira. É a chave do gráfico por
+ * hora e da coluna `hour` das visitas — as duas precisam virar a hora no mesmo
+ * lugar, senão o pedido das 23h cai numa barra e a visita das 23h noutra.
+ */
+export const spHourKey = (instant: Date): string => {
+  const parts = PARTS_FORMATTER.formatToParts(instant)
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '00'
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}`
+}
+
+/**
  * Quanto o fuso estava adiantado/atrasado em relação ao UTC NAQUELE instante,
  * em milissegundos. Medido, não assumido — é o que dispensa tabela de offsets.
  */

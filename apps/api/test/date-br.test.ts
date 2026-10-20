@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   spDayKey,
+  spHourKey,
   spDayStart,
   spDayEnd,
   spDayAsDateColumn,
@@ -26,6 +27,22 @@ describe('spDayKey — a fronteira do dia', () => {
 
   it('meio-dia UTC é o mesmo dia nos dois fusos', () => {
     expect(spDayKey(new Date('2026-07-20T12:00:00.000Z'))).toBe('2026-07-20')
+  })
+})
+
+describe('spHourKey — a hora da parede brasileira', () => {
+  it('23h de Brasília é a última hora do dia anterior', () => {
+    expect(spHourKey(new Date('2026-10-20T02:30:00.000Z'))).toBe('2026-10-19T23')
+  })
+
+  it('meia-noite de Brasília é a hora 00, nunca 24', () => {
+    expect(spHourKey(new Date('2026-10-20T03:00:00.000Z'))).toBe('2026-10-20T00')
+  })
+
+  it('concorda com spDayKey sobre o dia', () => {
+    const instante = new Date('2026-10-20T17:45:00.000Z')
+    expect(spHourKey(instante)).toBe('2026-10-20T14')
+    expect(spHourKey(instante).slice(0, 10)).toBe(spDayKey(instante))
   })
 })
 

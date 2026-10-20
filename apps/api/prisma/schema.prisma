@@ -177,6 +177,7 @@ model Store {
   movements             InventoryMovement[]
   carts                 Cart[]
   orders                Order[]
+  storeVisits           StoreVisit[]
   newsletterSubscribers NewsletterSubscriber[]
   emailCampaigns        EmailCampaign[]
   banners               Banner[]
@@ -508,6 +509,34 @@ model ProductView {
 
   @@unique([storeId, productId, date])
   @@index([storeId, date])
+}
+
+/// Visitas à loja agregadas por HORA, origem e dispositivo (rollup, como o
+/// ProductView acima). Uma visita = uma sessão do navegador: 30 min sem
+/// atividade ou a virada do dia encerram. É o denominador da taxa de conversão.
+///
+/// Não guarda QUEM visitou — nem IP, nem user-agent, nem id de visitante; só o
+/// contador. É o que dispensa banner de consentimento para esta métrica.
+///
+/// `hour` existe para o gráfico de "hoje" e para comparar com ontem até a mesma
+/// hora; sem ela, o dia em curso seria comparado com o dia anterior inteiro.
+/// `source`/`device` são texto (VISIT_SOURCES/VISIT_DEVICES nos contratos):
+/// acrescentar uma origem não exige migration.
+model StoreVisit {
+  id      String   @id @default(cuid())
+  storeId String
+  /// Dia BRASILEIRO da visita.
+  date    DateTime @db.Date
+  /// Hora da parede brasileira, 0–23.
+  hour    Int
+  source  String
+  device  String
+  count   Int      @default(0)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// Também serve o filtro por loja + intervalo de datas (prefixo do índice).
+  @@unique([storeId, date, hour, source, device])
 }
 
 /// Visita de um cliente IDENTIFICADO a um produto. COMPLEMENTA o ProductView

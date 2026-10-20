@@ -148,8 +148,9 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between border-b border-border bg-card px-6">
-          {/* Navegação enxuta no mobile, onde a sidebar some. */}
-          <nav className="flex items-center gap-1 md:hidden">
+          {/* Navegação enxuta no mobile, onde a sidebar some. Rola sozinha: são
+              ícones demais para 390px, e sem isso a página inteira rolava de lado. */}
+          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto md:hidden">
             {nav.map((item) => {
               const Icon = item.icon
               const count = countOf(item)
@@ -175,7 +176,7 @@ export const AppShell = ({ children }: { children: React.ReactNode }) => {
               )
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-4">
+          <div className="ml-auto flex shrink-0 items-center gap-4 pl-3">
             <div className="flex flex-col items-end leading-tight">
               <span className="text-sm">{user?.name}</span>
               <span className="text-xs text-muted-foreground">{user?.role}</span>

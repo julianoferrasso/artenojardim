@@ -27,6 +27,8 @@ export type OrderListParams = {
   customerId?: string | undefined
   sort?: string | undefined
   page?: number | undefined
+  /** O dashboard pede 1 (só quer o total) ou poucos (últimos pedidos). */
+  perPage?: number | undefined
 }
 
 export const useOrders = (params: OrderListParams) =>
@@ -35,7 +37,7 @@ export const useOrders = (params: OrderListParams) =>
     queryFn: () => {
       const qs = new URLSearchParams()
       qs.set('page', String(params.page ?? 1))
-      qs.set('perPage', '20')
+      qs.set('perPage', String(params.perPage ?? 20))
       if (params.situation) qs.set('situation', params.situation)
       if (params.q) qs.set('q', params.q)
       if (params.from) qs.set('from', params.from)

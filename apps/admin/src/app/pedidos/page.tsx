@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
-import type { OrderSituation } from '@ecommerce/shared/contracts'
+import { useSearchParams } from 'next/navigation'
+import { ORDER_SITUATIONS, type OrderSituation } from '@ecommerce/shared/contracts'
+import { isDayKey } from '@ecommerce/shared/utils'
 import {
   Table,
   TableBody,
@@ -32,11 +34,29 @@ import { formatBRL, formatDate } from '@/lib/utils'
 /** Sentinela do Select: Radix não aceita SelectItem com value="". */
 const ALL = 'all'
 
+/**
+ * Suspense: a tela lê o filtro inicial da URL — os atalhos do dashboard abrem
+ * com `?situacao=PAID` ou com o período (`?de=…&ate=…`). Valor inválido é ignorado.
+ */
 export default function OrdersPage() {
-  const [situation, setSituation] = useState<string>(ALL)
+  return (
+    <Suspense>
+      <OrdersView />
+    </Suspense>
+  )
+}
+
+const initialSituation = (value: string | null): string =>
+  value && (ORDER_SITUATIONS as readonly string[]).includes(value) ? value : ALL
+
+const initialDay = (value: string | null): string => (value && isDayKey(value) ? value : '')
+
+function OrdersView() {
+  const searchParams = useSearchParams()
+  const [situation, setSituation] = useState<string>(initialSituation(searchParams.get('situacao')))
   const [q, setQ] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [from, setFrom] = useState(initialDay(searchParams.get('de')))
+  const [to, setTo] = useState(initialDay(searchParams.get('ate')))
   const [sort, setSort] = useState('-createdAt')
   const [page, setPage] = useState(1)
 

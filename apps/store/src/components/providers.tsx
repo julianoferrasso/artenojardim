@@ -7,6 +7,7 @@ import { CartProvider } from '@/lib/cart'
 import { FavoritesProvider } from '@/lib/favorites'
 import { ShippingCepProvider } from '@/lib/shipping-cep'
 import { MiniCart } from '@/components/mini-cart'
+import { VisitBeacon } from '@/components/visit-beacon'
 import { ApiError } from '@/lib/api'
 
 /**
@@ -53,6 +54,8 @@ export const Providers = ({ children }: { children: ReactNode }) => {
               {children}
               {/* Uma instância só, no topo: retorna null enquanto fechado. */}
               <MiniCart />
+              {/* Conta a sessão (visita) para a taxa de conversão do painel. */}
+              <VisitBeacon />
             </ShippingCepProvider>
           </FavoritesProvider>
         </CartProvider>

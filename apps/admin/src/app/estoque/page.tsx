@@ -1,13 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { StockItem } from '@ecommerce/shared/contracts'
 import { useStock } from '@/lib/inventory'
 import { LedgerDrawer } from '@/components/ledger-drawer'
 import { cn } from '@/lib/utils'
 
+/** Suspense: a tela lê o filtro inicial da URL (o atalho do dashboard abre com `?baixo=1`). */
 export default function StockPage() {
-  const [lowStock, setLowStock] = useState(false)
+  return (
+    <Suspense>
+      <StockView />
+    </Suspense>
+  )
+}
+
+function StockView() {
+  const searchParams = useSearchParams()
+  const [lowStock, setLowStock] = useState(searchParams.get('baixo') === '1')
   const { data, isLoading, error } = useStock(lowStock)
   const [selected, setSelected] = useState<StockItem | null>(null)
 

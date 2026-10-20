@@ -69,6 +69,19 @@ export const deriveSituation = (o: SituationInput): OrderSituation => {
 }
 
 /**
+ * O que conta como VENDA em todo número do admin (dashboard, LTV do cliente).
+ *
+ * PARTIALLY_REFUNDED fica dentro: o cliente devolveu uma parte, mas a venda
+ * aconteceu — tirá-la inteira da receita (o que o painel fazia) some com o
+ * dinheiro que ficou. Cancelado fica fora mesmo pago: o dinheiro está de saída
+ * pelo estorno. REFUNDED total também fica fora, cancelado ou não.
+ */
+export const SALE_PAYMENT_STATUSES = ['PAID', 'PARTIALLY_REFUNDED'] as const satisfies readonly PaymentStatus[]
+
+export const isSale = (o: { canceledAt: string | Date | null; paymentStatus: PaymentStatus }): boolean =>
+  !o.canceledAt && (SALE_PAYMENT_STATUSES as readonly PaymentStatus[]).includes(o.paymentStatus)
+
+/**
  * Inverso de `deriveSituation`: descritor NEUTRO (sem Prisma) que o service
  * traduz em `where`. Fica aqui, e não no service, para nascer e morrer junto da
  * função que deriva — mudar uma sem a outra é o bug que este arquivo evita.

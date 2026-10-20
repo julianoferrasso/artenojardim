@@ -19,6 +19,7 @@ import { adminCustomerRoutes } from './modules/admin-customers/routes.js'
 import { campaignRoutes } from './modules/campaigns/routes.js'
 import { adminUserRoutes } from './modules/admin-users/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
+import { visitRoutes } from './modules/visits/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
 import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
 import { adminAlertRoutes } from './modules/alerts/routes.js'
@@ -73,6 +74,8 @@ apiRoutes.use('/admin/alerts', adminAlertRoutes)
 apiRoutes.use('/admin/coupons', adminCouponRoutes)
 apiRoutes.use('/coupons', couponRoutes)
 apiRoutes.use('/product-views', productViewRoutes)
+// Abertura de sessão na loja (denominador da conversão). Pública, sem identificar ninguém.
+apiRoutes.use('/visits', visitRoutes)
 apiRoutes.use('/dashboard', dashboardRoutes)
 apiRoutes.use('/store', storeRoutes)
 apiRoutes.use('/newsletter', newsletterRoutes)
