@@ -76,7 +76,10 @@ export function PixPayment({
       setNow(Date.now())
     } catch (err) {
       if (err instanceof ApiError && err.code === 'ORDER_NOT_PAYABLE') {
-        onPaid()
+        // O mesmo código diz "já pago" e "cancelado": só o status do pedido separa.
+        const current = await getOrderStatus(orderId).catch(() => null)
+        if (current?.paymentStatus === 'PAID') onPaid()
+        else setError(err.message)
         return
       }
       setError(

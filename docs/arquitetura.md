@@ -1008,6 +1008,13 @@ tolerante — valor estranho vira ausente, nunca 400, porque é antifraude e nã
 O Pix ainda vai sem device ID. Os itens levam `category_id` (`home` nos produtos, `services` no
 frete) e `description`, que o checklist de qualidade do MP conta como requisito.
 
+**Cartão: só crédito (desde 20/10/2026).** O Card Payment Brick exclui `debit_card` e
+`prepaid_card`. Débito online no Brasil exige autenticação 3DS, e a integração ainda não a pede:
+`action_required`/`pending_challenge` virariam PROCESSING sem desafio para o cliente, que ficaria
+preso em "Confirmando…" até a recusa. **Pendência:** integrar 3DS no Orders API (desafio no front);
+aí o débito volta — sai do `excluded`, o rótulo vira "Cartão de crédito ou débito", e o contrato e o
+front já mapeiam `paymentType: 'debit_card'`.
+
 **Por que `fetch` e não o SDK `mercadopago`:** o SDK muta a config compartilhada a cada chamada (o
 `X-Idempotency-Key` vaza entre chamadas) e descarta o corpo do 402 — que é como o MP devolve um
 cartão recusado, **com a order criada dentro de `data`**.
@@ -2062,3 +2069,4 @@ Toda decisão de "não agora" tem um gatilho explícito. É o que separa simplic
 | **Feature flags** | Chave em `Setting`, teto de 5 | Passar de 5 → remova antes de criar |
 | Árvore de categorias | Adjacency list | > 10k categorias ou > 6 níveis |
 | Métricas do dashboard | Query agregada ao vivo | Dashboard > 2s |
+| **Cartão de débito** | **Fora** (o Brick exclui `debit_card`; ver §10) | Integrar 3DS no Orders API — aí reabre o débito |
