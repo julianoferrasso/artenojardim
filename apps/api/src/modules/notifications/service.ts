@@ -111,7 +111,7 @@ const toStaff = (types: AlertTypes, data: AlertContent): Promise<void> => raiseA
  */
 export const notifyOrderCanceled = (
   orderId: string,
-  p: { by: 'customer' | 'store'; reason: string; refund: AutoRefundOutcome },
+  p: { by: 'customer' | 'store' | 'system'; reason: string; refund: AutoRefundOutcome },
 ): Promise<void> =>
   safely('pedido cancelado', { orderId }, async () => {
     const order = await loadOrder(orderId)

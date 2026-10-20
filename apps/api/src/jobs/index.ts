@@ -1,6 +1,7 @@
 import { logger } from '../config/logger.js'
 import { renewMelhorEnvioToken } from './melhor-envio-token.js'
 import { monitorSite } from './site-monitor.js'
+import { releaseExpiredReservations } from './release-reservations.js'
 
 /**
  * Varreduras periódicas — `jobs/` é cron; reação a fato consumado mora em `queues/`.
@@ -18,6 +19,7 @@ const HOUR_MS = 60 * MINUTE_MS
 const JOBS: Job[] = [
   { name: 'melhor-envio-token', everyMs: 6 * HOUR_MS, run: renewMelhorEnvioToken },
   { name: 'site-monitor', everyMs: 2 * MINUTE_MS, run: monitorSite },
+  { name: 'release-reservations', everyMs: 5 * MINUTE_MS, run: releaseExpiredReservations },
 ]
 
 /** A primeira execução espera o boot assentar antes de ir à rede. */

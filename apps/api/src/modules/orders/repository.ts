@@ -149,7 +149,8 @@ export type CustomerOrderRow = Prisma.OrderGetPayload<{ select: typeof CUSTOMER_
 /**
  * O motivo do cancelamento só volta ao cliente quando foi ELE que escreveu —
  * cancelando sozinho, ou pedindo e a loja aprovando (o motivo segue sendo o
- * dele). Quando o staff cancelou por conta própria, `cancelReason` é anotação
+ * dele) — ou quando é o texto fixo do vencimento do prazo de pagamento (`system`).
+ * Quando o staff cancelou por conta própria, `cancelReason` é anotação
  * operacional ("suspeita de fraude", "cliente sumiu") — texto que nunca foi
  * endereçado a ele.
  */
@@ -159,7 +160,7 @@ const customerVisibleCancelReason = (row: CustomerOrderRow): string | null => {
   const meta = canceledEvent?.metadataJson
   if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) return null
   const { by, approvedRequest } = meta as Record<string, unknown>
-  return by === 'customer' || approvedRequest === true ? row.cancelReason : null
+  return by === 'customer' || by === 'system' || approvedRequest === true ? row.cancelReason : null
 }
 
 export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {

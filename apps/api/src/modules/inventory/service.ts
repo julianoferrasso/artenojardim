@@ -12,7 +12,7 @@ import { prisma } from '../../config/prisma.js'
 import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
-import { withRunningBalance, countDelta } from './domain/ledger.js'
+import { withRunningBalance, countDelta, movementBlocker } from './domain/ledger.js'
 import { notifyStockChanges } from '../notifications/service.js'
 
 /**
@@ -48,12 +48,14 @@ export const recordMovement = async (
 
   const { level, quantity } = await prisma.$transaction(async (tx) => {
     // Saldo atual (0 se ainda não há linha) — necessário para o COUNT calcular a
-    // diferença, e para recusar um movimento que deixaria o onHand negativo.
+    // diferença, e para recusar um movimento que deixaria o onHand negativo ou
+    // abaixo do que pedidos em aberto já reservaram.
     const current = await tx.inventoryLevel.findUnique({
       where: { variantId: input.variantId },
-      select: { onHand: true },
+      select: { onHand: true, reserved: true },
     })
     const onHand = current?.onHand ?? 0
+    const reserved = current?.reserved ?? 0
 
     // COUNT grava a DIFERENÇA para a contagem física; os demais usam quantity.
     const quantity =
@@ -64,12 +66,20 @@ export const recordMovement = async (
       return { level: await readLevel(tx, input.variantId), quantity }
     }
 
-    // Recusa o que deixaria o físico negativo. A CHECK constraint é a última
-    // linha; aqui damos a mensagem de negócio antes de bater nela.
-    if (onHand + quantity < 0) {
+    // A CHECK constraint é a última linha; aqui damos a mensagem de negócio
+    // antes de bater nela (ou no pagamento que bateria nela depois).
+    const blocker = movementBlocker({ onHand, reserved, quantity })
+    if (blocker === 'NEGATIVE') {
       throw businessError(
         ERROR_CODES.INSUFFICIENT_STOCK,
         `Movimento deixaria o estoque negativo (atual: ${onHand}, movimento: ${quantity})`,
+        422,
+      )
+    }
+    if (blocker === 'BELOW_RESERVED') {
+      throw businessError(
+        ERROR_CODES.INSUFFICIENT_STOCK,
+        `Há ${reserved} ${reserved === 1 ? 'unidade reservada' : 'unidades reservadas'} por pedidos aguardando pagamento, e o estoque não pode ficar abaixo disso (atual: ${onHand}, movimento: ${quantity}). Cancele o pedido ou espere o prazo de pagamento vencer.`,
         422,
       )
     }

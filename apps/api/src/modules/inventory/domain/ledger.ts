@@ -53,3 +53,25 @@ export const withRunningBalance = <T extends Movement>(
  */
 export const countDelta = (currentOnHand: number, counted: number): number =>
   counted - currentOnHand
+
+export type MovementBlocker = 'NEGATIVE' | 'BELOW_RESERVED'
+
+/**
+ * Por que um movimento do admin não pode entrar — ou null se pode.
+ *
+ * Abaixo de zero o físico mente na hora. Abaixo do RESERVADO a mentira demora:
+ * quando o pedido que reservou a peça é pago, `settleOrderReservations` baixa o
+ * `onHand`, a CHECK (onHand >= 0) estoura e derruba a transação do pagamento
+ * inteira — o cliente pagou e o pedido segue "aguardando pagamento". Só a baixa
+ * é barrada: uma entrada nunca piora a conta, mesmo que ainda não a feche.
+ */
+export const movementBlocker = (p: {
+  onHand: number
+  reserved: number
+  quantity: number
+}): MovementBlocker | null => {
+  const after = p.onHand + p.quantity
+  if (after < 0) return 'NEGATIVE'
+  if (p.quantity < 0 && after < p.reserved) return 'BELOW_RESERVED'
+  return null
+}

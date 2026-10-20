@@ -541,9 +541,10 @@ no ar (`openssl rand -base64 32`), atualizando o `.env`.
 cobre DROP/migration ruim, mas não a perda da VPS inteira. Não depende mais de credencial —
 falta o passo no `pg-backup.sh`, num bucket privado próprio (não o da mídia).
 
-**Job de liberação de reserva de estoque.** O checkout (Fase 1.11) reserva estoque ao criar o
-pedido PENDING, mas nada varre e libera as reservas vencidas (TTL em `Setting.reservation_ttl_minutes`).
-Checkout abandonado prende `reserved` até o job existir (`jobs/release-reservations`, Fase 1.18).
+**~~Job de liberação de reserva de estoque~~ — resolvido (out/2026).** `jobs/release-reservations`
+roda no worker a cada 5 min e cancela o pedido não pago cuja reserva venceu (regras em
+`docs/arquitetura.md`, "Reserva ≠ movimento"). Como roda no worker, mudança nele pede
+`pm2 restart artenojardim-worker`.
 
 **~~SES em sandbox~~ — resolvido.** Conferido em 18/10/2026 pela API do SES (`GetAccount`):
 `ProductionAccessEnabled: true`, cota de 50 mil e-mails/dia, `EnforcementStatus: HEALTHY`. O envio

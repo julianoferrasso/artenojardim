@@ -644,7 +644,7 @@ Tabela separada porque um pedido pode ter mais de uma remessa — na v1 sempre u
 
 **Implementado (out/2026) mais simples que o desenho original:**
 - **Sem `CouponUsage`.** Um uso = um `Order` **não cancelado** com `couponId` — é a verdade. `usageCount` é o cache que deixa o limite total atômico: `UPDATE ... SET "usageCount" = "usageCount" + 1 WHERE "usageCount" < "usageLimit"` dentro da transação do confirm (o mesmo truque da reserva de estoque); o cancelamento devolve o uso na mesma transação. O limite por cliente reconta os pedidos dele sob o lock da linha do cupom.
-- **O uso conta ao criar o pedido**, não ao pagar: contar no pagamento deixaria o limite estourar (não dá para recusar quem já pagou). Contrapartida: pedido abandonado segura a vaga até ser cancelado — como a reserva de estoque — até existir o job de expiração.
+- **O uso conta ao criar o pedido**, não ao pagar: contar no pagamento deixaria o limite estourar (não dá para recusar quem já pagou). Contrapartida: pedido abandonado segura a vaga até ser cancelado — como a reserva de estoque. O job `release-reservations` cancela o pedido não pago quando a reserva vence, e a vaga volta junto.
 - **Sem `maxDiscount`** e **sem cupom no carrinho** (`Cart.couponId` segue sem uso): a loja guarda o cupom aplicado só na tela do checkout e manda o código no confirm.
 - PERCENTAGE/FIXED_AMOUNT descontam só os produtos (teto: subtotal); FREE_SHIPPING desconta o frete — `shippingTotal` fica cheio e o abatimento entra em `discountTotal`. Desconto zero (frete já grátis) não grava cupom nem gasta uso; total zero é recusado (`COUPON_NOT_APPLICABLE`).
 - Inativo/agendado respondem como inexistente (`COUPON_NOT_FOUND`): não revela campanha futura. Cupom com pedido não se exclui (`COUPON_IN_USE`, FK Restrict) — desativa-se.
@@ -811,16 +811,37 @@ Pagamento aprovado
   → InventoryMovement(SALE, -1, reference='order:abc')
   → onHand -= 1 ; reserved -= 1 ; reservation.releasedAt = now
 
-Pagamento falha / Pix expira / TTL vence
-  → reserved -= 1 ; reservation.releasedAt = now
+Prazo da reserva vence sem pagamento (job release-reservations)
+  → o PEDIDO é cancelado (cancelOrderInternal, ator 'system')
+  → reserved -= 1 ; reservation.releasedAt = now ; cupom e Pix em aberto também
   → NENHUM movimento (nada aconteceu de verdade)
 ```
+
+Uma tentativa recusada **não** libera nada: o cliente pode pagar de novo dentro do prazo. E o
+job cancela o pedido em vez de só soltar a reserva: um pedido ainda pagável, sem reserva, faria o
+pagamento tardio não achar o que liquidar, e a peça seria vendida duas vezes.
 
 O ledger registra **fatos físicos**. Reserva é **intenção**. Misturá-los polui o histórico com eventos que nunca ocorreram e destrói qualquer relatório de vendas.
 
 `available = onHand - reserved` — é o número que a loja mostra e o carrinho valida.
 
 Com Pix e boleto a reserva ganha peso: o boleto leva até 3 dias. **TTL por método** via `Setting`: cartão 30 min, Pix 60 min, boleto 3 dias — ajustável sem deploy.
+
+**Como está implementado (out/2026):**
+- O confirm usa o TTL do **Pix para todo pedido**, porque o meio de pagamento ainda não foi escolhido.
+- O Pix gerado estende a reserva até o vencimento dele + 5 min.
+- O job `jobs/release-reservations` roda no worker, só em produção, a cada 5 min. Ele cancela o pedido
+  não pago cuja reserva venceu há mais de 10 min.
+- Ele **espera** quando há cartão em análise (o MP não deixa cancelar e pode aprovar dias depois), Pix
+  ainda dentro do vencimento ou tentativa Stripe aberta (o webhook do Stripe não tem a guarda de
+  pago-após-cancelar).
+- Antes de decidir, relê o MP: um Pix pago cujo webhook se perdeu seria cancelado e estornado.
+- O claim do cancelamento pelo sistema exige `paymentStatus: 'PENDING'`. Pagamento e job disputam a
+  mesma linha, e quem commita depois cai no caminho certo.
+- A decisão é pura, em `orders/domain/expiry.ts`. O cliente recebe e-mail só se o vencimento foi há
+  menos de 24h (a 1ª rodada pegou pedidos de semanas).
+- `recordMovement` recusa baixa que deixe o `onHand` abaixo do `reserved`: o pagamento do pedido
+  reservado estouraria a CHECK `onHand >= 0` e seria desfeito.
 
 ### Concorrência — a parte que costuma quebrar
 

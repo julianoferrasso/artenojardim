@@ -16,6 +16,7 @@ import {
 import { EVENTS } from '@ecommerce/shared/constants'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
+import { logger } from '../../config/logger.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { notFound, conflict } from '../../shared/errors.js'
 import { toPrismaPagination, buildMeta } from '../../shared/pagination.js'
@@ -23,6 +24,7 @@ import { cancelOrderInternal } from '../admin-orders/service.js'
 import { refreshPendingMercadoPagoPayment, refundCanceledOrder } from '../payments/service.js'
 import type { AutoRefundOutcome } from '../payments/domain/refund.js'
 import { appendMessage } from '../support/service.js'
+import { decideExpiry, EXPIRY_GRACE_MS } from './domain/expiry.js'
 import {
   notifyCancelRequested,
   notifyOrderCanceled,
@@ -356,4 +358,88 @@ export const reorder = async (customerId: string, id: string): Promise<ReorderRe
   const result = await addItems(cartId, wanted)
 
   return { added: result.added, skipped: [...skipped, ...result.skipped] }
+}
+
+// ── Expiração (job release-reservations) ─────────────────────────────────────
+
+const EXPIRED_REASON = 'Pagamento não confirmado no prazo'
+
+const EXPIRY_SELECT = {
+  paymentStatus: true,
+  payments: { select: { provider: true, method: true, status: true, expiresAt: true } },
+} satisfies Prisma.OrderSelect
+
+const loadForExpiry = (orderId: string) =>
+  prisma.order.findFirst({
+    where: { id: orderId, storeId: getActiveStoreId(), canceledAt: null },
+    select: EXPIRY_SELECT,
+  })
+
+/** true = cancelado agora. */
+const expireOrder = async (orderId: string, now: Date): Promise<boolean> => {
+  let order = await loadForExpiry(orderId)
+  if (!order) return false
+
+  // Pix pago com o webhook perdido: sem a releitura, o job cancelaria — e o
+  // estorno automático devolveria — uma venda de verdade.
+  if (order.payments.some((p) => p.provider === 'MERCADO_PAGO' && p.status === 'PROCESSING')) {
+    await refreshPendingMercadoPagoPayment(orderId, { force: true })
+    order = await loadForExpiry(orderId)
+    if (!order) return false
+  }
+
+  const { _max } = await prisma.inventoryReservation.aggregate({
+    where: { orderId, releasedAt: null },
+    _max: { expiresAt: true },
+  })
+  if (!_max.expiresAt) return false
+
+  const decision = decideExpiry({
+    paymentStatus: order.paymentStatus,
+    latestReservationExpiry: _max.expiresAt,
+    attempts: order.payments,
+    now,
+  })
+  if (decision.action === 'skip') return false
+
+  await cancelOrderInternal(orderId, EXPIRED_REASON, { kind: 'system' })
+
+  if (decision.notifyCustomer) {
+    // Se o Pix foi pago no último segundo, o cancelamento da cobrança no MP
+    // falhou, o pagamento foi aplicado e o estorno já saiu: o e-mail conta isso.
+    await notifyOrderCanceled(orderId, {
+      by: 'system',
+      reason: EXPIRED_REASON,
+      refund: await refundFromLatePayment(orderId),
+    })
+  }
+  return true
+}
+
+/**
+ * Cancela os pedidos não pagos cuja reserva venceu — o cancelamento devolve a
+ * peça, o cupom e derruba o Pix em aberto. QUAIS pedidos é decisão de
+ * `decideExpiry`; aqui é a varredura. Cada pedido é independente: um que mudou
+ * de situação no meio (409) não para o lote.
+ */
+export const expireUnpaidOrders = async (now = new Date()): Promise<{ canceled: number; skipped: number }> => {
+  // A reserva não tem FK para o pedido: o escopo da loja vem do Order, no load.
+  const due = await prisma.inventoryReservation.findMany({
+    where: { releasedAt: null, expiresAt: { lt: new Date(now.getTime() - EXPIRY_GRACE_MS) } },
+    select: { orderId: true },
+    distinct: ['orderId'],
+  })
+
+  let canceled = 0
+  let skipped = 0
+  for (const { orderId } of due) {
+    try {
+      if (await expireOrder(orderId, now)) canceled++
+      else skipped++
+    } catch (err) {
+      skipped++
+      logger.warn({ err, orderId }, 'expiração: pedido não cancelado nesta rodada')
+    }
+  }
+  return { canceled, skipped }
 }

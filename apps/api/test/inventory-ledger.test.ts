@@ -4,6 +4,7 @@ import {
   balanceAt,
   withRunningBalance,
   countDelta,
+  movementBlocker,
 } from '../src/modules/inventory/domain/ledger.js'
 
 const mov = (quantity: number, iso: string) => ({ quantity, createdAt: new Date(iso) })
@@ -63,5 +64,23 @@ describe('countDelta (inventário físico)', () => {
   })
   it('bateu → zero (nada a lançar)', () => {
     expect(countDelta(10, 10)).toBe(0)
+  })
+})
+
+describe('movementBlocker', () => {
+  it('movimento que cabe → livre', () => {
+    expect(movementBlocker({ onHand: 5, reserved: 2, quantity: -3 })).toBeNull()
+  })
+  it('deixaria o físico negativo → NEGATIVE', () => {
+    expect(movementBlocker({ onHand: 2, reserved: 0, quantity: -3 })).toBe('NEGATIVE')
+  })
+  it('baixa abaixo do reservado → BELOW_RESERVED (o pagamento do pedido estouraria depois)', () => {
+    expect(movementBlocker({ onHand: 3, reserved: 2, quantity: -2 })).toBe('BELOW_RESERVED')
+  })
+  it('baixa que para exatamente no reservado → livre', () => {
+    expect(movementBlocker({ onHand: 3, reserved: 2, quantity: -1 })).toBeNull()
+  })
+  it('entrada nunca é barrada, mesmo com o saldo ainda abaixo do reservado', () => {
+    expect(movementBlocker({ onHand: 0, reserved: 2, quantity: 1 })).toBeNull()
   })
 })

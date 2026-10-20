@@ -262,6 +262,8 @@ export const updateFulfillment = async (
 export type CancelActor =
   | { kind: 'staff'; userId?: string | undefined; approvedRequest?: boolean }
   | { kind: 'customer'; reasonCode?: CustomerCancelReason }
+  /** O job que cancela pedido não pago depois que a reserva vence. */
+  | { kind: 'system' }
 
 /**
  * A mecânica do cancelamento, sem auditoria e sem recarregar o DTO.
@@ -302,7 +304,17 @@ export const cancelOrderInternal = async (
     // acima e esta linha cabem um segundo clique e o staff mudando a expedição.
     // Cancelar duas vezes reestocaria duas vezes o mesmo pedido.
     const claimed = await tx.order.updateMany({
-      where: { id, canceledAt: null, fulfillmentStatus: { in: [...allowed] } },
+      where: {
+        id,
+        canceledAt: null,
+        fulfillmentStatus: { in: [...allowed] },
+        // O job só cancela o que segue NÃO pago. Um pagamento confirmado entre a
+        // leitura dele e este claim seria cancelado como pago — peça de volta,
+        // cupom de volta e nenhum estorno. Com a guarda, quem commita primeiro
+        // vence: o pagamento (o claim falha) ou o job (o pagamento que chegar
+        // depois cai no estorno automático de "pago com o pedido cancelado").
+        ...(actor.kind === 'system' ? { paymentStatus: 'PENDING' as const } : {}),
+      },
       data: { canceledAt: new Date(), cancelReason: reason },
     })
     if (claimed.count === 0) {

@@ -63,6 +63,24 @@ describe('aviso de cancelamento ao cliente', () => {
     const notice = customerCanceledNotice({ order, by: 'store', refund: { status: 'none' }, orderUrl: url })
     expect(notice.paragraphs[0]).toContain('Aprovamos')
   })
+
+  it('prazo de pagamento vencido: explica o vencimento, sem falar em estorno', () => {
+    const notice = customerCanceledNotice({ order, by: 'system', refund: { status: 'none' }, orderUrl: url })
+    const text = notice.paragraphs.join(' ')
+    expect(text).toContain('O prazo para pagar o pedido #1042 terminou')
+    expect(text).toContain('novo pedido')
+    expect(text).not.toContain('estornar')
+  })
+
+  it('prazo vencido mas o Pix pago no último segundo: conta o estorno', () => {
+    const notice = customerCanceledNotice({
+      order,
+      by: 'system',
+      refund: { status: 'requested', amount: 8990, method: 'PIX' },
+      orderUrl: url,
+    })
+    expect(brl(notice.paragraphs.join(' '))).toContain('O estorno de R$ 89,90 já foi solicitado.')
+  })
 })
 
 describe('recibo do pedido de cancelamento', () => {

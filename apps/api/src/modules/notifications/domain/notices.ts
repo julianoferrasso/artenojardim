@@ -57,14 +57,21 @@ const STAFF_FOOTER = 'Aviso automático da loja. Responda pelo painel: respostas
  */
 export const customerCanceledNotice = (p: {
   order: NoticeOrder
-  by: 'customer' | 'store'
+  /** `system` = o prazo de pagamento venceu e o job cancelou. */
+  by: 'customer' | 'store' | 'system'
   refund: AutoRefundOutcome
   orderUrl: string
 }): NoticeContent => {
   const opening =
     p.by === 'customer'
       ? `${hello(p.order)} Confirmamos o cancelamento do pedido #${p.order.number}, como você pediu.`
-      : `${hello(p.order)} Aprovamos o seu pedido de cancelamento: o pedido #${p.order.number} foi cancelado.`
+      : p.by === 'store'
+        ? `${hello(p.order)} Aprovamos o seu pedido de cancelamento: o pedido #${p.order.number} foi cancelado.`
+        : `${hello(p.order)} O prazo para pagar o pedido #${p.order.number} terminou, e ele foi cancelado. As peças voltaram para a loja: se ainda quiser, é só fazer um novo pedido.`
+
+  // No vencimento, a abertura já explica que nada foi pago.
+  const nothingToRefund =
+    p.by === 'system' ? [] : ['Como o pagamento não chegou a ser feito, não há nada a estornar.']
 
   const refund =
     p.refund.status === 'requested'
@@ -77,7 +84,7 @@ export const customerCanceledNotice = (p: {
             `O estorno de ${formatBRL(p.refund.amount)} está em processamento.`,
             'Avisaremos por e-mail assim que ele for concluído.',
           ]
-        : ['Como o pagamento não chegou a ser feito, não há nada a estornar.']
+        : nothingToRefund
 
   return {
     subject: `Pedido #${p.order.number} cancelado`,
@@ -268,7 +275,7 @@ export const staffOrderCreatedNotice = (p: { order: OrderSummary; orderUrl: stri
     `${p.order.customerName} fechou um pedido de ${formatBRL(p.order.total)}; o pagamento ainda não foi confirmado.`,
     ...itemLines(p.order.items),
     ...orderExtras(p.order),
-    'O estoque fica reservado enquanto o pedido estiver aberto. Se o pagamento não vier, cancele o pedido no painel para liberar a reserva.',
+    'O estoque fica reservado enquanto o pedido estiver aberto. Se o pagamento não vier no prazo, o pedido é cancelado sozinho e a reserva volta para a loja.',
   ],
   ctaLabel: 'Abrir o pedido',
   ctaUrl: p.orderUrl,
