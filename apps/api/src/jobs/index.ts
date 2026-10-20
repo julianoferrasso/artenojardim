@@ -1,5 +1,6 @@
 import { logger } from '../config/logger.js'
 import { renewMelhorEnvioToken } from './melhor-envio-token.js'
+import { monitorSite } from './site-monitor.js'
 
 /**
  * Varreduras periódicas — `jobs/` é cron; reação a fato consumado mora em `queues/`.
@@ -11,10 +12,12 @@ import { renewMelhorEnvioToken } from './melhor-envio-token.js'
 
 type Job = { name: string; everyMs: number; run: () => Promise<void> }
 
-const HOUR_MS = 60 * 60_000
+const MINUTE_MS = 60_000
+const HOUR_MS = 60 * MINUTE_MS
 
 const JOBS: Job[] = [
   { name: 'melhor-envio-token', everyMs: 6 * HOUR_MS, run: renewMelhorEnvioToken },
+  { name: 'site-monitor', everyMs: 2 * MINUTE_MS, run: monitorSite },
 ]
 
 /** A primeira execução espera o boot assentar antes de ir à rede. */

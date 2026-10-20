@@ -9,6 +9,7 @@ import { QUEUES, assertTopology } from './queues/topology.js'
 import { campaignDispatchHandler } from './queues/consumers/campaign-dispatch.js'
 import { emailSendHandler } from './queues/consumers/email-send.js'
 import { orderPaidHandler } from './queues/consumers/order-paid.js'
+import { alertSendHandler } from './queues/consumers/alert-send.js'
 
 /**
  * Processo dos consumidores (e dos jobs periódicos, de `jobs/`). SEPARADO da
@@ -35,6 +36,7 @@ const start = async (): Promise<void> => {
     await consume(channel, QUEUES.campaignDispatch, campaignDispatchHandler),
     await consume(channel, QUEUES.emailSend, emailSendHandler),
     await consume(channel, QUEUES.orderPaid, orderPaidHandler),
+    await consume(channel, QUEUES.alertSend, alertSendHandler),
   ]
 
   logger.info({ queues: Object.keys(tags).length }, 'worker pronto')

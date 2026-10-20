@@ -30,6 +30,13 @@ export const QUEUES = {
   emailSend: 'email.send',
   campaignDispatch: 'campaign.dispatch',
   orderPaid: 'order.paid',
+  /**
+   * A sexta: alertas da equipe (e-mail, Telegram, WhatsApp), uma mensagem por
+   * destino. Fila própria e não `email.send`: dois dos três canais não são
+   * e-mail, e um Telegram fora do ar em retry não pode atrasar a recuperação de
+   * senha de um cliente.
+   */
+  alertSend: 'alert.send',
   shippingLabel: 'shipping.label',
   shippingTracking: 'shipping.tracking',
 } as const
@@ -61,6 +68,7 @@ const BINDINGS: ReadonlyArray<{ queue: QueueName; pattern: string }> = [
   { queue: QUEUES.emailSend, pattern: 'email.*' },
   { queue: QUEUES.campaignDispatch, pattern: EVENTS.campaign.dispatchRequested },
   { queue: QUEUES.orderPaid, pattern: EVENTS.order.paid },
+  { queue: QUEUES.alertSend, pattern: EVENTS.alert.sendRequested },
   { queue: QUEUES.shippingLabel, pattern: EVENTS.shipping.labelRequested },
   { queue: QUEUES.shippingTracking, pattern: EVENTS.shipping.trackingSync },
 ]

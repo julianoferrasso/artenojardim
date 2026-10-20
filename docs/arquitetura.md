@@ -1152,12 +1152,14 @@ O critério é único e binário:
 | Descartado | Por quê |
 |---|---|
 | `catalog.product.updated` → revalidar loja | O ISR de 60s já resolve. Uma fila para economizar 60s de atraso é fila para o ego |
-| `order.created` | Ninguém consome. O pedido ainda não é fato comercial — pode nunca ser pago |
-| `inventory.low_stock` | É uma **query** no dashboard (`available < minStock`), não um evento |
-| `notification.*` | Não existe notificação além de e-mail na v1 |
+| `order.created` | Ninguém consome. O pedido ainda não é fato comercial — pode nunca ser pago. (O alerta "aguardando pagamento" é um `notify*` depois do commit do checkout, que vira `alert.send_requested` — não um evento próprio.) |
+| `inventory.low_stock` | Continua sem evento próprio: o cruzamento do limite é detectado na escrita (reserva do checkout, ajuste do admin) e vira um alerta da equipe |
+| `notification.*` | Não existe. Os alertas da equipe (e-mail, Telegram, WhatsApp) passam por **uma** fila, `alert.send` — ver "Alertas da equipe" abaixo |
 | `product.*`, `category.*` | CRUD síncrono. Quem precisa saber já sabe: quem chamou |
 
-De 7 filas para 4 — e para 5 quando a campanha de marketing trouxe um consumidor real.
+De 7 filas para 4 — para 5 quando a campanha de marketing trouxe um consumidor real, e para 6 com
+os alertas da equipe (`alert.send`), que são lentos (três provedores de fora) e podem falhar sem
+desfazer o fato.
 
 ### Topologia
 
@@ -1255,9 +1257,13 @@ campaign.dispatch_requested → publicado pelo service da campanha
   └─ campaign-dispatch      → publica email.marketing_product × N       [NO AR]
 
 email.order_confirmation    email.marketing_product                     [NO AR]
-email.notice                (aviso com texto pronto: cancelamento,      [NO AR]
-                            estorno, resposta do atendimento, alertas
-                            à equipe — modules/notifications)
+email.notice                (aviso ao CLIENTE com texto pronto:         [NO AR]
+                            cancelamento, estorno, resposta do
+                            atendimento — modules/notifications)
+
+alert.send_requested        → um destino de alerta da equipe (fan-out   [NO AR]
+                            na hora do fato) → alert-send.worker:
+                            e-mail (SES), Telegram ou WhatsApp
 email.order_shipped         email.order_delivered                       (a fazer)
 email.payment_failed        email.boleto_issued     email.password_reset (a fazer)
                             → email-send.worker (genérico: {template, to, data})
@@ -1271,10 +1277,19 @@ shipping.tracking.sync      → shipping-tracking.worker (cron)           (a faz
 **`email.notice` — um template para todos os avisos transacionais.** O texto de cada aviso é
 montado na API por funções puras (`modules/notifications/domain/notices.ts`, testadas) e viaja
 pronto; o worker só aplica a marca e envia. Um template por aviso seria cinco arquivos com o mesmo
-layout. Os `notify*` rodam depois do commit de quem chama e **nunca lançam** (fila fora = log). Os
-avisos à equipe vão para o Setting `notifications.staffEmail` (configurável em `/configuracoes` no
-admin; vazio = `Store.email`). O `emailSendHandler` é um `switch` exaustivo: template desconhecido
-vai direto para a DLQ (antes, caía renderizado como confirmação de pedido).
+layout. Os `notify*` rodam depois do commit de quem chama e **nunca lançam** (fila fora = log). O
+`emailSendHandler` é um `switch` exaustivo: template desconhecido vai direto para a DLQ (antes,
+caía renderizado como confirmação de pedido).
+
+**Alertas da equipe (`modules/alerts`, docs/alertas.md).** Os `notify*` que avisam a EQUIPE chamam
+`raiseAlert(tipos, conteúdo)`: os destinos verificados e ativos que assinam algum dos tipos ganham
+UMA mensagem cada em `alert.send` (o fan-out da campanha — o retry de um Telegram lento não reenvia
+ao e-mail). O texto completo só viaja na fila; o banco guarda `Alert` (tipo + título, que nunca leva
+nome de cliente) e `AlertDelivery` (entregue/erro, o histórico da tela). Destino só recebe depois
+do código de 6 dígitos que chegou nele (e-mail, chat do Telegram via `getUpdates`, WhatsApp via
+modelo de autenticação da Meta). Falha de configuração do SERVIDOR nunca marca o destino: dev e
+produção dividem o banco. O antigo `notifications.staffEmail` virou o primeiro destino (migration
+`20261020120000_alerts`); a linha do Setting ficou, inerte.
 
 **Atendimento (`modules/support`).** A mensagem do cliente ("Falar com a loja" na página do pedido)
 vive em `SupportThread` (uma por pedido, `orderId` único) + `SupportMessage`; antes era só um
@@ -2051,7 +2066,8 @@ Toda decisão de "não agora" tem um gatilho explícito. É o que separa simplic
 | Repositório | Monorepo pnpm | Nunca |
 | Pacotes compartilhados | **Um** (`shared` com 2 subcaminhos) | Um terceiro consumidor com necessidades divergentes |
 | Build orchestrator | Nenhum (scripts npm) | Build completo > 2 min |
-| **Filas** | **4** (email, order.paid, label, tracking) | Novo consumidor real — nunca "por via das dúvidas" |
+| **Filas** | **6** (email, campaign, order.paid, alert.send, label, tracking) | Novo consumidor real — nunca "por via das dúvidas" |
+| Canais de alerta | E-mail, Telegram (vínculo por `getUpdates`, sem webhook), WhatsApp (Cloud API, pronto e desligado) | Responder cliente pelo Telegram → webhook do bot; status de entrega do WhatsApp → webhook da Meta |
 | **Busca** | **`unaccent` + `ILIKE`** | ~500 produtos, > 200ms, ou faltar ranking → FTS |
 | Motor de busca | Postgres | Facetas complexas ou > 100k produtos |
 | Cache distribuído | Nenhum (memória + Postgres) | 2ª VPS ou rate limit vira gargalo |

@@ -137,8 +137,22 @@ export const EVENTS = {
   store: {
     /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */
     themeUpdated: 'store.theme_updated',
-    /** Endereço que recebe os e-mails da equipe mudou. Só auditoria. */
-    notificationsUpdated: 'store.notifications_updated',
+  },
+  /** Alertas da equipe (e-mail, Telegram, WhatsApp). */
+  alert: {
+    /**
+     * UM destino a avisar. O fato vira uma destas por destino inscrito (o fan-out
+     * da campanha): o retry de um Telegram lento não reenvia ao e-mail que já
+     * recebeu. Vai pela fila porque é lento (três provedores de fora) e pode
+     * falhar sem desfazer o fato — o critério do §12.
+     */
+    sendRequested: 'alert.send_requested',
+    /** Gestão dos destinos e do limite de estoque. Só auditoria. */
+    destinationCreated: 'alert.destination_created',
+    destinationVerified: 'alert.destination_verified',
+    destinationUpdated: 'alert.destination_updated',
+    destinationDeleted: 'alert.destination_deleted',
+    settingsUpdated: 'alert.settings_updated',
   },
   /** Banners do carrossel da home. Só auditoria — nenhum consumidor de fila. */
   banner: {
@@ -177,6 +191,7 @@ export const QUEUED_EVENTS = [
   EVENTS.email.passwordReset,
   EVENTS.email.marketingProduct,
   EVENTS.email.notice,
+  EVENTS.alert.sendRequested,
   EVENTS.shipping.labelRequested,
   EVENTS.shipping.trackingSync,
 ] as const

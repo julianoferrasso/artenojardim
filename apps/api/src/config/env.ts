@@ -160,10 +160,44 @@ const baseSchema = z.object({
   /// segredo de sessão invalidaria todo link de descadastro já entregue, e um
   /// e-mail de dois anos atrás precisa continuar funcionando.
   EMAIL_UNSUBSCRIBE_SECRET: secret('EMAIL_UNSUBSCRIBE_SECRET').optional(),
+
+  // Alertas da equipe por Telegram e WhatsApp (o e-mail usa o SES acima). Todos
+  // opcionais: sem eles o canal aparece "não configurado" na tela de Alertas.
+
+  /// Token do bot (BotFather). O MESMO em dev e em produção, ou vazio em dev: o
+  /// banco é compartilhado, e um chat vinculado por um bot de dev é um chat com
+  /// quem o bot de produção nunca falou — ele não consegue escrever lá.
+  TELEGRAM_BOT_TOKEN: z
+    .string()
+    .regex(/^\d+:[\w-]{30,}$/, 'TELEGRAM_BOT_TOKEN fora do formato do BotFather (123456789:AA...)')
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
+  /// WhatsApp Cloud API (Meta): token permanente de um usuário do sistema + o id
+  /// do número remetente. Andam juntos (superRefine abaixo).
+  WHATSAPP_ACCESS_TOKEN: z
+    .string()
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
+  WHATSAPP_PHONE_NUMBER_ID: z
+    .string()
+    .regex(/^\d+$/, 'WHATSAPP_PHONE_NUMBER_ID é o id numérico do número na Meta, não o telefone')
+    .or(z.literal(''))
+    .optional()
+    .transform((v) => v || undefined),
+  WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v26.0'),
+  /// Nomes dos templates aprovados na Meta (o texto exato está em docs/alertas.md).
+  WHATSAPP_OTP_TEMPLATE: z.string().min(1).default('codigo_verificacao'),
+  WHATSAPP_ALERT_TEMPLATE: z.string().min(1).default('alerta_loja'),
+  WHATSAPP_TEMPLATE_LANG: z.string().min(2).default('pt_BR'),
 })
 
 /** As três andam juntas: com credencial e sem remetente (ou vice-versa) o SES recusa tudo. */
 const EMAIL_KEYS = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'EMAIL_FROM'] as const
+
+/** Token e número remetente da Meta: um sem o outro não envia nada. */
+const WHATSAPP_KEYS = ['WHATSAPP_ACCESS_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID'] as const
 
 /** Public key e access token de cada ambiente do MP: um sem o outro não cobra nada. */
 const MP_KEYS = {
@@ -255,6 +289,20 @@ const envSchema = baseSchema.superRefine((env, ctx) => {
     })
   }
 
+  // WhatsApp pela metade: o boot passaria e o erro só apareceria no primeiro
+  // código enviado — e a tela mostraria o canal como disponível.
+  if (WHATSAPP_KEYS.filter((key) => env[key]).length === 1) {
+    for (const key of WHATSAPP_KEYS) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} é obrigatório quando o WhatsApp está configurado — token e número andam juntos`,
+        })
+      }
+    }
+  }
+
   // Mesmo "pela metade" do e-mail: com só uma das duas chaves o boot passaria e
   // o erro só apareceria na primeira cobrança.
   const activeMp = env.MP_ENVIRONMENT ?? 'test'
@@ -311,6 +359,12 @@ export const isEmailConfigured = (): boolean =>
 
 /** Sem broker configurado a API sobe e publica 503 — a loja continua vendendo. */
 export const isQueueConfigured = (): boolean => Boolean(env.RABBITMQ_URL)
+
+/** Canais de alerta além do e-mail. Ausente = o canal não aceita destino novo. */
+export const isTelegramConfigured = (): boolean => Boolean(env.TELEGRAM_BOT_TOKEN)
+
+export const isWhatsAppConfigured = (): boolean =>
+  Boolean(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID)
 
 export const isProduction = env.NODE_ENV === 'production'
 export const isDevelopment = env.NODE_ENV === 'development'

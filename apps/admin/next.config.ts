@@ -42,6 +42,13 @@ const nextConfig: NextConfig = {
   },
 
   productionBrowserSourceMaps: false,
+
+  // A tela de Configurações só tinha o e-mail da equipe, que virou a tela de
+  // Alertas. 307 e não 308: se Configurações voltar a existir, nenhum navegador
+  // terá guardado o redirect para sempre.
+  async redirects() {
+    return [{ source: '/configuracoes', destination: '/alertas', permanent: false }]
+  },
 }
 
 export default nextConfig

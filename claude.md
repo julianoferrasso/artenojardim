@@ -89,7 +89,7 @@ Um módulo importa o `service` de outro. **Nunca** o `repository` de outro.
 
 ## Fronteiras
 
-- **`integrations/`** — tudo que fala com serviço externo (Mercado Pago, Stripe, Melhor Envio, SMTP, storage, ViaCEP).
+- **`integrations/`** — tudo que fala com serviço externo (Mercado Pago, Stripe, Melhor Envio, SES, Telegram, WhatsApp, storage, ViaCEP).
   Sabe falar com o mundo lá fora, **não** sabe do nosso negócio. Traduz erro externo → `appError`.
   Um módulo **nunca** faz `fetch` para fora nem importa o SDK do Stripe direto.
 - **`modules/`** — sabe do negócio, **não** sabe como o mundo lá fora fala.

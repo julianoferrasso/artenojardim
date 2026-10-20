@@ -83,3 +83,21 @@ export const sendEmailSafe = async (input: SendEmailInput): Promise<boolean> => 
     return false
   }
 }
+
+/**
+ * Erros do SES que NÃO adianta repetir: o endereço não existe, a conta está
+ * suspensa, o destinatário não está verificado (sandbox). Repetir três vezes só
+ * enche a DLQ de ruído e faz o alerta de "DLQ > 0" perder o sentido.
+ */
+const PERMANENT_SES_ERRORS = new Set([
+  'MessageRejected',
+  'MailFromDomainNotVerifiedException',
+  'AccountSuspendedException',
+  'SendingPausedException',
+])
+
+export const isPermanentSesError = (err: unknown): boolean => {
+  const name = (err as { name?: string; cause?: { name?: string } })?.name
+  const causeName = (err as { cause?: { name?: string } })?.cause?.name
+  return PERMANENT_SES_ERRORS.has(name ?? '') || PERMANENT_SES_ERRORS.has(causeName ?? '')
+}

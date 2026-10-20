@@ -1,5 +1,5 @@
 import argon2 from 'argon2'
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto'
+import { randomBytes, randomInt, createHash, timingSafeEqual } from 'node:crypto'
 
 /**
  * Argon2id e não bcrypt/SHA.
@@ -72,3 +72,11 @@ export const safeCompare = (a: string, b: string): boolean => {
   if (bufA.length !== bufB.length) return false
   return timingSafeEqual(bufA, bufB)
 }
+
+/**
+ * Código numérico de uso único (o OTP que a pessoa digita). `randomInt` e não
+ * `Math.random`: o código prova a posse de um e-mail ou telefone, e um gerador
+ * previsível deixaria adivinhar o próximo.
+ */
+export const generateNumericCode = (length: number): string =>
+  randomInt(0, 10 ** length).toString().padStart(length, '0')

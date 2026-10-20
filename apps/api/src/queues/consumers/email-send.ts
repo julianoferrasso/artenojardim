@@ -1,7 +1,7 @@
 import { env } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { prisma } from '../../config/prisma.js'
-import { sendEmail } from '../../integrations/email/index.js'
+import { isPermanentSesError, sendEmail } from '../../integrations/email/index.js'
 import type { EmailContent } from '../../integrations/email/index.js'
 import { permanentError } from '../consumer.js'
 import { renderCampaignEmail, type CampaignEmailData } from './render-campaign.js'
@@ -20,24 +20,6 @@ export type EmailJob =
   | { template: 'marketing_product'; to: string; recipientId: string; data: CampaignEmailData }
   | { template: 'order_confirmation'; to: string; data: OrderEmailData }
   | { template: 'notice'; to: string; data: NoticeEmailData }
-
-/**
- * Erros do SES que NÃO adianta repetir: o endereço não existe, a conta está
- * suspensa, o destinatário não está verificado (sandbox). Repetir três vezes só
- * enche a DLQ de ruído e faz o alerta de "DLQ > 0" perder o sentido.
- */
-const PERMANENT_SES_ERRORS = new Set([
-  'MessageRejected',
-  'MailFromDomainNotVerifiedException',
-  'AccountSuspendedException',
-  'SendingPausedException',
-])
-
-const isPermanentSesError = (err: unknown): boolean => {
-  const name = (err as { name?: string; cause?: { name?: string } })?.name
-  const causeName = (err as { cause?: { name?: string } })?.cause?.name
-  return PERMANENT_SES_ERRORS.has(name ?? '') || PERMANENT_SES_ERRORS.has(causeName ?? '')
-}
 
 /**
  * Espaça os envios para não estourar o limite do SES (~14/s).

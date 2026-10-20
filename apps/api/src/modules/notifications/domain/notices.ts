@@ -1,4 +1,5 @@
 import {
+  PAYMENT_METHOD_LABEL,
   REFUND_TIMING_LABEL,
   SUPPORT_TOPIC_LABEL,
   type PaymentMethod,
@@ -15,6 +16,10 @@ import { formatBRL } from '../../../utils/money.js'
  *
  * Dois públicos: o cliente (tom de loja, nunca texto interno) e a equipe (direto,
  * com o que pede ação no assunto, para chamar atenção na caixa de entrada).
+ *
+ * Os da equipe viram ALERTA (e-mail, Telegram, WhatsApp), e o `heading` vira o
+ * título guardado no histórico: por isso ele nunca leva nome de cliente — o
+ * texto completo só viaja na fila, e o banco não guarda dado pessoal ali.
  */
 
 export type NoticeOrder = {
@@ -219,14 +224,153 @@ export const staffRefundFailedNotice = (p: {
   footerNote: STAFF_FOOTER,
 })
 
-export const staffTestNotice = (p: { adminUrl: string }): NoticeContent => ({
-  subject: '[Teste] Notificações da loja',
-  heading: 'Notificações configuradas',
+// ── Equipe: pedidos, estoque e sistema ───────────────────────────────────────
+
+export type OrderSummary = NoticeOrder & {
+  total: number
+  method: PaymentMethod | null
+  items: { label: string; quantity: number }[]
+  /** "Total Express Standard — Caxias do Sul/RS". Null sem frete gravado. */
+  shipping: string | null
+  couponCode: string | null
+}
+
+/** Pedido grande não vira mensagem de três telas: os primeiros itens e a contagem do resto. */
+const MAX_ITEMS_LISTED = 8
+
+const itemLines = (items: OrderSummary['items']): string[] => [
+  ...items.slice(0, MAX_ITEMS_LISTED).map((item) => `${item.quantity}× ${item.label}`),
+  ...(items.length > MAX_ITEMS_LISTED ? [`… e mais ${items.length - MAX_ITEMS_LISTED} itens.`] : []),
+]
+
+const orderExtras = (order: OrderSummary): string[] => [
+  ...(order.shipping ? [`Entrega: ${order.shipping}.`] : []),
+  ...(order.couponCode ? [`Cupom: ${order.couponCode}.`] : []),
+]
+
+export const staffOrderPaidNotice = (p: { order: OrderSummary; orderUrl: string }): NoticeContent => ({
+  subject: `[Pedido pago] #${p.order.number} — ${formatBRL(p.order.total)}`,
+  heading: `Novo pedido pago: #${p.order.number}`,
   paragraphs: [
-    'Este é um e-mail de teste. Se você o recebeu, os avisos da loja estão chegando neste endereço.',
-    'Aqui chegam: mensagens de clientes, cancelamentos, pedidos de cancelamento e estornos que falharem.',
+    `${p.order.customerName} pagou ${formatBRL(p.order.total)}${p.order.method ? ` (${PAYMENT_METHOD_LABEL[p.order.method]})` : ''}. Já pode separar.`,
+    ...itemLines(p.order.items),
+    ...orderExtras(p.order),
   ],
-  ctaLabel: 'Abrir o painel',
-  ctaUrl: p.adminUrl,
+  ctaLabel: 'Abrir o pedido',
+  ctaUrl: p.orderUrl,
   footerNote: STAFF_FOOTER,
 })
+
+export const staffOrderCreatedNotice = (p: { order: OrderSummary; orderUrl: string }): NoticeContent => ({
+  subject: `[Aguardando pagamento] Pedido #${p.order.number} — ${formatBRL(p.order.total)}`,
+  heading: `Pedido #${p.order.number} aguardando pagamento`,
+  paragraphs: [
+    `${p.order.customerName} fechou um pedido de ${formatBRL(p.order.total)}; o pagamento ainda não foi confirmado.`,
+    ...itemLines(p.order.items),
+    ...orderExtras(p.order),
+    'O estoque fica reservado enquanto o pedido estiver aberto. Se o pagamento não vier, cancele o pedido no painel para liberar a reserva.',
+  ],
+  ctaLabel: 'Abrir o pedido',
+  ctaUrl: p.orderUrl,
+  footerNote: STAFF_FOOTER,
+})
+
+export type LowStockItem = {
+  productName: string
+  /** Opções da variante ("300 g"). Null quando o produto não tem variação. */
+  variantLabel: string | null
+  sku: string
+  onHand: number
+  reserved: number
+}
+
+const itemName = (item: LowStockItem): string =>
+  item.variantLabel ? `${item.productName} (${item.variantLabel})` : item.productName
+
+const units = (n: number): string => (n === 1 ? '1 unidade' : `${n} unidades`)
+
+const stockLine = (item: LowStockItem): string => {
+  const available = item.onHand - item.reserved
+  const state = available <= 0 ? 'esgotado' : `${units(available)} ${available === 1 ? 'disponível' : 'disponíveis'}`
+  // Reserva é pedido não pago: o físico ainda está na prateleira, e o cliente não vê.
+  const reserved = item.reserved > 0 ? ` (${units(item.onHand)} em estoque, ${item.reserved} reservada${item.reserved === 1 ? '' : 's'} em pedidos não pagos)` : ''
+  return `${itemName(item)}, SKU ${item.sku}: ${state}${reserved}.`
+}
+
+export const staffLowStockNotice = (p: {
+  items: LowStockItem[]
+  threshold: number
+  stockUrl: string
+}): NoticeContent => {
+  const soldOut = p.items.filter((item) => item.onHand - item.reserved <= 0)
+  const single = p.items.length === 1 ? p.items[0] : undefined
+  const heading = single
+    ? `${soldOut.length > 0 ? 'Esgotado' : 'Estoque baixo'}: ${itemName(single)}`
+    : soldOut.length === p.items.length
+      ? `${p.items.length} produtos esgotaram`
+      : `Estoque baixo em ${p.items.length} produtos`
+
+  return {
+    subject: `[Estoque] ${heading}`,
+    heading,
+    paragraphs: [
+      ...p.items.map(stockLine),
+      `O limite de estoque baixo da loja é ${units(p.threshold)}; dá para mudar na tela Alertas do painel.`,
+    ],
+    ctaLabel: 'Abrir o estoque',
+    ctaUrl: p.stockUrl,
+    footerNote: STAFF_FOOTER,
+  }
+}
+
+export const staffShippingDisconnectedNotice = (p: { shippingUrl: string }): NoticeContent => ({
+  subject: '[Ação necessária] Frete desconectado: a loja não calcula frete',
+  heading: 'Frete desconectado',
+  paragraphs: [
+    'A conexão com o Melhor Envio caiu. Sem ela a loja não calcula frete, e nenhum cliente consegue fechar pedido.',
+    'Reconecte a conta na tela Frete do painel (exige administrador). Enquanto isso, este aviso se repete a cada 6 horas.',
+  ],
+  ctaLabel: 'Reconectar o frete',
+  ctaUrl: p.shippingUrl,
+  footerNote: STAFF_FOOTER,
+})
+
+export type SiteTargetStatus = { name: string; url: string; detail: string }
+
+const joinNames = (names: string[]): string =>
+  names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} e ${names.at(-1)}`
+
+const MONITOR_FOOTER =
+  'Aviso do monitor que roda no próprio servidor da loja. Se o servidor inteiro cair, ele cai junto e não avisa: para isso, só um monitor externo.'
+
+export const staffSiteDownNotice = (p: { targets: SiteTargetStatus[]; storeUrl: string }): NoticeContent => {
+  const names = joinNames(p.targets.map((t) => t.name))
+  return {
+    subject: `[Fora do ar] ${names}`,
+    heading: `${names} fora do ar`,
+    paragraphs: [
+      ...p.targets.map((t) => `${t.name} (${t.url}) não responde: ${t.detail}.`),
+      'O monitor confere a cada 2 minutos e avisa de novo quando voltar.',
+    ],
+    ctaLabel: 'Abrir a loja',
+    ctaUrl: p.storeUrl,
+    footerNote: MONITOR_FOOTER,
+  }
+}
+
+export const staffSiteUpNotice = (p: {
+  targets: { name: string; downMinutes: number }[]
+  storeUrl: string
+}): NoticeContent => {
+  const names = joinNames(p.targets.map((t) => t.name))
+  return {
+    subject: `[De volta] ${names}`,
+    heading: `${names} de volta ao ar`,
+    paragraphs: p.targets.map(
+      (t) => `${t.name} voltou a responder depois de cerca de ${t.downMinutes} minuto${t.downMinutes === 1 ? '' : 's'} fora.`,
+    ),
+    ctaLabel: 'Abrir a loja',
+    ctaUrl: p.storeUrl,
+    footerNote: MONITOR_FOOTER,
+  }
+}

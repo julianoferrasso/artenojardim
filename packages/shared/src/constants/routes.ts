@@ -105,9 +105,25 @@ export const ROUTES = {
   admin: {
     /** Aparência da loja (cores, raio, logo). Atrás de requireMinRole('ADMIN'). */
     storeTheme: `${base}/admin/store/theme`,
-    /** Para onde vão os e-mails da equipe. GET/PUT; `test` dispara um envio de prova. */
-    storeNotifications: `${base}/admin/store/notifications`,
-    storeNotificationsTest: `${base}/admin/store/notifications/test`,
+
+    /**
+     * Alertas da equipe: destinos confirmados por código e os eventos de cada um.
+     * Router inteiro atrás de requireMinRole(ALERTS_MIN_ROLE).
+     */
+    alerts: {
+      /** Canais disponíveis + destinos + limite de estoque baixo, numa leitura só. */
+      overview: `${base}/admin/alerts`,
+      history: `${base}/admin/alerts/history`,
+      settings: `${base}/admin/alerts/settings`,
+      destinations: `${base}/admin/alerts/destinations`,
+      destination: (id: string) => `${base}/admin/alerts/destinations/${id}`,
+      /** Novo código (e-mail/WhatsApp/Telegram já vinculado) ou novo link (Telegram sem chat). */
+      resend: (id: string) => `${base}/admin/alerts/destinations/${id}/resend`,
+      verify: (id: string) => `${base}/admin/alerts/destinations/${id}/verify`,
+      /** Long-poll: espera o "Iniciar" no Telegram e devolve o estado do vínculo. */
+      telegramSync: (id: string) => `${base}/admin/alerts/destinations/${id}/telegram-sync`,
+      test: (id: string) => `${base}/admin/alerts/destinations/${id}/test`,
+    },
 
     orders: {
       list: `${base}/admin/orders`,

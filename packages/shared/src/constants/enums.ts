@@ -115,3 +115,26 @@ export type SupportThreadStatus = z.infer<typeof supportThreadStatusSchema>
 export const SUPPORT_AUTHORS = ['CUSTOMER', 'STAFF', 'SYSTEM'] as const
 export const supportAuthorSchema = z.enum(SUPPORT_AUTHORS)
 export type SupportAuthor = z.infer<typeof supportAuthorSchema>
+
+/** Por onde um alerta da equipe sai. Cada destino é de um canal e só recebe depois do código. */
+export const ALERT_CHANNELS = ['EMAIL', 'TELEGRAM', 'WHATSAPP'] as const
+export const alertChannelSchema = z.enum(ALERT_CHANNELS)
+export type AlertChannel = z.infer<typeof alertChannelSchema>
+
+/**
+ * Fatos que viram alerta para a equipe, na ordem em que a tela os mostra. Tipo
+ * novo pede migration: é enum no banco, e cada destino guarda a lista que assina.
+ */
+export const ALERT_EVENT_TYPES = [
+  'ORDER_PAID',
+  'CANCELLATION_REQUESTED',
+  'ORDER_CANCELED_BY_CUSTOMER',
+  'REFUND_FAILED',
+  'ORDER_CREATED',
+  'CUSTOMER_MESSAGE',
+  'LOW_STOCK',
+  'SHIPPING_DISCONNECTED',
+  'SITE_DOWN',
+] as const
+export const alertEventTypeSchema = z.enum(ALERT_EVENT_TYPES)
+export type AlertEventType = z.infer<typeof alertEventTypeSchema>

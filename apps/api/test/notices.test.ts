@@ -4,8 +4,14 @@ import {
   customerCancelRequestNotice,
   customerReplyNotice,
   staffCanceledNotice,
+  staffLowStockNotice,
   staffMessageNotice,
+  staffOrderPaidNotice,
+  staffShippingDisconnectedNotice,
+  staffSiteDownNotice,
+  staffSiteUpNotice,
   toParagraphs,
+  type OrderSummary,
 } from '../src/modules/notifications/domain/notices.js'
 // Direto do template, não do index: o index carrega o client do SES e o env.
 import { renderNotice } from '../src/integrations/email/templates/notice.js'
@@ -120,5 +126,93 @@ describe('renderNotice', () => {
     expect(email.html).not.toContain('<script>')
     expect(email.html).toContain('&lt;script&gt;')
     expect(email.text).toContain('<script>alert(1)</script>')
+  })
+})
+
+/**
+ * Os avisos da equipe viram ALERTA, e o título é o que fica no histórico do
+ * banco. Por isso ele nunca leva o nome do cliente: o texto inteiro só viaja na
+ * fila, longe do alcance da anonimização LGPD.
+ */
+describe('alertas da equipe', () => {
+  const summary: OrderSummary = {
+    ...order,
+    total: 18990,
+    method: 'PIX',
+    items: Array.from({ length: 10 }, (_, i) => ({ label: `Vela ${i + 1}`, quantity: 1 })),
+    shipping: 'Jadlog .Package — Caxias do Sul/RS',
+    couponCode: 'BEMVINDO10',
+  }
+
+  it('pedido pago: valor e método no texto, nome do cliente fora do título', () => {
+    const notice = staffOrderPaidNotice({ order: summary, orderUrl: url })
+    expect(notice.heading).toBe('Novo pedido pago: #1042')
+    expect(notice.heading).not.toContain('Maria')
+    expect(brl(notice.paragraphs[0]!)).toContain('Maria da Silva pagou R$ 189,90 (Pix)')
+    expect(notice.paragraphs).toContain('… e mais 2 itens.')
+    expect(notice.paragraphs).toContain('Entrega: Jadlog .Package — Caxias do Sul/RS.')
+  })
+
+  it('nenhum título de alerta da equipe leva o nome do cliente', () => {
+    const headings = [
+      staffMessageNotice({ order, topic: null, body: 'oi', threadUrl: url }).heading,
+      staffCanceledNotice({ order, reason: 'x', refund: { status: 'none' }, orderUrl: url }).heading,
+      staffOrderPaidNotice({ order: summary, orderUrl: url }).heading,
+    ]
+    for (const heading of headings) expect(heading).not.toContain('Maria')
+  })
+
+  it('estoque baixo de um item: produto e variante no título; reserva explicada', () => {
+    const notice = staffLowStockNotice({
+      items: [{ productName: 'Vela Lavanda', variantLabel: '300 g', sku: 'VL-300', onHand: 3, reserved: 1 }],
+      threshold: 2,
+      stockUrl: url,
+    })
+    expect(notice.heading).toBe('Estoque baixo: Vela Lavanda (300 g)')
+    expect(notice.paragraphs[0]).toBe(
+      'Vela Lavanda (300 g), SKU VL-300: 2 unidades disponíveis (3 unidades em estoque, 1 reservada em pedidos não pagos).',
+    )
+    expect(notice.paragraphs[1]).toContain('2 unidades')
+  })
+
+  it('esgotado e vários itens', () => {
+    const one = staffLowStockNotice({
+      items: [{ productName: 'Vela', variantLabel: null, sku: 'V', onHand: 0, reserved: 0 }],
+      threshold: 2,
+      stockUrl: url,
+    })
+    expect(one.heading).toBe('Esgotado: Vela')
+    expect(one.paragraphs[0]).toContain('esgotado')
+
+    const many = staffLowStockNotice({
+      items: [
+        { productName: 'A', variantLabel: null, sku: 'A', onHand: 0, reserved: 0 },
+        { productName: 'B', variantLabel: null, sku: 'B', onHand: 2, reserved: 0 },
+      ],
+      threshold: 2,
+      stockUrl: url,
+    })
+    expect(many.heading).toBe('Estoque baixo em 2 produtos')
+  })
+
+  it('frete desconectado pede ação no assunto', () => {
+    expect(staffShippingDisconnectedNotice({ shippingUrl: url }).subject).toContain('[Ação necessária]')
+  })
+
+  it('loja fora do ar e de volta, com nomes juntos', () => {
+    const down = staffSiteDownNotice({
+      targets: [
+        { name: 'Loja', url: 'https://loja.test', detail: 'HTTP 502' },
+        { name: 'Painel', url: 'https://admin.loja.test', detail: 'falha de conexão' },
+        { name: 'API', url: 'https://api.loja.test/api/v1/health', detail: 'sem resposta em 15 s' },
+      ],
+      storeUrl: 'https://loja.test',
+    })
+    expect(down.heading).toBe('Loja, Painel e API fora do ar')
+    expect(down.paragraphs[0]).toBe('Loja (https://loja.test) não responde: HTTP 502.')
+
+    const up = staffSiteUpNotice({ targets: [{ name: 'Loja', downMinutes: 1 }], storeUrl: 'https://loja.test' })
+    expect(up.heading).toBe('Loja de volta ao ar')
+    expect(up.paragraphs[0]).toContain('cerca de 1 minuto fora')
   })
 })

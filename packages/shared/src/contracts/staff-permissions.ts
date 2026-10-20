@@ -54,6 +54,13 @@ export const canManageUsers = (actor: Actor): boolean =>
   ROLE_RANK[actor.role] >= ROLE_RANK[MANAGE_USERS_MIN_ROLE]
 
 /**
+ * Piso para cadastrar destinos de alerta. Um destino recebe nome de cliente,
+ * valor de pedido e mensagem do atendimento num e-mail, chat ou telefone que a
+ * loja não controla: decidir para onde isso vai não é tarefa de STAFF.
+ */
+export const ALERTS_MIN_ROLE: UserRole = 'ADMIN'
+
+/**
  * `nextRole` só importa em 'create' e 'update'; nas demais ações é ignorado.
  *
  * O invariante do último OWNER NÃO está aqui: depende de uma contagem no banco,

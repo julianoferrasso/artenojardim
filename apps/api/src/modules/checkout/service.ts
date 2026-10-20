@@ -18,6 +18,7 @@ import { resolveCart, getCart } from '../cart/service.js'
 import { getAddress } from '../addresses/service.js'
 import { quoteShipping } from '../shipping/service.js'
 import { getOrder } from '../orders/service.js'
+import { notifyOrderCreated, notifyStockChanges, type StockChange } from '../notifications/service.js'
 import { resolveCoupon, claimCouponUse, type CheckoutCoupon } from '../coupons/service.js'
 import { computeCouponDiscount } from '../coupons/domain/rules.js'
 import { calculateTotals, type Totals } from './domain/totals.js'
@@ -197,7 +198,7 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
   // `number`; o @@unique([storeId, number]) barra o segundo, que tenta o próximo.
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const orderId = await prisma.$transaction(async (tx) => {
+      const { orderId, stock } = await prisma.$transaction(async (tx) => {
         // Antes do create: a contagem por cliente dentro do claim não pode
         // enxergar o próprio pedido que está nascendo.
         if (coupon) await claimCouponUse(tx, coupon, customerId)
@@ -241,21 +242,31 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
           select: { id: true },
         })
 
-        // Reserva atômica por item. Zero linhas = sem estoque → 409 e rollback.
+        // Reserva atômica por item. Nenhuma linha = sem estoque → 409 e rollback.
+        // O RETURNING devolve o saldo de DEPOIS, sob o lock da linha: é dele que
+        // sai o "antes" exato para o alerta de estoque baixo, sem outro SELECT.
+        const stock: StockChange[] = []
         for (const i of items) {
-          const affected = await tx.$executeRaw`
+          const [level] = await tx.$queryRaw<{ onHand: number; reserved: number }[]>`
             UPDATE "InventoryLevel"
                SET reserved = reserved + ${i.quantity}
              WHERE "variantId" = ${i.variantId}
                AND ("onHand" - reserved) >= ${i.quantity}
+            RETURNING "onHand", reserved
           `
-          if (affected === 0) {
+          if (!level) {
             throw businessError(
               ERROR_CODES.INSUFFICIENT_STOCK,
               `Estoque insuficiente para ${i.productName}.`,
               409,
             )
           }
+          stock.push({
+            variantId: i.variantId,
+            before: level.onHand - level.reserved + i.quantity,
+            onHand: level.onHand,
+            reserved: level.reserved,
+          })
           await tx.inventoryReservation.create({
             data: { variantId: i.variantId, orderId: order.id, quantity: i.quantity, expiresAt },
           })
@@ -264,9 +275,13 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
         // O carrinho não é promovido: esvazia depois de virar pedido.
         await tx.cartItem.deleteMany({ where: { cartId } })
 
-        return order.id
+        // Devolvido pela transação, e não acumulado fora dela: a tentativa que
+        // colidiu no número desfez a reserva, e não pode avisar nada.
+        return { orderId: order.id, stock }
       })
 
+      await notifyOrderCreated(orderId)
+      await notifyStockChanges(stock)
       return getOrder(customerId, orderId)
     } catch (err) {
       // Colisão no número: tenta de novo com o próximo. Outros erros sobem —

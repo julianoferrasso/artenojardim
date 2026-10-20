@@ -309,3 +309,37 @@ export const deleteAccountLimiter = build({
   max: 3,
   keyBy: byCustomer,
 })
+
+/**
+ * Ações do staff na tela de Alertas. Por USUÁRIO: as rotas ficam atrás do
+ * `authenticate`, então `req.auth.sub` sempre existe — mesmo raciocínio do
+ * `byCustomer`.
+ */
+const byStaff = (req: Request): string => req.auth?.sub ?? 'anonymous'
+
+/**
+ * Cadastrar ou reenviar código manda um e-mail ou mensagem DE VERDADE para um
+ * endereço que alguém digitou. O teto impede o painel de virar disparador (e de
+ * queimar a cota do SES e da Meta) nas mãos de uma sessão roubada.
+ */
+export const alertCodeSendLimiter = build({
+  name: 'alert-code-send',
+  windowMs: 60 * 60_000,
+  max: 15,
+  keyBy: byStaff,
+})
+
+/** As 5 tentativas por código já travam o chute; isto segura o ciclo "pede outro, chuta 5". */
+export const alertCodeVerifyLimiter = build({
+  name: 'alert-code-verify',
+  windowMs: 15 * 60_000,
+  max: 30,
+  keyBy: byStaff,
+})
+
+export const alertTestLimiter = build({
+  name: 'alert-test',
+  windowMs: 60 * 60_000,
+  max: 20,
+  keyBy: byStaff,
+})

@@ -274,35 +274,3 @@ export const healthResponseSchema = z.object({
 })
 
 export type HealthResponse = z.infer<typeof healthResponseSchema>
-
-// ---------------------------------------------------------------------------
-// Notificações da equipe
-// ---------------------------------------------------------------------------
-
-/**
- * Para onde vão os avisos que pedem ação da loja: mensagem nova de cliente,
- * cancelamento, estorno que falhou. Vazio = o e-mail de contato da loja.
- * `''` vira null: é o que o formulário manda quando o campo é apagado.
- */
-export const updateStaffNotificationsSchema = z.object({
-  staffEmail: z
-    .string()
-    .trim()
-    .toLowerCase()
-    .transform((v) => v || null)
-    .pipe(z.string().email('E-mail inválido').max(254).nullable()),
-})
-
-export type UpdateStaffNotificationsInput = z.input<typeof updateStaffNotificationsSchema>
-export type UpdateStaffNotificationsData = z.output<typeof updateStaffNotificationsSchema>
-
-export const staffNotificationsSchema = z.object({
-  /** O que foi configurado. Null = usar o e-mail da loja. */
-  staffEmail: z.string().nullable(),
-  /** O e-mail da loja — o padrão quando nada é configurado. */
-  defaultEmail: z.string(),
-  /** Quem recebe de fato agora. */
-  effectiveEmail: z.string(),
-})
-
-export type StaffNotifications = z.infer<typeof staffNotificationsSchema>

@@ -87,6 +87,20 @@ export const ERROR_CODES = {
   /// Token de descadastro adulterado ou de outra loja.
   UNSUBSCRIBE_TOKEN_INVALID: 'UNSUBSCRIBE_TOKEN_INVALID',
 
+  // Alertas da equipe
+  /// O servidor não tem o canal configurado (token do bot, conta da Meta, SES).
+  ALERT_CHANNEL_UNAVAILABLE: 'ALERT_CHANNEL_UNAVAILABLE',
+  /// Este e-mail, número ou chat já é um destino da loja.
+  ALERT_DESTINATION_EXISTS: 'ALERT_DESTINATION_EXISTS',
+  ALERT_CODE_INVALID: 'ALERT_CODE_INVALID',
+  /// Código vencido, ou apagado depois de tentativas demais: o front oferece reenviar.
+  ALERT_CODE_EXPIRED: 'ALERT_CODE_EXPIRED',
+  ALERT_RESEND_TOO_SOON: 'ALERT_RESEND_TOO_SOON',
+  /// Ação que exige o destino confirmado (ex.: enviar teste).
+  ALERT_NOT_VERIFIED: 'ALERT_NOT_VERIFIED',
+  /// O provedor (SES, Telegram, Meta) recusou o envio; a message traz o motivo legível.
+  ALERT_DELIVERY_FAILED: 'ALERT_DELIVERY_FAILED',
+
   // Uploads
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',

@@ -123,6 +123,27 @@ enum SupportAuthor {
   SYSTEM
 }
 
+/// Por onde um alerta da equipe sai. Espelha ALERT_CHANNELS em constants.
+enum AlertChannel {
+  EMAIL
+  TELEGRAM
+  WHATSAPP
+}
+
+/// Fato que vira alerta para a equipe. Espelha ALERT_EVENT_TYPES em constants.
+/// Tipo novo = migration: cada destino guarda a lista de tipos que assina.
+enum AlertEventType {
+  ORDER_PAID
+  CANCELLATION_REQUESTED
+  ORDER_CANCELED_BY_CUSTOMER
+  REFUND_FAILED
+  ORDER_CREATED
+  CUSTOMER_MESSAGE
+  LOW_STOCK
+  SHIPPING_DISCONNECTED
+  SITE_DOWN
+}
+
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
 /// Sem planId/status/trialEndsAt/themeId: campo morto confunde quem lê o schema.
 /// Eles nascem na Fase 4, junto com a funcionalidade.
@@ -162,6 +183,8 @@ model Store {
   instagramPosts        InstagramPost[]
   coupons               Coupon[]
   supportThreads        SupportThread[]
+  alertDestinations     AlertDestination[]
+  alerts                Alert[]
 }
 
 /// Staff. Cliente da loja é Customer (Fase 1) — tabela separada de propósito:
@@ -1160,4 +1183,85 @@ model EmailCampaignRecipient {
   @@unique([campaignId, email])
   /// A consulta do fan-out: "os que faltam desta campanha".
   @@index([campaignId, status])
+}
+
+/// Para onde vão os alertas da equipe: um e-mail, um chat do Telegram ou um
+/// número de WhatsApp. Só recebe com `verifiedAt` preenchido — o código de 6
+/// dígitos chega no próprio destino, e é isso que prova que o endereço é de quem
+/// cadastrou (e não um e-mail digitado errado recebendo pedido da loja).
+///
+/// Código e token do link guardam só o HASH: banco vazado não entrega código
+/// válido, e o link do Telegram não pode ser remontado depois de criado.
+model AlertDestination {
+  id           String           @id @default(cuid())
+  storeId      String
+  channel      AlertChannel
+  label        String
+  /// E-mail (minúsculo), número E.164 só com dígitos, ou chat_id do Telegram.
+  /// Nulo só no Telegram ainda sem chat: o endereço nasce do "Iniciar" no link.
+  address      String?
+  /// Como mostrar o chat do Telegram ("@fulano", nome do grupo).
+  addressLabel String?
+  events       AlertEventType[] @default([])
+  /// Pausar sem perder a verificação. Telegram que recusa por bloqueio pausa
+  /// sozinho, com o motivo em lastError.
+  enabled      Boolean          @default(true)
+  verifiedAt   DateTime?
+
+  codeHash      String?
+  codeExpiresAt DateTime?
+  codeAttempts  Int       @default(0)
+  codeSentAt    DateTime?
+
+  linkTokenHash String?   @unique
+  linkExpiresAt DateTime?
+
+  lastSentAt  DateTime?
+  lastError   String?
+  lastErrorAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  deliveries AlertDelivery[]
+
+  /// O mesmo e-mail, número ou chat uma vez por loja. O Postgres trata NULL como
+  /// distinto: vários Telegram pendentes, ainda sem chat, convivem.
+  @@unique([storeId, channel, address])
+  @@index([storeId])
+}
+
+/// Um alerta disparado. Guarda tipo e TÍTULO só: o texto completo (nome e
+/// mensagem do cliente) viaja no payload da fila e não fica no banco, fora do
+/// alcance da anonimização LGPD. Por isso o título nunca leva nome de cliente.
+model Alert {
+  id        String         @id @default(cuid())
+  storeId   String
+  type      AlertEventType
+  title     String
+  createdAt DateTime       @default(now())
+
+  store      Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  deliveries AlertDelivery[]
+
+  @@index([storeId, createdAt])
+}
+
+/// Uma entrega por destino. `error` nulo = entregue. O unique é a trava do retry:
+/// a fila reprocessa o alerta inteiro, e o destino que já recebeu é pulado.
+model AlertDelivery {
+  id            String   @id @default(cuid())
+  alertId       String
+  destinationId String
+  error         String?
+  attempts      Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  alert       Alert            @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  destination AlertDestination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+
+  @@unique([alertId, destinationId])
+  @@index([destinationId])
 }

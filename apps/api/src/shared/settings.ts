@@ -66,15 +66,19 @@ export const SETTING_SCHEMAS = {
     cache: false,
   },
   /**
-   * Para onde vão os e-mails da equipe (mensagem de cliente, cancelamento,
-   * estorno que falhou). Null = o e-mail da loja (`Store.email`).
+   * Ajustes dos alertas da equipe. Os destinos moram em AlertDestination; aqui
+   * fica só o que vale para a loja inteira.
    *
-   * SEM cache: quem lê é o worker e a API, e quem escreve é a API — trocar o
-   * endereço no painel precisa valer no próximo aviso, não no próximo restart.
+   * Campo novo aqui PRECISA de `.default()`: uma linha gravada antes dele não
+   * passaria no safeParse, e o `getSetting` cairia no default inteiro em
+   * silêncio — perdendo o limite que o lojista configurou.
+   *
+   * SEM cache: a API grava, e quem lê é o checkout (API) e o estoque — um limite
+   * trocado no painel vale no próximo pedido, não no próximo restart.
    */
-  notifications: {
-    schema: z.object({ staffEmail: z.string().email().nullable() }),
-    default: { staffEmail: null },
+  alerts: {
+    schema: z.object({ lowStockThreshold: z.number().int().min(0).max(999).default(2) }),
+    default: { lowStockThreshold: 2 },
     cache: false,
   },
 } as const

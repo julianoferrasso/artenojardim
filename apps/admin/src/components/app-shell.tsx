@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  BellRing,
   LayoutDashboard,
   ShoppingCart,
   Package,
@@ -14,14 +15,13 @@ import {
   Mail,
   MessagesSquare,
   Palette,
-  Settings,
   TicketPercent,
   Truck,
   UserRound,
   Users,
   type LucideIcon,
 } from 'lucide-react'
-import { MANAGE_USERS_MIN_ROLE } from '@ecommerce/shared/contracts'
+import { ALERTS_MIN_ROLE, MANAGE_USERS_MIN_ROLE } from '@ecommerce/shared/contracts'
 import { ROLE_RANK, type UserRole } from '@ecommerce/shared/constants'
 import { useAuth } from '@/lib/auth'
 import { useSupportSummary } from '@/lib/support'
@@ -63,8 +63,8 @@ const NAV: NavItem[] = [
   // Mexe na cara da loja inteira: mesmo piso de cargo da gestão de usuários.
   { href: '/aparencia', label: 'Aparência', icon: Palette, minRole: 'ADMIN' },
   { href: '/usuarios', label: 'Usuários', icon: Users, minRole: MANAGE_USERS_MIN_ROLE },
-  // Para onde vão os e-mails da equipe: mesmo piso da rota na API.
-  { href: '/configuracoes', label: 'Configurações', icon: Settings, minRole: 'ADMIN' },
+  // Para onde vão os alertas da equipe (e-mail, Telegram, WhatsApp): mesmo piso da API.
+  { href: '/alertas', label: 'Alertas', icon: BellRing, minRole: ALERTS_MIN_ROLE },
 ]
 
 /**

@@ -13,6 +13,7 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import { withRunningBalance, countDelta } from './domain/ledger.js'
+import { notifyStockChanges } from '../notifications/service.js'
 
 /**
  * Estoque como livro-razão. Duas regras não-negociáveis:
@@ -45,7 +46,7 @@ export const recordMovement = async (
   const storeId = getActiveStoreId()
   await assertVariant(input.variantId)
 
-  const level = await prisma.$transaction(async (tx) => {
+  const { level, quantity } = await prisma.$transaction(async (tx) => {
     // Saldo atual (0 se ainda não há linha) — necessário para o COUNT calcular a
     // diferença, e para recusar um movimento que deixaria o onHand negativo.
     const current = await tx.inventoryLevel.findUnique({
@@ -60,8 +61,7 @@ export const recordMovement = async (
 
     if (quantity === 0 && input.type === 'COUNT') {
       // Contagem bateu com o sistema: nada a registrar.
-      const lvl = await readLevel(tx, input.variantId)
-      return lvl
+      return { level: await readLevel(tx, input.variantId), quantity }
     }
 
     // Recusa o que deixaria o físico negativo. A CHECK constraint é a última
@@ -102,7 +102,7 @@ export const recordMovement = async (
       data: { onHand: { increment: quantity } },
     })
 
-    return readLevel(tx, input.variantId)
+    return { level: await readLevel(tx, input.variantId), quantity }
   })
 
   await audit({
@@ -112,6 +112,13 @@ export const recordMovement = async (
     changes: { type: { from: null, to: input.type }, onHand: { from: null, to: level.onHand } },
     context: ctx,
   })
+
+  // Contagem que achou menos peças, quebra, ajuste: também pode cruzar o limite.
+  if (quantity < 0) {
+    await notifyStockChanges([
+      { variantId: input.variantId, before: level.available - quantity, onHand: level.onHand, reserved: level.reserved },
+    ])
+  }
 
   return level
 }

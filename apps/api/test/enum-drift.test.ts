@@ -15,6 +15,8 @@ import {
   INSTAGRAM_DISPLAY_MODES,
   SUPPORT_THREAD_STATUSES,
   SUPPORT_AUTHORS,
+  ALERT_CHANNELS,
+  ALERT_EVENT_TYPES,
 } from '@ecommerce/shared/constants'
 
 /**
@@ -63,6 +65,8 @@ describe('enums: shared/constants vs schema.prisma', () => {
       SUPPORT_THREAD_STATUSES,
     ],
     ['SupportAuthor', ($Enums as Record<string, never>)['SupportAuthor'], SUPPORT_AUTHORS],
+    ['AlertChannel', ($Enums as Record<string, never>)['AlertChannel'], ALERT_CHANNELS],
+    ['AlertEventType', ($Enums as Record<string, never>)['AlertEventType'], ALERT_EVENT_TYPES],
   ]
 
   for (const [name, prismaEnum, shared] of cases) {

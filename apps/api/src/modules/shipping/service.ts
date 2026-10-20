@@ -9,7 +9,7 @@ import { EVENTS } from '@ecommerce/shared/constants'
 import { prisma } from '../../config/prisma.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { getSetting } from '../../shared/settings.js'
-import { appError, notFound } from '../../shared/errors.js'
+import { appError, isAppError, notFound } from '../../shared/errors.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import {
   buildAuthorizeUrl,
@@ -137,9 +137,20 @@ export const providerStatus = async (): Promise<ShippingProviderStatus> => {
  */
 const PROACTIVE_RENEWAL_MARGIN_MS = 7 * 24 * 60 * 60_000
 
-/** Chamado pelo job periódico. Conta não conectada não é erro: só não há o que renovar. */
+/**
+ * Chamado pelo job periódico. Conta não conectada não é erro: só não há o que
+ * renovar. A renovação RECUSADA também não: ela zera os tokens e lança
+ * SHIPPING_UNAVAILABLE — devolver o status (agora desconectado) é o que deixa o
+ * job avisar a equipe na mesma rodada, e não seis horas depois.
+ */
 export const renewProviderToken = async (): Promise<ShippingProviderStatus> => {
   const before = await getConnectionStatus()
-  if (before.connected) await getValidAccessToken(PROACTIVE_RENEWAL_MARGIN_MS)
+  if (before.connected) {
+    try {
+      await getValidAccessToken(PROACTIVE_RENEWAL_MARGIN_MS)
+    } catch (err) {
+      if (!isAppError(err) || err.code !== ERROR_CODES.SHIPPING_UNAVAILABLE) throw err
+    }
+  }
   return providerStatus()
 }

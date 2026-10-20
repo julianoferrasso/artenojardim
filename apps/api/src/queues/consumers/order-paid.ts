@@ -5,6 +5,7 @@ import { prisma } from '../../config/prisma.js'
 import { publish } from '../../shared/publish.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { formatBRL } from '../../utils/money.js'
+import { notifyOrderPaid } from '../../modules/notifications/service.js'
 import { permanentError } from '../consumer.js'
 import type { OrderEmailData } from './render-order.js'
 
@@ -110,4 +111,8 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
   })
 
   logger.info({ orderId: order.id, number: order.number }, 'confirmação de pedido enfileirada')
+
+  // Por ÚLTIMO e sem lançar: o único passo que devolve a mensagem para a fila é a
+  // confirmação acima, e um retry dela não pode alertar a equipe duas vezes.
+  await notifyOrderPaid(order.id)
 }

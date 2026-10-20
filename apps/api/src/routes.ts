@@ -21,6 +21,7 @@ import { adminUserRoutes } from './modules/admin-users/routes.js'
 import { productViewRoutes } from './modules/product-views/routes.js'
 import { dashboardRoutes } from './modules/dashboard/routes.js'
 import { storeRoutes, adminStoreRoutes } from './modules/store/routes.js'
+import { adminAlertRoutes } from './modules/alerts/routes.js'
 import { newsletterRoutes } from './modules/newsletter/routes.js'
 import { bannerRoutes } from './modules/banners/routes.js'
 import { instagramPostRoutes } from './modules/instagram/routes.js'
@@ -66,6 +67,8 @@ apiRoutes.use('/admin/campaigns', campaignRoutes)
 apiRoutes.use('/admin/users', adminUserRoutes)
 // Aparência da loja. Também exige ADMIN — ver o comentário no router.
 apiRoutes.use('/admin/store', adminStoreRoutes)
+// Alertas da equipe (e-mail, Telegram, WhatsApp). O router inteiro exige ALERTS_MIN_ROLE.
+apiRoutes.use('/admin/alerts', adminAlertRoutes)
 // Cupons: gestão do staff aqui; a validação do cliente em /coupons.
 apiRoutes.use('/admin/coupons', adminCouponRoutes)
 apiRoutes.use('/coupons', couponRoutes)
