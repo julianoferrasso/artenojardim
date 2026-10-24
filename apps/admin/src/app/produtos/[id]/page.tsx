@@ -389,14 +389,32 @@ function InfoEditor({ product }: { product: Product }) {
   )
 }
 
-type DraftImage = { uploadId: string; url: string; alt: string; variantId: string | null }
+type DraftImage = {
+  uploadId: string
+  url: string
+  alt: string
+  variantId: string | null
+  width: number | null
+  height: number | null
+}
 
 const toDraft = (img: ProductImage): DraftImage => ({
   uploadId: img.uploadId,
   url: img.url,
   alt: img.alt ?? '',
   variantId: img.variantId,
+  width: img.width,
+  height: img.height,
 })
+
+/**
+ * Abaixo disto o zoom da loja não tem detalhe para mostrar: ele é limitado pela
+ * resolução real da foto, e nenhum código cria pixel que o arquivo não tem.
+ */
+const MIN_ZOOMABLE_SIDE = 1200
+
+const isSmallImage = (img: DraftImage) =>
+  img.width !== null && img.height !== null && Math.max(img.width, img.height) < MIN_ZOOMABLE_SIDE
 
 /** Rótulo da variação — mesmo formato da tabela de variações, para não divergir. */
 const variantLabel = (v: Variant): string =>
@@ -468,6 +486,11 @@ function ImagesEditor({ product }: { product: Product }) {
             <li key={img.uploadId} className="flex flex-col gap-2 rounded-md border border-border p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={img.url} alt={img.alt} className="aspect-square w-full rounded object-cover" />
+              {isSmallImage(img) && (
+                <p className="rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-xs text-warning-foreground">
+                  Foto pequena ({img.width}×{img.height}): o zoom da loja não mostra detalhes.
+                </p>
+              )}
               <input
                 value={img.alt}
                 onChange={(e) => {
@@ -549,11 +572,24 @@ function ImagesEditor({ product }: { product: Product }) {
             setImages((prev) =>
               prev.some((im) => im.uploadId === upload.id)
                 ? prev
-                : [...prev, { uploadId: upload.id, url: upload.url, alt: '', variantId: null }],
+                : [
+                    ...prev,
+                    {
+                      uploadId: upload.id,
+                      url: upload.url,
+                      alt: '',
+                      variantId: null,
+                      width: upload.width,
+                      height: upload.height,
+                    },
+                  ],
             )
             touch()
           }}
         />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Para o zoom da loja mostrar detalhes, envie fotos com 1600 px ou mais no lado maior.
+        </p>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

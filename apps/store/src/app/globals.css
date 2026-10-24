@@ -259,6 +259,22 @@
   mask-image: linear-gradient(to right, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 56%, rgb(0 0 0 / 0.15) 68%, transparent 78%);
 }
 
+/*
+  Tela cheia da galeria (lib/gallery-viewer.ts, PhotoSwipe). Fundo claro: as
+  fotos recortadas em PNG somem num fundo escuro. `:root .pswp` vence o CSS do
+  PhotoSwipe qualquer que seja a ordem em que o bundle os carregue.
+*/
+:root .pswp {
+  --pswp-bg: var(--background);
+  --pswp-placeholder-bg: var(--muted);
+  --pswp-icon-color: var(--foreground);
+  --pswp-icon-color-secondary: var(--background);
+  --pswp-icon-stroke-color: var(--background);
+  --pswp-error-text-color: var(--muted-foreground);
+  --pswp-preloader-color: color-mix(in oklch, var(--foreground) 20%, transparent);
+  --pswp-preloader-color-secondary: var(--foreground);
+}
+
 @layer utilities {
   /*
    * Carrossel da galeria: o swipe é scroll nativo com scroll-snap, então a

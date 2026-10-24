@@ -4,8 +4,9 @@ import { useEffect, useRef } from 'react'
 
 /**
  * O mínimo de acessibilidade que todo overlay precisa, sem trazer uma
- * biblioteca de dialog. Usado pelo lightbox da galeria E pelo minicarrinho —
- * é o reuso entre os dois que justifica o arquivo.
+ * biblioteca de dialog. Usado pelo minicarrinho E pelo menu do celular — é o
+ * reuso entre os dois que justifica o arquivo. (A tela cheia da galeria usa o
+ * do PhotoSwipe.)
  */
 
 const FOCUSABLE =
