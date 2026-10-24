@@ -6,10 +6,11 @@ import type {
   ProductListItem,
 } from '@ecommerce/shared/contracts'
 import { storage } from '../../integrations/storage/index.js'
+import type { StockPolicy } from '@ecommerce/shared/constants'
 import {
-  aggregateAvailable,
   availableOf,
   lowStockRemainingOf,
+  productStockStatusOf,
   stockStatusOf,
 } from '../inventory/domain/availability.js'
 
@@ -32,6 +33,8 @@ export const PRODUCT_SELECT = {
   seoTitle: true,
   seoDescription: true,
   isFeatured: true,
+  stockPolicy: true,
+  productionDays: true,
   publishedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -93,7 +96,11 @@ const toImage = (img: ProductRow['images'][number]): ProductImage => ({
 /** Quem pergunta: o público (a loja) ou o staff (o admin). Muda o que sai. */
 type Audience = { publicOnly: boolean }
 
-const toVariant = (v: ProductRow['variants'][number], { publicOnly }: Audience): Variant => {
+const toVariant = (
+  v: ProductRow['variants'][number],
+  { publicOnly }: Audience,
+  policy: StockPolicy,
+): Variant => {
   const available = availableOf(v.level)
   return {
     id: v.id,
@@ -114,8 +121,8 @@ const toVariant = (v: ProductRow['variants'][number], { publicOnly }: Audience):
       option: ov.optionValue.option.name,
       value: ov.optionValue.value,
     })),
-    stockStatus: stockStatusOf(available),
-    lowStockRemaining: lowStockRemainingOf(available),
+    stockStatus: stockStatusOf(available, policy),
+    lowStockRemaining: lowStockRemainingOf(available, policy),
   }
 }
 
@@ -131,7 +138,7 @@ const priceRange = (variants: Variant[]): { min: number; max: number } => {
  */
 export const toProductDTO = (row: ProductRow, audience: Audience): Product => {
   const rows = audience.publicOnly ? row.variants.filter((v) => v.isActive) : row.variants
-  const variants = rows.map((v) => toVariant(v, audience))
+  const variants = rows.map((v) => toVariant(v, audience, row.stockPolicy))
   return {
     id: row.id,
     name: row.name,
@@ -151,7 +158,14 @@ export const toProductDTO = (row: ProductRow, audience: Audience): Product => {
     images: row.images.map(toImage),
     variants,
     priceRange: priceRange(variants),
-    stockStatus: stockStatusOf(aggregateAvailable(rows.filter((v) => v.isActive).map((v) => v.level))),
+    stockStatus: productStockStatusOf(
+      rows.filter((v) => v.isActive).map((v) => v.level),
+      row.stockPolicy,
+    ),
+    stockPolicy: row.stockPolicy,
+    // O staff vê o prazo guardado (o cadastro volta preenchido ao trocar a
+    // política); o público só quando ele vale.
+    productionDays: audience.publicOnly && row.stockPolicy === 'STOCK_ONLY' ? null : row.productionDays,
   }
 }
 
@@ -163,6 +177,7 @@ export const LIST_SELECT = {
   slug: true,
   status: true,
   isFeatured: true,
+  stockPolicy: true,
   updatedAt: true,
   // Capa do catálogo: a foto do PRODUTO (variantId null) vem primeiro. Sem o
   // desempate por variantId, a capa poderia virar a foto de uma variação
@@ -195,6 +210,10 @@ export const toListItem = (row: ListRow): ProductListItem => {
     variantCount: row.variants.length,
     isFeatured: row.isFeatured,
     updatedAt: row.updatedAt.toISOString(),
-    stockStatus: stockStatusOf(aggregateAvailable(row.variants.map((v) => v.level))),
+    stockStatus: productStockStatusOf(
+      row.variants.map((v) => v.level),
+      row.stockPolicy,
+    ),
+    stockPolicy: row.stockPolicy,
   }
 }

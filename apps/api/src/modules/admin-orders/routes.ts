@@ -27,6 +27,8 @@ export const adminOrderRoutes: Router = Router()
 adminOrderRoutes.use(authenticate, requireStaff)
 
 adminOrderRoutes.get('/', validate({ query: adminOrderListQuerySchema }), controller.listController)
+// Antes do `/:id`: senão "production-summary" seria lido como id de pedido.
+adminOrderRoutes.get('/production-summary', controller.productionSummaryController)
 adminOrderRoutes.get('/:id', controller.detailController)
 
 adminOrderRoutes.patch(

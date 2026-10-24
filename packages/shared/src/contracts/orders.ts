@@ -15,6 +15,8 @@ export const orderItemSchema = z.object({
   quantity: z.number().int(),
   totalPrice: z.number().int(),
   imageUrl: z.string().nullable(),
+  /** Unidades produzidas sob encomenda (0..quantity); o resto saiu da prateleira. */
+  madeToOrderQuantity: z.number().int().nonnegative(),
 })
 
 export type OrderItem = z.infer<typeof orderItemSchema>
@@ -56,6 +58,8 @@ export const orderSchema = z.object({
   total: z.number().int(),
   shippingAddress: orderAddressSchema,
   shippingMethod: orderShippingMethodSchema,
+  /** Dias úteis de produção depois do pagamento; 0 = tudo pronta entrega. */
+  productionDays: z.number().int().nonnegative(),
   items: z.array(orderItemSchema),
   customerNote: z.string().nullable(),
   createdAt: z.string(),

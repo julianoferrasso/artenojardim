@@ -29,8 +29,15 @@ export type ShippingQuoteRequest = {
   packages: ShippingPackage[]
 }
 
+/**
+ * O que a transportadora responde: serviço, preço e o prazo DELA. Produção e a
+ * data estimada são da loja — o service acrescenta, porque dependem do carrinho
+ * e do relógio, não do provider.
+ */
+export type CarrierOption = Omit<ShippingOption, 'productionDays' | 'estimatedDeliveryAt'>
+
 export type ShippingProvider = {
   id: string
-  quote: (req: ShippingQuoteRequest) => Promise<ShippingOption[]>
+  quote: (req: ShippingQuoteRequest) => Promise<CarrierOption[]>
   // createLabel / track entram na Fase 1.16, quando as etiquetas forem compradas.
 }

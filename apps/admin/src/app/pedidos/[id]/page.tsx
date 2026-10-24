@@ -3,7 +3,9 @@
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Printer, ClipboardList, ExternalLink, MessagesSquare } from 'lucide-react'
-import type { AdminOrder } from '@ecommerce/shared/contracts'
+import type { AdminOrder, AdminOrderItem } from '@ecommerce/shared/contracts'
+import { businessDaysLabel } from '@ecommerce/shared/constants'
+import { formatSpDeadline } from '@ecommerce/shared/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
@@ -14,6 +16,7 @@ import { OrderTimeline } from '@/components/order-timeline'
 import { CopyButton } from '@/components/copy-button'
 import { CancelRequestCard } from '@/components/cancel-request-card'
 import { SupportStatusBadge } from '@/components/support-status-badge'
+import { ProductionDue } from '@/components/production-due'
 import { useOrder, useSetInternalNote } from '@/lib/orders'
 import {
   PAYMENT_STATUS_LABEL,
@@ -105,6 +108,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
+      {/* A próxima ação de uma encomenda paga é produzir, não separar. */}
+      {order.situation === 'IN_PRODUCTION' && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm no-print">
+          <span>
+            <strong>Encomenda em produção</strong>
+            {order.productionDays > 0 && ` · prazo de ${businessDaysLabel(order.productionDays)}`}.{' '}
+            <span className="text-muted-foreground">Terminou? Mude a expedição para “Em separação” em Ações.</span>
+          </span>
+          {order.productionDueAt && <ProductionDue at={order.productionDueAt} className="text-sm" />}
+        </div>
+      )}
+
       {order.cancelRequest && (
         <CancelRequestCard
           orderId={order.id}
@@ -180,6 +195,7 @@ const ItemsCard = ({ order }: { order: AdminOrder }) => (
             <p className="truncate text-xs text-muted-foreground">
               {item.variantName} · SKU {item.sku}
             </p>
+            <ItemOrigin item={item} />
           </div>
 
           <div className="shrink-0 text-right text-sm">
@@ -211,6 +227,21 @@ const ItemsCard = ({ order }: { order: AdminOrder }) => (
     </dl>
   </section>
 )
+
+/**
+ * De onde sai cada unidade: da prateleira (reservada no checkout) ou da
+ * produção. É o que a separação precisa saber — e o que não pode ser tirado da
+ * prateleira para cobrir uma encomenda sem dar baixa no estoque.
+ */
+const ItemOrigin = ({ item }: { item: AdminOrderItem }) => {
+  if (item.madeToOrderQuantity <= 0) return null
+  const ready = item.quantity - item.madeToOrderQuantity
+  return (
+    <span className="mt-1 inline-flex rounded border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning-foreground">
+      {ready > 0 ? `${ready} da prateleira + ${item.madeToOrderQuantity} a produzir` : 'Sob encomenda — a produzir'}
+    </span>
+  )
+}
 
 const Row = ({ label, value }: { label: string; value: string }) => (
   <div className="flex justify-between gap-2">
@@ -286,8 +317,18 @@ const AddressCard = ({ order }: { order: AdminOrder }) => {
       <p className="text-xs text-muted-foreground">
         {order.shippingMethod.carrier} · {order.shippingMethod.service}
         <br />
-        {formatBRL(order.shippingMethod.priceCents)} · até {order.shippingMethod.deliveryDays} dia(s)
+        {formatBRL(order.shippingMethod.priceCents)} · até {businessDaysLabel(order.shippingMethod.deliveryDays)}
+        {order.productionDays > 0 && (
+          <>
+            <br />+ produção: até {businessDaysLabel(order.productionDays)}
+          </>
+        )}
       </p>
+      {order.estimatedDeliveryAt && (
+        <p className="mt-2 text-xs">
+          Entrega prevista: <span className="font-medium">até {formatSpDeadline(order.estimatedDeliveryAt)}</span>
+        </p>
+      )}
     </section>
   )
 }

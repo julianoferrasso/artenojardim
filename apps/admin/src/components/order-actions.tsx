@@ -230,7 +230,8 @@ export const OrderActions = ({ order }: { order: AdminOrder }) => {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancelar o pedido #{order.number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Os itens voltam ao estoque.{' '}
+              {/* Encomenda pura nunca saiu da prateleira: não há o que devolver ao estoque. */}
+              {order.items.some((i) => i.madeToOrderQuantity < i.quantity) && 'Os itens prontos voltam ao estoque. '}
               {order.refundableAmount > 0
                 ? 'O dinheiro NÃO é devolvido: use “Reembolsar” depois, se for o caso.'
                 : 'Este pedido não tem pagamento a estornar.'}

@@ -3,6 +3,9 @@ import {
   aggregateAvailable,
   availableOf,
   lowStockRemainingOf,
+  productStockStatusOf,
+  productionDaysOf,
+  splitLine,
   stockStatusOf,
   visibleStockChanged,
 } from '../src/modules/inventory/domain/availability.js'
@@ -71,5 +74,91 @@ describe('visibleStockChanged (revalidar a vitrine?)', () => {
     [0, -1],
   ])('%i → %i não muda nada visível', (before, after) => {
     expect(visibleStockChanged(before, after)).toBe(false)
+  })
+})
+
+describe('stockStatusOf com a política do produto', () => {
+  it('sob encomenda é sempre MADE_TO_ORDER, tenha ou não estoque', () => {
+    for (const available of [0, 1, 2, 50]) {
+      expect(stockStatusOf(available, 'MADE_TO_ORDER')).toBe('MADE_TO_ORDER')
+      expect(lowStockRemainingOf(available, 'MADE_TO_ORDER')).toBeNull()
+    }
+  })
+
+  it('híbrido: com estoque é pronta entrega; sem, vira encomenda — nunca esgotado', () => {
+    expect(stockStatusOf(5, 'STOCK_THEN_MADE_TO_ORDER')).toBe('IN_STOCK')
+    expect(stockStatusOf(2, 'STOCK_THEN_MADE_TO_ORDER')).toBe('LOW_STOCK')
+    expect(lowStockRemainingOf(2, 'STOCK_THEN_MADE_TO_ORDER')).toBe(2)
+    expect(stockStatusOf(0, 'STOCK_THEN_MADE_TO_ORDER')).toBe('MADE_TO_ORDER')
+    expect(lowStockRemainingOf(0, 'STOCK_THEN_MADE_TO_ORDER')).toBeNull()
+  })
+
+  it('sem política é pronta entrega (o comportamento de antes)', () => {
+    expect(stockStatusOf(0)).toBe(stockStatusOf(0, 'STOCK_ONLY'))
+    expect(stockStatusOf(0, 'STOCK_ONLY')).toBe('OUT_OF_STOCK')
+  })
+})
+
+describe('productStockStatusOf', () => {
+  it('sem variação à venda é esgotado em qualquer política', () => {
+    expect(productStockStatusOf([], 'MADE_TO_ORDER')).toBe('OUT_OF_STOCK')
+    expect(productStockStatusOf([], 'STOCK_THEN_MADE_TO_ORDER')).toBe('OUT_OF_STOCK')
+  })
+
+  it('soma as variações e aplica a política', () => {
+    const levels = [{ onHand: 0, reserved: 0 }, null]
+    expect(productStockStatusOf(levels, 'STOCK_ONLY')).toBe('OUT_OF_STOCK')
+    expect(productStockStatusOf(levels, 'STOCK_THEN_MADE_TO_ORDER')).toBe('MADE_TO_ORDER')
+    expect(productStockStatusOf([{ onHand: 9, reserved: 0 }], 'STOCK_THEN_MADE_TO_ORDER')).toBe('IN_STOCK')
+  })
+})
+
+describe('splitLine (quanto sai da prateleira, quanto é produzido)', () => {
+  it('pronta entrega: tudo ou nada', () => {
+    expect(splitLine({ policy: 'STOCK_ONLY', available: 3, quantity: 2 })).toEqual({ ready: 2, madeToOrder: 0 })
+    expect(splitLine({ policy: 'STOCK_ONLY', available: 1, quantity: 2 })).toBeNull()
+  })
+
+  it('sob encomenda: tudo produzido, mesmo com peça na prateleira', () => {
+    expect(splitLine({ policy: 'MADE_TO_ORDER', available: 10, quantity: 2 })).toEqual({ ready: 0, madeToOrder: 2 })
+  })
+
+  it('híbrido DIVIDE: leva o que há e produz o resto', () => {
+    expect(splitLine({ policy: 'STOCK_THEN_MADE_TO_ORDER', available: 2, quantity: 3 })).toEqual({
+      ready: 2,
+      madeToOrder: 1,
+    })
+    expect(splitLine({ policy: 'STOCK_THEN_MADE_TO_ORDER', available: 5, quantity: 3 })).toEqual({
+      ready: 3,
+      madeToOrder: 0,
+    })
+    expect(splitLine({ policy: 'STOCK_THEN_MADE_TO_ORDER', available: 0, quantity: 3 })).toEqual({
+      ready: 0,
+      madeToOrder: 3,
+    })
+  })
+
+  it('disponível negativo conta como zero', () => {
+    expect(splitLine({ policy: 'STOCK_THEN_MADE_TO_ORDER', available: -2, quantity: 1 })).toEqual({
+      ready: 0,
+      madeToOrder: 1,
+    })
+  })
+})
+
+describe('productionDaysOf (o pedido espera a peça mais lenta)', () => {
+  it('o maior prazo entre as linhas com parte produzida', () => {
+    expect(
+      productionDaysOf([
+        { madeToOrder: 1, productionDays: 5 },
+        { madeToOrder: 2, productionDays: 9 },
+        { madeToOrder: 0, productionDays: 30 },
+      ]),
+    ).toBe(9)
+  })
+
+  it('tudo pronta entrega = 0', () => {
+    expect(productionDaysOf([{ madeToOrder: 0, productionDays: 7 }])).toBe(0)
+    expect(productionDaysOf([])).toBe(0)
   })
 })

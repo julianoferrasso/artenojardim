@@ -8,6 +8,7 @@ import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { VariantEditor } from '@/components/variant-editor'
 import { ImageUploader } from '@/components/image-uploader'
 import { RichTextEditor } from '@/components/rich-text-editor'
+import { AvailabilityFields, parseProductionDays, type AvailabilityValue } from '@/components/availability-editor'
 import { useSendCampaign } from '@/lib/campaigns'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -29,6 +30,7 @@ export default function NewProductPage() {
   const [variants, setVariants] = useState<CreateProductInput['variants']>([
     { sku: '', price: 0, weight: 0, length: 0, width: 0, height: 0, position: 0, isActive: true, initialStock: 0, options: [] },
   ])
+  const [availability, setAvailability] = useState<AvailabilityValue>({ stockPolicy: 'STOCK_ONLY', productionDays: '' })
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +40,11 @@ export default function NewProductPage() {
 
   const submit = (status: 'DRAFT' | 'ACTIVE') => {
     setError(null)
+    const production = parseProductionDays(availability)
+    if (!production.ok) {
+      setError(production.message)
+      return
+    }
     const input: CreateProductInput = {
       name,
       status,
@@ -50,6 +57,8 @@ export default function NewProductPage() {
       seoDescription: seoDescription || undefined,
       // Produto nasce fora dos Destaques; a estrela mora na tela de edição.
       isFeatured: false,
+      stockPolicy: availability.stockPolicy,
+      productionDays: production.days,
     }
 
     create.mutate(input, {
@@ -150,6 +159,14 @@ export default function NewProductPage() {
         <section className={section}>
           <h2 className="font-medium">Variações e preço</h2>
           <VariantEditor value={variants} onChange={setVariants} />
+        </section>
+
+        <section className={section}>
+          <div>
+            <h2 className="font-medium">Disponibilidade</h2>
+            <p className="text-sm text-muted-foreground">Como este produto é vendido.</p>
+          </div>
+          <AvailabilityFields value={availability} onChange={setAvailability} />
         </section>
 
         <section className={section}>

@@ -32,7 +32,8 @@ export const ALERT_EVENT_CATALOG: Record<AlertEventType, AlertEventInfo> = {
   },
   CANCELLATION_REQUESTED: {
     label: 'Pedido de cancelamento',
-    description: 'O cliente pediu para cancelar um pedido já em separação. A loja aprova ou recusa.',
+    description:
+      'O cliente pediu para cancelar um pedido já em separação ou uma encomenda já em produção. A loja aprova ou recusa.',
     group: 'orders',
     defaultOn: true,
   },
@@ -53,6 +54,13 @@ export const ALERT_EVENT_CATALOG: Record<AlertEventType, AlertEventInfo> = {
     description: 'O cliente fechou o pedido, mas o Pix ou o cartão ainda não foram pagos.',
     group: 'orders',
     defaultOn: false,
+  },
+  PRODUCTION_DUE: {
+    label: 'Encomenda no prazo',
+    description:
+      'Resumo diário, às 8h dos dias úteis: encomendas que vencem o prazo de produção no próximo dia útil ou já atrasaram.',
+    group: 'orders',
+    defaultOn: true,
   },
   CUSTOMER_MESSAGE: {
     label: 'Mensagem de cliente',

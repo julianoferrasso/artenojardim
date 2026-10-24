@@ -20,6 +20,7 @@ import { quoteShipping } from '../shipping/service.js'
 import { getOrder } from '../orders/service.js'
 import { notifyOrderCreated, type StockChange } from '../notifications/service.js'
 import { afterStockChange } from '../inventory/service.js'
+import { productionDaysOf } from '../inventory/domain/availability.js'
 import { resolveCoupon, claimCouponUse, type CheckoutCoupon } from '../coupons/service.js'
 import { computeCouponDiscount } from '../coupons/domain/rules.js'
 import { calculateTotals, type Totals } from './domain/totals.js'
@@ -159,9 +160,11 @@ export const getSummary = async (
       quantity: i.quantity,
       totalPrice: i.lineTotal,
       imageUrl: i.imageUrl,
+      madeToOrderQuantity: i.madeToOrderQuantity,
     })),
     shippingAddress: addressSnapshot(address),
     shippingMethod: methodSnapshot(shipping),
+    productionDays: shipping.productionDays,
     subtotal: totals.subtotal,
     discountTotal: totals.discountTotal,
     shippingTotal: totals.shippingTotal,
@@ -169,12 +172,90 @@ export const getSummary = async (
   }
 }
 
+type ReservedLine = { variantId: string; ready: number; madeToOrder: number; productionDays: number | null }
+
 /**
- * Confirma: numa transação, cria o pedido (PENDING) + itens (snapshot) e RESERVA
- * o estoque atomicamente. A reserva usa `UPDATE ... WHERE (onHand - reserved) >=
- * qty`: o banco arbitra a concorrência (dois clientes, uma peça → um 201, um 409),
- * sem SELECT antes, sem race. Reserva NÃO é movimento: a mercadoria continua na
- * prateleira até o pagamento (Fase 1.12).
+ * Reserva a parte PRONTA de uma linha, decidindo e escrevendo no mesmo comando
+ * — o banco arbitra a concorrência, sem SELECT antes:
+ *
+ *  - STOCK_ONLY: tudo ou nada (`WHERE disponível >= qty`); nenhuma linha → 409.
+ *  - MADE_TO_ORDER: não toca no estoque.
+ *  - Híbrido: leva o que houver (`LEAST(qty, disponível)`) e o resto é produzido.
+ *    O FOR UPDATE na CTE trava a linha entre a leitura do disponível e o UPDATE.
+ *
+ * Os `::int` não são enfeite: sem eles o parâmetro pode chegar como int8 e o
+ * `take` voltar como BigInt.
+ */
+const reserveLine = async (
+  tx: Prisma.TransactionClient,
+  item: CartItem,
+  productionDays: number | null,
+  stock: StockChange[],
+): Promise<ReservedLine> => {
+  const line = (ready: number): ReservedLine => ({
+    variantId: item.variantId,
+    ready,
+    madeToOrder: item.quantity - ready,
+    productionDays,
+  })
+
+  if (item.stockPolicy === 'MADE_TO_ORDER') return line(0)
+
+  if (item.stockPolicy === 'STOCK_ONLY') {
+    const [level] = await tx.$queryRaw<{ onHand: number; reserved: number }[]>`
+      UPDATE "InventoryLevel"
+         SET reserved = reserved + ${item.quantity}
+       WHERE "variantId" = ${item.variantId}
+         AND ("onHand" - reserved) >= ${item.quantity}
+      RETURNING "onHand", reserved
+    `
+    if (!level) {
+      throw businessError(ERROR_CODES.INSUFFICIENT_STOCK, `Estoque insuficiente para ${item.productName}.`, 409)
+    }
+    stock.push({
+      variantId: item.variantId,
+      before: level.onHand - level.reserved + item.quantity,
+      onHand: level.onHand,
+      reserved: level.reserved,
+    })
+    return line(item.quantity)
+  }
+
+  const [taken] = await tx.$queryRaw<{ onHand: number; reserved: number; take: number }[]>`
+    WITH cur AS (
+      SELECT "variantId", LEAST(${item.quantity}::int, GREATEST("onHand" - reserved, 0))::int AS take
+        FROM "InventoryLevel"
+       WHERE "variantId" = ${item.variantId}
+         FOR UPDATE
+    )
+    UPDATE "InventoryLevel" AS l
+       SET reserved = l.reserved + cur.take
+      FROM cur
+     WHERE l."variantId" = cur."variantId"
+       AND cur.take > 0
+    RETURNING l."onHand", l.reserved, cur.take
+  `
+  if (!taken) return line(0)
+
+  stock.push({
+    variantId: item.variantId,
+    before: taken.onHand - taken.reserved + taken.take,
+    onHand: taken.onHand,
+    reserved: taken.reserved,
+  })
+  return line(taken.take)
+}
+
+/**
+ * Confirma: numa transação, RESERVA o estoque da parte pronta e cria o pedido
+ * (PENDING) + itens (snapshot) com o que a reserva decidiu. Reserva NÃO é
+ * movimento: a mercadoria continua na prateleira até o pagamento (Fase 1.12), e
+ * a parte sob encomenda nem chega a reservar.
+ *
+ * A reserva vem ANTES do pedido porque é ela que decide quanto de cada linha é
+ * produzido — e isso vai para o snapshot e para o prazo do pedido. O prazo que
+ * vale é o daqui, não o da cotação: se a pronta entrega acabou no meio do
+ * caminho e o prazo cresceu, o cliente vê a data nova antes de pagar (409).
  */
 export const confirm = async (customerId: string, input: ConfirmCheckoutInput): Promise<Order> => {
   const { cartId, address, items, shipping, totals, coupon, customer } = await prepare(
@@ -184,11 +265,12 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
   const storeId = getActiveStoreId()
 
   // Peso é snapshot no item; carrega das variantes (o carrinho não guarda peso).
-  const weights = await prisma.productVariant.findMany({
+  // O prazo de produção também: é o do produto AGORA, congelado no pedido.
+  const variants = await prisma.productVariant.findMany({
     where: { id: { in: items.map((i) => i.variantId) } },
-    select: { id: true, weight: true },
+    select: { id: true, weight: true, product: { select: { productionDays: true } } },
   })
-  const weightById = new Map(weights.map((w) => [w.id, w.weight]))
+  const variantById = new Map(variants.map((v) => [v.id, v]))
 
   // TTL da reserva: sem método de pagamento ainda (Fase 1.12), usa o do Pix como
   // janela padrão. Um job de expiração libera as vencidas (Fase 1.18).
@@ -203,6 +285,26 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
         // Antes do create: a contagem por cliente dentro do claim não pode
         // enxergar o próprio pedido que está nascendo.
         if (coupon) await claimCouponUse(tx, coupon, customerId)
+
+        // Em ordem de variantId: duas confirmações com as mesmas peças travam as
+        // linhas de estoque na mesma ordem, e uma espera a outra em vez de deadlock.
+        // O RETURNING devolve o saldo de DEPOIS, sob o lock da linha: é dele que
+        // sai o "antes" exato para o alerta de estoque baixo, sem outro SELECT.
+        const stock: StockChange[] = []
+        const lines = new Map<string, ReservedLine>()
+        for (const i of [...items].sort((a, b) => a.variantId.localeCompare(b.variantId))) {
+          const productionDays = variantById.get(i.variantId)?.product.productionDays ?? null
+          lines.set(i.variantId, await reserveLine(tx, i, productionDays, stock))
+        }
+
+        const productionDays = productionDaysOf([...lines.values()])
+        if (input.expectedProductionDays !== undefined && productionDays > input.expectedProductionDays) {
+          throw businessError(
+            ERROR_CODES.PRODUCTION_TIME_CHANGED,
+            'Um item acabou de esgotar a pronta entrega e passa a ser produzido sob encomenda. Confira o novo prazo antes de continuar.',
+            409,
+          )
+        }
 
         const agg = await tx.order.aggregate({ where: { storeId }, _max: { number: true } })
         const number = (agg._max.number ?? 0) + 1
@@ -222,6 +324,9 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
             couponCodeSnapshot: coupon?.code ?? null,
             shippingAddressJson: addressSnapshot(address) as object,
             shippingMethodJson: methodSnapshot(shipping) as object,
+            productionDays,
+            // O relógio do pedido só com encomenda: sem reserva, é ele que vence.
+            paymentDueAt: expiresAt,
             customerNote: input.customerNote ?? null,
             items: {
               create: items.map((i) => ({
@@ -232,8 +337,9 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
                 unitPrice: i.unitPrice,
                 quantity: i.quantity,
                 totalPrice: i.lineTotal,
-                weight: weightById.get(i.variantId) ?? 0,
+                weight: variantById.get(i.variantId)?.weight ?? 0,
                 imageUrl: i.imageUrl,
+                madeToOrderQuantity: lines.get(i.variantId)?.madeToOrder ?? 0,
               })),
             },
             events: {
@@ -243,33 +349,17 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
           select: { id: true },
         })
 
-        // Reserva atômica por item. Nenhuma linha = sem estoque → 409 e rollback.
-        // O RETURNING devolve o saldo de DEPOIS, sob o lock da linha: é dele que
-        // sai o "antes" exato para o alerta de estoque baixo, sem outro SELECT.
-        const stock: StockChange[] = []
-        for (const i of items) {
-          const [level] = await tx.$queryRaw<{ onHand: number; reserved: number }[]>`
-            UPDATE "InventoryLevel"
-               SET reserved = reserved + ${i.quantity}
-             WHERE "variantId" = ${i.variantId}
-               AND ("onHand" - reserved) >= ${i.quantity}
-            RETURNING "onHand", reserved
-          `
-          if (!level) {
-            throw businessError(
-              ERROR_CODES.INSUFFICIENT_STOCK,
-              `Estoque insuficiente para ${i.productName}.`,
-              409,
-            )
-          }
-          stock.push({
-            variantId: i.variantId,
-            before: level.onHand - level.reserved + i.quantity,
-            onHand: level.onHand,
-            reserved: level.reserved,
-          })
-          await tx.inventoryReservation.create({
-            data: { variantId: i.variantId, orderId: order.id, quantity: i.quantity, expiresAt },
+        // A reserva já foi feita acima; aqui só o registro dela, com o pedido.
+        // Só a parte pronta: é ela que vira SALE no pagamento.
+        const reservations = [...lines.values()].filter((l) => l.ready > 0)
+        if (reservations.length > 0) {
+          await tx.inventoryReservation.createMany({
+            data: reservations.map((l) => ({
+              variantId: l.variantId,
+              orderId: order.id,
+              quantity: l.ready,
+              expiresAt,
+            })),
           })
         }
 

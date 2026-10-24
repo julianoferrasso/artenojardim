@@ -1,10 +1,13 @@
 import {
   deriveSituation,
   canCancelOrder,
+  estimateDelivery,
+  estimateProductionDue,
   type AdminOrder,
   type AdminOrderListItem,
   type OrderPaymentDetail,
 } from '@ecommerce/shared/contracts'
+import { EVENTS } from '@ecommerce/shared/constants'
 import { Prisma } from '@prisma/client'
 
 /**
@@ -25,11 +28,33 @@ export const ADMIN_LIST_SELECT = {
   fulfillmentStatus: true,
   canceledAt: true,
   cancelRequestedAt: true,
+  productionDays: true,
   customer: { select: { name: true } },
   _count: { select: { items: true } },
+  // Só o primeiro pagamento aprovado: é dele que conta o prazo de produção.
+  payments: {
+    where: { paidAt: { not: null } },
+    orderBy: { paidAt: 'asc' },
+    take: 1,
+    select: { paidAt: true },
+  },
 } satisfies Prisma.OrderSelect
 
 export type AdminListRow = Prisma.OrderGetPayload<{ select: typeof ADMIN_LIST_SELECT }>
+
+/**
+ * "Produzir até" só enquanto a produção é o próximo passo: pago, sem separação
+ * começada e não cancelado. Depois disso a data não pede mais nada a ninguém.
+ */
+const productionDueOf = (row: {
+  canceledAt: Date | null
+  fulfillmentStatus: AdminListRow['fulfillmentStatus']
+  productionDays: number
+  paidAt: Date | null
+}): string | null =>
+  row.canceledAt || row.fulfillmentStatus !== 'UNFULFILLED'
+    ? null
+    : estimateProductionDue({ paidAt: row.paidAt, productionDays: row.productionDays })
 
 export const toAdminListItem = (row: AdminListRow): AdminOrderListItem => ({
   id: row.id,
@@ -47,6 +72,7 @@ export const toAdminListItem = (row: AdminListRow): AdminOrderListItem => ({
   // PAID ainda com o pedido cancelado: o estorno não saiu. PARTIALLY_REFUNDED
   // fica de fora — reembolso parcial num cancelado foi decisão de alguém.
   refundPending: !!row.canceledAt && row.paymentStatus === 'PAID',
+  productionDueAt: productionDueOf({ ...row, paidAt: row.payments[0]?.paidAt ?? null }),
 })
 
 export const ADMIN_ORDER_SELECT = {
@@ -68,6 +94,7 @@ export const ADMIN_ORDER_SELECT = {
   couponCodeSnapshot: true,
   shippingAddressJson: true,
   shippingMethodJson: true,
+  productionDays: true,
   customerNote: true,
   internalNote: true,
   createdAt: true,
@@ -87,6 +114,7 @@ export const ADMIN_ORDER_SELECT = {
       totalPrice: true,
       weight: true,
       imageUrl: true,
+      madeToOrderQuantity: true,
     },
   },
   payments: {
@@ -165,6 +193,9 @@ const toPaymentDTO = (
 
 export const toAdminOrderDTO = (row: AdminOrderRow, ctx: DtoContext): AdminOrder => {
   const payment = paidPayment(row)
+  const shippingMethod = row.shippingMethodJson as AdminOrder['shippingMethod']
+  // Eventos vêm do mais novo para o mais antigo: o ÚLTIMO da lista é o primeiro envio.
+  const shipped = row.events.filter((e) => e.type === EVENTS.order.shipped).at(-1)
 
   return {
     id: row.id,
@@ -186,7 +217,15 @@ export const toAdminOrderDTO = (row: AdminOrderRow, ctx: DtoContext): AdminOrder
     phone: row.phone,
 
     shippingAddress: row.shippingAddressJson as AdminOrder['shippingAddress'],
-    shippingMethod: row.shippingMethodJson as AdminOrder['shippingMethod'],
+    shippingMethod,
+    productionDays: row.productionDays,
+    productionDueAt: productionDueOf({ ...row, paidAt: payment?.paidAt ?? null }),
+    estimatedDeliveryAt: estimateDelivery({
+      shippedAt: shipped?.createdAt ?? null,
+      paidAt: payment?.paidAt ?? null,
+      deliveryDays: shippingMethod.deliveryDays,
+      productionDays: row.productionDays,
+    }),
 
     items: row.items.map((i) => ({
       id: i.id,
@@ -199,6 +238,7 @@ export const toAdminOrderDTO = (row: AdminOrderRow, ctx: DtoContext): AdminOrder
       totalPrice: i.totalPrice,
       weight: i.weight,
       imageUrl: i.imageUrl,
+      madeToOrderQuantity: i.madeToOrderQuantity,
     })),
 
     subtotal: row.subtotal,

@@ -133,6 +133,8 @@ export const EVENTS = {
     trackingSync: 'shipping.tracking.sync',
     /** Staff gerou o link de (re)conexão da conta do Melhor Envio. Só auditoria. */
     providerConnectStarted: 'shipping.provider_connect_started',
+    /** Prazo de postagem mudou. Só auditoria. */
+    settingsUpdated: 'shipping.settings_updated',
   },
   store: {
     /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */

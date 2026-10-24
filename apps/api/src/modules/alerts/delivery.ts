@@ -273,6 +273,14 @@ export const raiseAlert = async (types: AlertTypes, content: AlertContent): Prom
   }
 }
 
+/**
+ * Já saiu um alerta deste tipo desde `since`? É a trava de quem manda resumo
+ * periódico: o job roda de hora em hora, o resumo sai uma vez por dia. Sem
+ * destino inscrito o alerta nem é gravado — e não há a quem repetir.
+ */
+export const alertRaisedSince = async (type: AlertEventType, since: Date): Promise<boolean> =>
+  (await prisma.alert.count({ where: { storeId: getActiveStoreId(), type, createdAt: { gte: since } } })) > 0
+
 /** Uma entrega, no worker (`alert.send`). Só a falha transitória volta para a fila. */
 export const deliverAlert = async (job: AlertSendJob): Promise<void> => {
   const destination = await prisma.alertDestination.findFirst({

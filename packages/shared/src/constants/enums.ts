@@ -24,6 +24,15 @@ export const PRODUCT_STATUSES = ['DRAFT', 'ACTIVE', 'ARCHIVED'] as const
 export const productStatusSchema = z.enum(PRODUCT_STATUSES)
 export type ProductStatus = z.infer<typeof productStatusSchema>
 
+/**
+ * Como o produto é vendido em relação ao estoque (que continua por variante):
+ * só o disponível (pronta entrega), o disponível e depois sob encomenda, ou
+ * sempre sob encomenda.
+ */
+export const STOCK_POLICIES = ['STOCK_ONLY', 'STOCK_THEN_MADE_TO_ORDER', 'MADE_TO_ORDER'] as const
+export const stockPolicySchema = z.enum(STOCK_POLICIES)
+export type StockPolicy = z.infer<typeof stockPolicySchema>
+
 export const PAYMENT_STATUSES = [
   'PENDING',
   'PROCESSING',
@@ -131,6 +140,7 @@ export const ALERT_EVENT_TYPES = [
   'ORDER_CANCELED_BY_CUSTOMER',
   'REFUND_FAILED',
   'ORDER_CREATED',
+  'PRODUCTION_DUE',
   'CUSTOMER_MESSAGE',
   'LOW_STOCK',
   'SHIPPING_DISCONNECTED',

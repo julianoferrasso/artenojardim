@@ -31,6 +31,13 @@ enum ProductStatus {
   ARCHIVED
 }
 
+/// Como o produto é vendido em relação ao estoque. Espelha STOCK_POLICIES em constants.
+enum StockPolicy {
+  STOCK_ONLY // pronta entrega: vende só o disponível; acabou = esgotado
+  STOCK_THEN_MADE_TO_ORDER // vende o disponível; o que faltar é produzido sob encomenda
+  MADE_TO_ORDER // sob encomenda: produzido depois da compra, não usa estoque
+}
+
 /// Movimento de estoque. O sinal fica em `quantity`, não no tipo.
 enum MovementType {
   PURCHASE // + fornecedor, produção, estoque inicial (admin)
@@ -142,6 +149,7 @@ enum AlertEventType {
   LOW_STOCK
   SHIPPING_DISCONNECTED
   SITE_DOWN
+  PRODUCTION_DUE
 }
 
 /// Uma única linha na v1. Toda query filtra por storeId via getActiveStoreId().
@@ -474,6 +482,13 @@ model Product {
   /// Aparece na seção "Destaques" da home. Escolha editorial do lojista, não
   /// derivada de vendas ou data — por isso é flag, não query.
   isFeatured Boolean @default(false)
+
+  /// O estoque continua por variante; a política diz o que fazer quando ele não
+  /// basta. CHECK no banco: fora de STOCK_ONLY, `productionDays` é obrigatório.
+  stockPolicy    StockPolicy @default(STOCK_ONLY)
+  /// Dias ÚTEIS de produção, contados da confirmação do pagamento (1–60). Fica
+  /// guardado mesmo em STOCK_ONLY, para voltar preenchido se a política mudar.
+  productionDays Int?
 
   publishedAt DateTime?
   deletedAt   DateTime?
@@ -918,6 +933,13 @@ model Order {
   /// { carrier, service, serviceId, price, deliveryDays } da opção escolhida.
   shippingMethodJson  Json
 
+  /// Maior prazo de produção entre os itens sob encomenda (dias úteis após o
+  /// pagamento). 0 = tudo pronta entrega. Snapshot: mudar o produto não muda o pedido.
+  productionDays Int       @default(0)
+  /// Prazo para pagar. Pedido com item pronto vence pela reserva; este é o relógio
+  /// do pedido só com encomenda, que não reserva nada.
+  paymentDueAt   DateTime?
+
   customerNote String?
   internalNote String?
 
@@ -987,6 +1009,9 @@ model OrderItem {
   totalPrice  Int
   weight      Int
   imageUrl    String?
+  /// Unidades produzidas sob encomenda (0..quantity, CHECK no banco). O resto saiu
+  /// da prateleira e foi reservado — só essa parte gera SALE no pagamento.
+  madeToOrderQuantity Int @default(0)
 
   order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)

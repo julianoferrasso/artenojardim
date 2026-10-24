@@ -1,10 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, ChevronRight, MessagesSquare, PackageOpen, PackageX, type LucideIcon } from 'lucide-react'
+import {
+  CheckCircle2,
+  ChevronRight,
+  Hammer,
+  MessagesSquare,
+  PackageOpen,
+  PackageX,
+  type LucideIcon,
+} from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useLowStockCount } from '@/lib/inventory'
-import { useOrders } from '@/lib/orders'
+import { useOrders, useProductionSummary } from '@/lib/orders'
 import { useSupportSummary } from '@/lib/support'
 import { cn } from '@/lib/utils'
 import { formatCount } from './format'
@@ -16,13 +24,22 @@ import { formatCount } from './format'
  */
 export function AttentionStrip() {
   const toPick = useOrders({ situation: 'PAID', perPage: 1 })
+  const production = useProductionSummary()
   const support = useSupportSummary()
   const lowStock = useLowStockCount()
 
   const cancelRequests = support.data?.cancelRequests ?? 0
+  const overdue = production.data?.overdue ?? 0
+  const dueSoon = production.data?.dueSoon ?? 0
+  const productionHint = [
+    overdue > 0 ? `${formatCount(overdue)} atrasada(s)` : null,
+    dueSoon > 0 ? `${formatCount(dueSoon)} vence(m) logo` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
-    <section aria-label="Precisa de atenção agora" className="grid gap-3 sm:grid-cols-3">
+    <section aria-label="Precisa de atenção agora" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Item
         href="/pedidos?situacao=PAID"
         icon={PackageOpen}
@@ -30,6 +47,17 @@ export function AttentionStrip() {
         one="pedido a separar"
         many="pedidos a separar"
         calm="Nenhum pedido a separar"
+      />
+      {/* Encomenda paga não é "a separar": primeiro ela é produzida. */}
+      <Item
+        href="/pedidos?situacao=IN_PRODUCTION"
+        icon={Hammer}
+        count={production.data?.inProduction}
+        one="encomenda em produção"
+        many="encomendas em produção"
+        calm="Nenhuma encomenda em produção"
+        hint={productionHint || undefined}
+        urgent={overdue > 0}
       />
       <Item
         href="/atendimento"
@@ -60,6 +88,7 @@ function Item({
   many,
   calm,
   hint,
+  urgent = false,
 }: {
   href: string
   icon: LucideIcon
@@ -68,6 +97,8 @@ function Item({
   many: string
   calm: string
   hint?: string | undefined
+  /** Há prazo estourado: a dica sai em vermelho. */
+  urgent?: boolean
 }) {
   const pending = count !== undefined && count > 0
 
@@ -95,7 +126,11 @@ function Item({
         ) : (
           <span className="text-sm text-muted-foreground">{calm}</span>
         )}
-        {hint && <span className="truncate text-xs text-muted-foreground">{hint}</span>}
+        {hint && (
+          <span className={cn('truncate text-xs', urgent ? 'font-medium text-destructive' : 'text-muted-foreground')}>
+            {hint}
+          </span>
+        )}
       </span>
       <ChevronRight
         aria-hidden

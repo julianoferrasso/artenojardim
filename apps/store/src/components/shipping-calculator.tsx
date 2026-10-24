@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { ShippingOption } from '@ecommerce/shared/contracts'
-import { quoteShippingCached } from '@/lib/shipping'
+import { businessDaysLabel } from '@ecommerce/shared/constants'
+import { deliveryLabel, quoteShippingCached } from '@/lib/shipping'
 import { useShippingCep } from '@/lib/shipping-cep'
 import { formatBRL, maskCep } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
@@ -27,6 +28,14 @@ type Props = {
 }
 
 const itemsKeyOf = (items: Items): string => items.map((i) => `${i.variantId}:${i.quantity}`).join(',')
+
+/** A data é promessa: dizer de onde ela parte e o que está dentro dela. */
+const ProductionNote = ({ days }: { days: number }) => (
+  <p className="text-xs text-muted-foreground">
+    {days > 0 ? `Inclui até ${businessDaysLabel(days)} de produção. ` : ''}
+    Previsão para pagamento aprovado hoje.
+  </p>
+)
 
 export const ShippingCalculator = ({ items, disabled = false }: Props) => {
   const { cep: savedCep, ready, setCep: saveCep } = useShippingCep()
@@ -124,18 +133,24 @@ export const ShippingCalculator = ({ items, disabled = false }: Props) => {
       )}
 
       {showOptions && options.length > 0 && (
-        <ul className="flex flex-col gap-1.5 text-sm">
-          {options.map((o) => (
-            <li key={o.id} className="flex items-center justify-between gap-4">
-              <span>
-                {o.carrier} · {o.service}
-              </span>
-              <span className="whitespace-nowrap text-muted-foreground">
-                {formatBRL(o.priceCents)} · {o.deliveryDays} dias
-              </span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-2 text-sm">
+            {options.map((o) => (
+              <li key={o.id} className="flex items-start justify-between gap-4">
+                <span className="flex flex-col">
+                  <span>
+                    {o.carrier} · {o.service}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{deliveryLabel(o)}</span>
+                </span>
+                <span className="whitespace-nowrap font-medium">
+                  {o.priceCents === 0 ? 'Grátis' : formatBRL(o.priceCents)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <ProductionNote days={options[0]?.productionDays ?? 0} />
+        </>
       )}
     </div>
   )

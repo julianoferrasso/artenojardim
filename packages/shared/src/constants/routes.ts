@@ -69,6 +69,8 @@ export const ROUTES = {
     connect: `${base}/shipping/melhor-envio/connect`,
     callback: `${base}/shipping/melhor-envio/callback`,
     status: `${base}/shipping/melhor-envio/status`,
+    /** Prazo de postagem (ADMIN). GET lê, PUT grava. */
+    settings: `${base}/shipping/settings`,
   },
 
   checkout: {
@@ -127,6 +129,8 @@ export const ROUTES = {
 
     orders: {
       list: `${base}/admin/orders`,
+      /** Encomendas pagas ainda na produção: total, vencendo e atrasadas (Dashboard). */
+      productionSummary: `${base}/admin/orders/production-summary`,
       detail: (id: string) => `${base}/admin/orders/${id}`,
       fulfillment: (id: string) => `${base}/admin/orders/${id}/fulfillment`,
       cancel: (id: string) => `${base}/admin/orders/${id}/cancel`,

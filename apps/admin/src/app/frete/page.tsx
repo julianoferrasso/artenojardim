@@ -1,11 +1,19 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
+import { HANDLING_DAYS_MAX, shippingSettingsSchema, type ShippingSettings } from '@ecommerce/shared/contracts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ApiError } from '@/lib/api'
-import { useConnectShippingProvider, useShippingProviderStatus } from '@/lib/shipping'
+import {
+  useConnectShippingProvider,
+  useShippingProviderStatus,
+  useShippingSettings,
+  useUpdateShippingSettings,
+} from '@/lib/shipping'
 import { formatDate } from '@/lib/utils'
 
 export default function FretePage() {
@@ -15,8 +23,100 @@ export default function FretePage() {
       <p className="mb-6 text-sm text-muted-foreground">
         A conta do Melhor Envio que calcula os fretes da loja.
       </p>
-      <MelhorEnvioCard />
+      <div className="flex flex-col gap-6">
+        <MelhorEnvioCard />
+        <HandlingDaysCard />
+      </div>
     </div>
+  )
+}
+
+/**
+ * Quantos dias úteis a loja leva para postar um pedido pronto. Entra em toda
+ * data de entrega que o cliente vê, e na página do produto ("Postamos em até N
+ * dias úteis"). Na encomenda, é somado depois da produção.
+ */
+function HandlingDaysCard() {
+  const { data, isLoading, error } = useShippingSettings()
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-6">
+      <h2 className="text-sm font-semibold">Prazo de postagem</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Dias úteis entre a confirmação do pagamento e a postagem de um pedido pronto. A loja soma este prazo ao
+        da transportadora em toda data de entrega — e, na encomenda, depois do prazo de produção.
+      </p>
+      {isLoading && <Skeleton className="mt-3 h-9 w-48" />}
+      {error && <p className="mt-3 text-sm text-destructive">Falha ao carregar o prazo de postagem.</p>}
+      {data && <HandlingDaysForm settings={data} />}
+    </section>
+  )
+}
+
+function HandlingDaysForm({ settings }: { settings: ShippingSettings }) {
+  const save = useUpdateShippingSettings()
+  const current = String(settings.handlingDays)
+  const [value, setValue] = useState(current)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => setValue(current), [current])
+
+  useEffect(() => {
+    if (!saved) return
+    const timer = setTimeout(() => setSaved(false), 2000)
+    return () => clearTimeout(timer)
+  }, [saved])
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const parsed = shippingSettingsSchema.safeParse({ handlingDays: value.trim() === '' ? Number.NaN : Number(value) })
+    if (!parsed.success) {
+      setError(`Informe um número inteiro de 0 a ${HANDLING_DAYS_MAX}.`)
+      return
+    }
+    setError(null)
+    save.mutate(parsed.data, {
+      onSuccess: () => setSaved(true),
+      onError: (err) =>
+        setError(
+          err instanceof ApiError && err.status === 403
+            ? 'Só administradores podem mudar o prazo de postagem.'
+            : 'Não foi possível salvar. Tente de novo.',
+        ),
+    })
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+      <label htmlFor="handling-days" className="text-muted-foreground">
+        Postamos em até
+      </label>
+      <Input
+        id="handling-days"
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={HANDLING_DAYS_MAX}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value)
+          setError(null)
+        }}
+        aria-invalid={!!error}
+        className="h-9 w-20"
+      />
+      <span className="text-muted-foreground">dias úteis</span>
+      <Button type="submit" size="sm" variant="outline" disabled={value === current || save.isPending}>
+        {save.isPending ? 'Salvando…' : 'Salvar'}
+      </Button>
+      {saved && <span className="text-success">Salvo ✓</span>}
+      {error && (
+        <span role="alert" className="w-full text-destructive">
+          {error}
+        </span>
+      )}
+    </form>
   )
 }
 

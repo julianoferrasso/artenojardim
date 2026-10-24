@@ -20,6 +20,7 @@ import { slugify, uniqueSlug } from '../../utils/slug.js'
 import { sanitizeRichText } from '../../utils/rich-text.js'
 import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
 import { recordInitialStock } from '../inventory/service.js'
+import { notifyBackInStock } from '../notifications/service.js'
 import { deriveOptions, validateVariants, optionKey } from './domain/variants.js'
 import { publishBlockers, BLOCKER_MESSAGES } from './domain/publish.js'
 import { splitPage } from './domain/list-order.js'
@@ -176,6 +177,8 @@ export const createProduct = async (
         seoTitle: input.seoTitle ?? null,
         seoDescription: input.seoDescription ?? null,
         isFeatured: input.isFeatured,
+        stockPolicy: input.stockPolicy,
+        productionDays: input.productionDays,
         publishedAt: input.status === 'ACTIVE' ? new Date() : null,
         categories: { create: input.categoryIds.map((categoryId) => ({ categoryId })) },
         images: {
@@ -276,18 +279,29 @@ const IN_STOCK_VARIANT = {
   level: { is: { onHand: { gt: prisma.inventoryLevel.fields.reserved } } },
 } satisfies Prisma.ProductVariantWhereInput
 
+/** Vende sem depender da prateleira: sob encomenda ou híbrido, com alguma variação à venda. */
+const SELLS_WITHOUT_STOCK = {
+  stockPolicy: { not: 'STOCK_ONLY' },
+  variants: { some: { isActive: true } },
+} satisfies Prisma.ProductWhereInput
+
+/** Comprável agora: tem estoque livre, ou é produzido sob encomenda. */
+const PURCHASABLE = {
+  OR: [{ variants: { some: IN_STOCK_VARIANT } }, SELLS_WITHOUT_STOCK],
+} satisfies Prisma.ProductWhereInput
+
 /**
- * A vitrine pública: os com estoque primeiro, os esgotados no fim (ver
- * `splitPage`). O `id` desempata para a fronteira entre páginas não repetir nem
- * pular produto com o mesmo `updatedAt`.
+ * A vitrine pública: os compráveis primeiro — com estoque ou sob encomenda —, os
+ * esgotados no fim (ver `splitPage`). O `id` desempata para a fronteira entre
+ * páginas não repetir nem pular produto com o mesmo `updatedAt`.
  */
 const listInStockFirst = async (
   where: Prisma.ProductWhereInput,
   orderBy: Prisma.ProductOrderByWithRelationInput,
   query: ProductListQuery,
 ): Promise<[Prisma.ProductGetPayload<{ select: typeof LIST_SELECT }>[], number]> => {
-  const inStock: Prisma.ProductWhereInput = { AND: [where, { variants: { some: IN_STOCK_VARIANT } }] }
-  const soldOut: Prisma.ProductWhereInput = { AND: [where, { variants: { none: IN_STOCK_VARIANT } }] }
+  const inStock: Prisma.ProductWhereInput = { AND: [where, PURCHASABLE] }
+  const soldOut: Prisma.ProductWhereInput = { AND: [where, { NOT: PURCHASABLE }] }
 
   const [inCount, total] = await Promise.all([
     prisma.product.count({ where: inStock }),
@@ -321,6 +335,11 @@ export const listProducts = async (
     // A seção "Destaques" da home. Comparação com a STRING 'true': query param
     // chega como texto (ver o comentário no contrato).
     ...(query.featured === 'true' ? { isFeatured: true } : {}),
+    // "Pronta entrega": sai da prateleira agora. O híbrido entra enquanto tem
+    // estoque; o sob encomenda, nunca.
+    ...(query.ready === 'true'
+      ? { stockPolicy: { not: 'MADE_TO_ORDER' }, variants: { some: IN_STOCK_VARIANT } }
+      : {}),
   }
 
   const orderBy = parseSort(query.sort)
@@ -368,6 +387,8 @@ export const updateProduct = async (
       slug: true,
       status: true,
       isFeatured: true,
+      stockPolicy: true,
+      productionDays: true,
       _count: { select: { images: true } },
       variants: {
         select: { isActive: true, price: true, weight: true, length: true, width: true, height: true },
@@ -377,6 +398,18 @@ export const updateProduct = async (
   if (!current) throw notFound('Produto')
 
   if (input.categoryIds) await assertCategoriesValid(input.categoryIds)
+
+  // A regra cruzada contra o estado JUNTO: o PATCH pode mandar só a política, e
+  // o prazo que vale é o que já está gravado. Sem isto, a CHECK do banco viraria 500.
+  const nextPolicy = input.stockPolicy ?? current.stockPolicy
+  const nextProductionDays = input.productionDays !== undefined ? input.productionDays : current.productionDays
+  if (nextPolicy !== 'STOCK_ONLY' && nextProductionDays === null) {
+    throw businessError(
+      ERROR_CODES.PRODUCTION_DAYS_REQUIRED,
+      'Informe o prazo de produção do produto sob encomenda.',
+      422,
+    )
+  }
 
   // Transição para ACTIVE: valida contra o estado real (imagens + variantes que
   // JÁ existem no banco), não contra o que o request manda.
@@ -406,6 +439,8 @@ export const updateProduct = async (
   if (input.seoTitle !== undefined) data.seoTitle = input.seoTitle
   if (input.seoDescription !== undefined) data.seoDescription = input.seoDescription
   if (input.isFeatured !== undefined) data.isFeatured = input.isFeatured
+  if (input.stockPolicy !== undefined) data.stockPolicy = input.stockPolicy
+  if (input.productionDays !== undefined) data.productionDays = input.productionDays
   if (input.status !== undefined) {
     data.status = input.status
     // Marca publishedAt na primeira vez que vira ACTIVE; não reescreve depois.
@@ -424,8 +459,22 @@ export const updateProduct = async (
   })
 
   const changes = diff(
-    { name: current.name, slug: current.slug, status: current.status, isFeatured: current.isFeatured },
-    { name: updated.name, slug: updated.slug, status: updated.status, isFeatured: updated.isFeatured },
+    {
+      name: current.name,
+      slug: current.slug,
+      status: current.status,
+      isFeatured: current.isFeatured,
+      stockPolicy: current.stockPolicy,
+      productionDays: current.productionDays,
+    },
+    {
+      name: updated.name,
+      slug: updated.slug,
+      status: updated.status,
+      isFeatured: updated.isFeatured,
+      stockPolicy: updated.stockPolicy,
+      productionDays: updated.productionDays,
+    },
   )
   if (Object.keys(changes).length > 0) {
     await audit({
@@ -438,6 +487,15 @@ export const updateProduct = async (
   }
 
   void revalidateStorefront()
+
+  // Deixou de ser só pronta entrega: quem pediu "Avise-me" já pode encomendar.
+  // O aviso é de uso único e só sai para produto publicado (notifyBackInStock).
+  if (current.stockPolicy === 'STOCK_ONLY' && updated.stockPolicy !== 'STOCK_ONLY') {
+    void notifyBackInStock(
+      updated.variants.filter((v) => v.isActive).map((v) => v.id),
+      { madeToOrder: true },
+    )
+  }
 
   return toProductDTO(updated, { publicOnly: false })
 }

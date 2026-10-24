@@ -16,6 +16,8 @@ export type OrderEmailData = {
   totals: Array<{ label: string; value: string; strong?: boolean }>
   shippingAddress: string
   estimatedDelivery: string | null
+  /** Opcional: mensagens enfileiradas antes da encomenda existir não trazem. */
+  productionDue?: string | null
 }
 
 export const renderOrderEmail = async (data: OrderEmailData): Promise<EmailContent> => {
@@ -30,5 +32,6 @@ export const renderOrderEmail = async (data: OrderEmailData): Promise<EmailConte
     totals: data.totals,
     shippingAddress: data.shippingAddress,
     estimatedDelivery: data.estimatedDelivery,
+    productionDue: data.productionDue ?? null,
   })
 }

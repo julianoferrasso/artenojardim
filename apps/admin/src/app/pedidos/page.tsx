@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { OrderSituationBadge } from '@/components/order-situation-badge'
 import { CancelRequestedBadge } from '@/components/support-status-badge'
+import { ProductionDue } from '@/components/production-due'
 import { useOrders } from '@/lib/orders'
 import { SITUATION_LABEL, SITUATION_ORDER, SORT_OPTIONS } from '@/lib/order-labels'
 import { formatBRL, formatDate } from '@/lib/utils'
@@ -221,6 +222,9 @@ function OrdersView() {
                     <Link href={`/pedidos/${order.id}`} className="flex flex-wrap gap-1">
                       <OrderSituationBadge situation={order.situation} />
                       {order.cancelRequested && <CancelRequestedBadge />}
+                      {order.situation === 'IN_PRODUCTION' && order.productionDueAt && (
+                        <ProductionDue at={order.productionDueAt} />
+                      )}
                       {order.refundPending && (
                         <Badge
                           variant="outline"

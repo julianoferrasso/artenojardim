@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import type { Product, ProductListItem } from '@ecommerce/shared/contracts'
-import { getProduct, listProducts } from '@/lib/catalog'
+import { getProduct, getStore, listProducts } from '@/lib/catalog'
 import { ApiError } from '@/lib/api'
 import { ProductDetail } from '@/components/product-detail'
 import { ProductCard } from '@/components/product-card'
@@ -67,12 +67,18 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
   if (!product) notFound()
 
   const soldOut = product.stockStatus === 'OUT_OF_STOCK'
-  const alternatives = soldOut ? await loadAlternatives(product) : []
+  // getStore() também roda no layout; o cache de request do Next deduplica.
+  const [alternatives, store] = await Promise.all([
+    soldOut ? loadAlternatives(product) : Promise.resolve([]),
+    getStore().catch(() => null),
+  ])
 
   // JSON-LD Product/Offer: é o que faz o Google mostrar preço e disponibilidade
   // direto no resultado de busca. `lowPrice/highPrice` da faixa de variantes. A
   // disponibilidade tem que ser a mesma que a tela mostra — divergir vira aviso
-  // no Search Console e tira o produto dos resultados ricos.
+  // no Search Console e tira o produto dos resultados ricos. Sob encomenda é
+  // BackOrder ("encomendável, sai depois"): o Google não aceita MadeToOrder, e
+  // OutOfStock tiraria do resultado um produto que dá para comprar.
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
@@ -84,7 +90,11 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
       priceCurrency: 'BRL',
       lowPrice: (product.priceRange.min / 100).toFixed(2),
       highPrice: (product.priceRange.max / 100).toFixed(2),
-      availability: soldOut ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStock',
+      availability: soldOut
+        ? 'https://schema.org/OutOfStock'
+        : product.stockStatus === 'MADE_TO_ORDER'
+          ? 'https://schema.org/BackOrder'
+          : 'https://schema.org/InStock',
     },
   }
 
@@ -103,7 +113,11 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
 
       <ProductViewBeacon slug={product.slug} />
 
-      <ProductDetail product={product} hasAlternatives={alternatives.length > 0} />
+      <ProductDetail
+        product={product}
+        hasAlternatives={alternatives.length > 0}
+        handlingDays={store?.handlingDays ?? null}
+      />
 
       {/* Logo abaixo da área de compra, e não depois da descrição: quem achou o
           produto esgotado precisa ver a saída sem rolar a página inteira. */}

@@ -10,7 +10,7 @@ import { ApiError } from '@/lib/api'
 import { VariantSelector } from './variant-selector'
 import { ShippingCalculator } from './shipping-calculator'
 import { FavoriteButton } from './favorite-button'
-import { StockStatusLine } from './stock-status'
+import { AvailabilityBlock } from './stock-status'
 import { BackInStockForm } from './back-in-stock-form'
 import { Button, buttonVariants } from './ui/button'
 
@@ -26,6 +26,7 @@ export const ProductPurchasePanel = ({
   onSelect,
   current,
   hasAlternatives,
+  handlingDays,
 }: {
   product: Product
   options: DerivedOption[]
@@ -33,6 +34,8 @@ export const ProductPurchasePanel = ({
   onSelect: (selected: Record<string, string>) => void
   current: Variant | undefined
   hasAlternatives: boolean
+  /** Prazo de postagem da loja, para a frase da pronta entrega. Null = não dizer. */
+  handlingDays: number | null
 }) => {
   const router = useRouter()
   const { add, openCart } = useCart()
@@ -75,7 +78,13 @@ export const ProductPurchasePanel = ({
               </span>
             )}
           </p>
-          <StockStatusLine status={current.stockStatus} remaining={current.lowStockRemaining} />
+          <AvailabilityBlock
+            status={current.stockStatus}
+            remaining={current.lowStockRemaining}
+            policy={product.stockPolicy}
+            productionDays={product.productionDays}
+            handlingDays={handlingDays}
+          />
         </div>
       ) : (
         <p className="text-muted-foreground">

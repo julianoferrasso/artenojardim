@@ -14,17 +14,22 @@ import { ProductPurchasePanel } from './product-purchase-panel'
 export const ProductDetail = ({
   product,
   hasAlternatives,
+  handlingDays,
 }: {
   product: Product
   /** A página achou alternativas para o produto esgotado (a seção #alternativas existe). */
   hasAlternatives: boolean
+  handlingDays: number | null
 }) => {
   const options = useMemo(() => deriveOptions(product.variants), [product.variants])
   const hasOptions = options.length > 0
 
   // Abre na primeira variação que dá para comprar: abrir no "Esgotado" quando a
   // outra cor tem estoque faria o cliente achar que o produto inteiro acabou.
+  // E a pronta entrega antes da encomenda: a que chega antes é a que vende.
+  const isReady = (v: Product['variants'][number]) => v.stockStatus === 'IN_STOCK' || v.stockStatus === 'LOW_STOCK'
   const initial =
+    product.variants.find((v) => v.isActive && isReady(v)) ??
     product.variants.find((v) => v.isActive && v.stockStatus !== 'OUT_OF_STOCK') ??
     product.variants.find((v) => v.isActive) ??
     product.variants[0]
@@ -49,6 +54,7 @@ export const ProductDetail = ({
         onSelect={setSelected}
         current={current}
         hasAlternatives={hasAlternatives}
+        handlingDays={handlingDays}
       />
     </div>
   )

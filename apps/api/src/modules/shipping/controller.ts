@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import type { QuoteRequestInput } from '@ecommerce/shared/contracts'
+import type { QuoteRequestInput, ShippingSettings } from '@ecommerce/shared/contracts'
 import { ok } from '../../shared/http.js'
 import * as service from './service.js'
 import type { OAuthCallbackInput } from './schemas.js'
@@ -29,6 +29,21 @@ export const callbackController = async (req: Request, res: Response): Promise<v
   const { code, state } = req.body as OAuthCallbackInput
   await service.finishProviderConnection(code, state)
   ok(res, { connected: true })
+}
+
+export const getSettingsController = async (_req: Request, res: Response): Promise<void> => {
+  ok(res, await service.getShippingSettings())
+}
+
+export const updateSettingsController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await service.updateShippingSettings(req.body as ShippingSettings, {
+      userId: req.auth?.sub,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    }),
+  )
 }
 
 /** Staff consulta se a conta está conectada (para a tela de configurações). */

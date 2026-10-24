@@ -1,4 +1,6 @@
-import { EVENTS } from '@ecommerce/shared/constants'
+import { EVENTS, businessDaysLabel } from '@ecommerce/shared/constants'
+import { estimateDelivery, estimateProductionDue } from '@ecommerce/shared/contracts'
+import { formatSpDeliveryDay } from '@ecommerce/shared/utils'
 import { env } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { prisma } from '../../config/prisma.js'
@@ -44,6 +46,28 @@ const deliveryDaysOf = (raw: unknown): number | null => {
   return typeof days === 'number' && days > 0 ? days : null
 }
 
+/** Quanto da linha é produzido — "(sob encomenda)" ou "(1 sob encomenda)". */
+const madeToOrderNote = (item: { quantity: number; madeToOrderQuantity: number }): string => {
+  if (item.madeToOrderQuantity <= 0) return ''
+  return item.madeToOrderQuantity >= item.quantity ? ' (sob encomenda)' : ` (${item.madeToOrderQuantity} sob encomenda)`
+}
+
+/**
+ * A previsão como DATA ("até sáb., 14 de nov."): produção + postagem +
+ * transporte, contados do pagamento. Sem o pagamento (não deveria acontecer
+ * num pedido pago), cai no prazo em dias — com a concordância certa.
+ */
+const deliveryText = (p: { paidAt: Date | null; deliveryDays: number | null; productionDays: number }): string | null => {
+  if (!p.deliveryDays) return null
+  const at = estimateDelivery({
+    shippedAt: null,
+    paidAt: p.paidAt,
+    deliveryDays: p.deliveryDays,
+    productionDays: p.productionDays,
+  })
+  return at ? `até ${formatSpDeliveryDay(at)}` : `${businessDaysLabel(p.deliveryDays)} após o envio`
+}
+
 export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
   const order = await prisma.order.findFirst({
     // storeId no filtro mesmo com o id em mãos: é a regra que compra o
@@ -60,11 +84,13 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
       total: true,
       shippingAddressJson: true,
       shippingMethodJson: true,
+      productionDays: true,
       customer: { select: { name: true } },
       items: {
         orderBy: { id: 'asc' },
-        select: { productName: true, variantName: true, quantity: true, totalPrice: true },
+        select: { productName: true, variantName: true, quantity: true, totalPrice: true, madeToOrderQuantity: true },
       },
+      payments: { where: { paidAt: { not: null } }, orderBy: { paidAt: 'asc' }, take: 1, select: { paidAt: true } },
     },
   })
 
@@ -73,6 +99,9 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
     throw permanentError(`pedido ${job.orderId} não encontrado`)
   }
 
+  const paidAt = order.payments[0]?.paidAt ?? null
+  const productionDue = estimateProductionDue({ paidAt, productionDays: order.productionDays })
+
   const data: OrderEmailData = {
     orderNumber: order.number,
     customerName: order.customer.name,
@@ -80,7 +109,7 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
     // pagamento termina, e este e-mail é consultado meses depois.
     orderUrl: `${env.STORE_URL.replace(/\/$/, '')}/conta/pedidos/${order.id}`,
     items: order.items.map((item) => ({
-      label: item.variantName ? `${item.productName} (${item.variantName})` : item.productName,
+      label: `${item.variantName ? `${item.productName} (${item.variantName})` : item.productName}${madeToOrderNote(item)}`,
       qty: item.quantity,
       price: formatBRL(item.totalPrice),
     })),
@@ -98,10 +127,12 @@ export const orderPaidHandler = async (job: OrderPaidJob): Promise<void> => {
       { label: 'Total', value: formatBRL(order.total), strong: true },
     ],
     shippingAddress: formatAddress(order.shippingAddressJson),
-    estimatedDelivery: (() => {
-      const days = deliveryDaysOf(order.shippingMethodJson)
-      return days ? `${days} dia${days > 1 ? 's' : ''} útil${days > 1 ? 'eis' : ''} após o envio` : null
-    })(),
+    estimatedDelivery: deliveryText({
+      paidAt,
+      deliveryDays: deliveryDaysOf(order.shippingMethodJson),
+      productionDays: order.productionDays,
+    }),
+    productionDue: productionDue ? `até ${formatSpDeliveryDay(productionDue)}` : null,
   }
 
   await publish(EVENTS.email.orderConfirmation, {

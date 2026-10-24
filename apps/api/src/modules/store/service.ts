@@ -21,7 +21,7 @@ import { storage } from '../../integrations/storage/index.js'
  * cacheável que qualquer visitante anônimo lê.
  */
 export const getPublicStore = async (): Promise<PublicStore> => {
-  const [store, flags, theme] = await Promise.all([
+  const [store, flags, theme, shipping] = await Promise.all([
     prisma.store.findUniqueOrThrow({
       where: { id: getActiveStoreId() },
       select: {
@@ -35,9 +35,10 @@ export const getPublicStore = async (): Promise<PublicStore> => {
     }),
     getFlags(),
     getSetting('theme'),
+    getSetting('shipping'),
   ])
 
-  return { ...store, flags, theme: await toPublicTheme(theme) }
+  return { ...store, flags, theme: await toPublicTheme(theme), handlingDays: shipping.additionalDays }
 }
 
 /**

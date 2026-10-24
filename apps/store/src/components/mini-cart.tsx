@@ -10,7 +10,7 @@ import { useBodyScrollLock, useEscapeKey, useFocusTrap } from '@/lib/overlay'
 import { Button, buttonVariants } from './ui/button'
 import { ProductImage } from './product-image'
 import { QuantityStepper } from './quantity-stepper'
-import { CartItemIssue } from './stock-status'
+import { CartItemAvailability, CartItemIssue, MadeToOrderNotice } from './stock-status'
 
 /**
  * Minicarrinho. Abre ao adicionar um produto e pelo ícone do header — o cliente
@@ -113,11 +113,12 @@ export const MiniCart = () => {
                   <span className="mt-0.5 text-sm">{formatBRL(item.unitPrice)}</span>
 
                   <CartItemIssue item={item} onAdjust={(quantity) => void setQuantity(item.id, quantity)} />
+                  <CartItemAvailability item={item} onAdjust={(quantity) => void setQuantity(item.id, quantity)} />
 
                   <div className="mt-1.5 flex items-center gap-2">
                     <QuantityStepper
                       quantity={item.quantity}
-                      available={item.available}
+                      max={item.maxQuantity}
                       onChange={(quantity) => void setQuantity(item.id, quantity)}
                     />
                     <button
@@ -136,6 +137,7 @@ export const MiniCart = () => {
 
         {items.length > 0 && (
           <footer className="border-t border-border p-4">
+            <MadeToOrderNotice items={items.filter((i) => i.purchasable)} className="mb-3" />
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="text-lg font-semibold">{formatBRL(cart?.subtotal ?? 0)}</span>

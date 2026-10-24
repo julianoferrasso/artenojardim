@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { listProducts, getCategoryTree } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
+import { ReadyFilterChip } from '@/components/ready-filter'
 import type { CategoryTreeNode } from '@ecommerce/shared/contracts'
 import { buttonVariants } from '@/components/ui/button'
 
@@ -32,15 +33,24 @@ export async function generateMetadata({
   }
 }
 
-export default async function CategoryPage({ params }: { params: Promise<Params> }) {
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<Params>
+  searchParams: Promise<{ pronta?: string }>
+}) {
   const { slug } = await params
+  const { pronta } = await searchParams
+  const ready = pronta === '1'
   const leaf = slug[slug.length - 1]!
 
   const tree = await getCategoryTree()
   const category = findBySlug(tree, leaf)
   if (!category || !category.isActive) notFound()
 
-  const { data: products } = await listProducts({ category: category.id })
+  const { data: products } = await listProducts({ category: category.id, ready })
+  const basePath = `/categorias/${slug.join('/')}`
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
@@ -76,9 +86,22 @@ export default async function CategoryPage({ params }: { params: Promise<Params>
         </div>
       )}
 
+      <div className="mb-5 flex items-center gap-2">
+        <ReadyFilterChip active={ready} href={ready ? basePath : `${basePath}?pronta=1`} />
+      </div>
+
       {products.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-card/50 p-10 text-center text-muted-foreground">
-          Nenhum produto nesta categoria ainda.
+          {ready ? (
+            <>
+              Nada a pronta entrega nesta categoria agora.{' '}
+              <a href={basePath} className="font-medium text-primary-ink underline-offset-4 hover:underline">
+                Ver tudo, inclusive sob encomenda
+              </a>
+            </>
+          ) : (
+            'Nenhum produto nesta categoria ainda.'
+          )}
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

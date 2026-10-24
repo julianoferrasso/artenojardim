@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Star } from 'lucide-react'
+import { STOCK_POLICY_LABEL } from '@ecommerce/shared/constants'
 import { useProducts, PRODUCT_STATUS_LABEL as STATUS_LABEL } from '@/lib/products'
 import { formatBRL, formatDate, cn } from '@/lib/utils'
 
@@ -121,6 +122,21 @@ export default function ProductsPage() {
                       {p.variantCount} variaç{p.variantCount === 1 ? 'ão' : 'ões'} ·{' '}
                       {formatDate(p.updatedAt)}
                     </p>
+                    {/* Só o que foge do padrão: pronta entrega é o normal e não precisa de selo. */}
+                    {(p.stockPolicy !== 'STOCK_ONLY' || (p.status === 'ACTIVE' && p.stockStatus === 'OUT_OF_STOCK')) && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {p.stockPolicy !== 'STOCK_ONLY' && (
+                          <span className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                            {STOCK_POLICY_LABEL[p.stockPolicy]}
+                          </span>
+                        )}
+                        {p.status === 'ACTIVE' && p.stockStatus === 'OUT_OF_STOCK' && (
+                          <span className="rounded bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning-foreground">
+                            Esgotado
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-right text-sm">
                     <p className="font-medium">

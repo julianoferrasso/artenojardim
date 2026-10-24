@@ -8,7 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { ShippingCalculator } from '@/components/shipping-calculator'
 import { ProductImage } from '@/components/product-image'
 import { QuantityStepper } from '@/components/quantity-stepper'
-import { CartItemIssue } from '@/components/stock-status'
+import { CartItemAvailability, CartItemIssue, MadeToOrderNotice } from '@/components/stock-status'
 
 export default function CartPage() {
   const { cart, loading, setQuantity, remove } = useCart()
@@ -74,11 +74,12 @@ export default function CartPage() {
               <span className="mt-1 text-sm">{formatBRL(item.unitPrice)}</span>
 
               <CartItemIssue item={item} onAdjust={(quantity) => void setQuantity(item.id, quantity)} />
+              <CartItemAvailability item={item} onAdjust={(quantity) => void setQuantity(item.id, quantity)} />
 
               <div className="mt-2 flex items-center gap-3">
                 <QuantityStepper
                   quantity={item.quantity}
-                  available={item.available}
+                  max={item.maxQuantity}
                   onChange={(quantity) => void setQuantity(item.id, quantity)}
                 />
                 <button
@@ -100,6 +101,8 @@ export default function CartPage() {
           Alguns itens mudaram desde que você os adicionou. Ajuste ou remova os destacados para finalizar a compra.
         </p>
       )}
+
+      <MadeToOrderNotice items={items.filter((i) => i.purchasable)} className="mt-4" />
 
       <div className="mt-6">
         <ShippingCalculator

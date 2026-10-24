@@ -108,9 +108,11 @@ export type CustomerOrderListItem = z.infer<typeof customerOrderListItemSchema>
 // Timeline
 // ---------------------------------------------------------------------------
 
+/** IN_PRODUCTION só entra na escada de pedido com item sob encomenda. */
 export const CUSTOMER_TIMELINE_STEPS = [
   'PLACED',
   'PAID',
+  'IN_PRODUCTION',
   'PICKING',
   'SHIPPED',
   'OUT_FOR_DELIVERY',
@@ -123,6 +125,7 @@ export type CustomerTimelineStepKey = z.infer<typeof customerTimelineStepKeySche
 export const TIMELINE_STEP_LABEL: Record<CustomerTimelineStepKey, string> = {
   PLACED: 'Pedido realizado',
   PAID: 'Pagamento aprovado',
+  IN_PRODUCTION: 'Em produção',
   PICKING: 'Em separação',
   SHIPPED: 'Enviado',
   OUT_FOR_DELIVERY: 'Saiu para entrega',
@@ -208,10 +211,14 @@ type RawEvent = {
  * Pedido cancelado não recebe escada: mostrar "Entregue" apagado num pedido
  * morto sugere que ainda há algo por vir. A lista cronológica continua, porque
  * o cliente precisa ver quando e por quê.
+ *
+ * "Em produção" não tem evento próprio: a produção começa quando o pagamento é
+ * aprovado, então o degrau acende junto com ele — e só existe na escada de quem
+ * comprou algo sob encomenda.
  */
 export const buildCustomerTimeline = (
   events: readonly RawEvent[],
-  opts: { canceled: boolean },
+  opts: { canceled: boolean; madeToOrder: boolean },
 ): { entries: CustomerOrderEvent[]; steps: CustomerTimelineStep[] } => {
   const chronological = [...events].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
@@ -238,9 +245,12 @@ export const buildCustomerTimeline = (
     if (view.step && !reachedAt.has(view.step)) reachedAt.set(view.step, at)
   }
 
+  const paidAt = reachedAt.get('PAID')
+  if (opts.madeToOrder && paidAt) reachedAt.set('IN_PRODUCTION', paidAt)
+
   const steps = opts.canceled
     ? []
-    : CUSTOMER_TIMELINE_STEPS.map((key) => ({
+    : CUSTOMER_TIMELINE_STEPS.filter((key) => key !== 'IN_PRODUCTION' || opts.madeToOrder).map((key) => ({
         key,
         label: TIMELINE_STEP_LABEL[key],
         reachedAt: reachedAt.get(key) ?? null,
@@ -267,7 +277,8 @@ export type CustomerCancelMode = z.infer<typeof customerCancelModeSchema>
  * arrepender pelo mesmo canal em que comprou.
  *
  * REQUEST com a caixa já sendo montada (PICKING, READY_TO_SHIP): a loja decide,
- * e aprovar estorna do mesmo jeito.
+ * e aprovar estorna do mesmo jeito. Também na encomenda paga: a produção começa
+ * no pagamento, e o material já pode estar cortado — o mesmo canal, a loja decide.
  *
  * NONE quando o pacote saiu: aí o caminho é recusar a entrega ou, depois de
  * receber, a devolução por arrependimento — conversa, não botão.
@@ -280,13 +291,14 @@ export const customerCancelMode = (o: {
   canceledAt: string | Date | null
   paymentStatus: PaymentStatus
   fulfillmentStatus: FulfillmentStatus
+  productionDays: number
 }): CustomerCancelMode => {
   if (o.canceledAt) return 'NONE'
   if (o.paymentStatus === 'REFUNDED' || o.paymentStatus === 'PARTIALLY_REFUNDED') return 'NONE'
 
   switch (o.fulfillmentStatus) {
     case 'UNFULFILLED':
-      return 'IMMEDIATE'
+      return o.paymentStatus === 'PAID' && o.productionDays > 0 ? 'REQUEST' : 'IMMEDIATE'
     case 'PICKING':
     case 'READY_TO_SHIP':
       return 'REQUEST'
@@ -412,6 +424,8 @@ export const customerOrderSchema = orderSchema.extend({
 
   payment: customerOrderPaymentSchema.nullable(),
 
+  /** ISO. Até quando a encomenda fica pronta; null sem produção ou antes do pagamento. */
+  productionDueAt: z.string().nullable(),
   estimatedDeliveryAt: z.string().nullable(),
   trackingCode: z.string().nullable(),
   trackingUrl: z.string().nullable(),

@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, Lock, MessageSquare, Plus, TicketPercent } from 'lucide-react'
-import type { Address, AppliedCoupon, ShippingOption } from '@ecommerce/shared/contracts'
+import { ERROR_CODES, type Address, type AppliedCoupon, type ShippingOption } from '@ecommerce/shared/contracts'
+import { businessDaysLabel } from '@ecommerce/shared/constants'
+import { formatSpDeliveryDay } from '@ecommerce/shared/utils'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
 import { useShippingCep } from '@/lib/shipping-cep'
 import { listAddresses } from '@/lib/addresses'
-import { quoteShipping } from '@/lib/shipping'
+import { deliveryLabel, quoteShipping } from '@/lib/shipping'
 import { confirmCheckout } from '@/lib/checkout'
 import { validateCoupon, couponErrorMessage, isCouponError } from '@/lib/coupons'
 import { formatBRL, cn, maskCep } from '@/lib/utils'
@@ -20,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CheckoutSteps } from '@/components/checkout-steps'
 import { ProductImage } from '@/components/product-image'
 import { AddressForm } from '@/components/address-form'
+import { MadeToOrderNotice } from '@/components/stock-status'
 
 /**
  * Checkout em página única com seções (não wizard): cada navegação é um ponto de
@@ -57,7 +60,7 @@ const EmptyNote = ({ children }: { children: React.ReactNode }) => (
 
 export default function CheckoutPage() {
   const { customer, loading: authLoading } = useAuth()
-  const { cart, loading: cartLoading } = useCart()
+  const { cart, loading: cartLoading, refresh: refreshCart } = useCart()
   const { cep: savedCep, ready: cepReady, setCep: saveCep } = useShippingCep()
   const router = useRouter()
 
@@ -81,6 +84,10 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null)
   const [couponError, setCouponError] = useState<string | null>(null)
   const [applyingCoupon, setApplyingCoupon] = useState(false)
+  /** Força a recotação: os itens não mudam quando só a pronta entrega acabou. */
+  const [quoteNonce, setQuoteNonce] = useState(0)
+  /** A pronta entrega acabou entre a tela e o confirmar: o prazo cresceu. */
+  const [timeChanged, setTimeChanged] = useState(false)
 
   const items = (cart?.items ?? []).filter((i) => i.purchasable)
   const itemsKey = items.map((i) => `${i.variantId}:${i.quantity}`).join(',')
@@ -180,7 +187,7 @@ export default function CheckoutPage() {
     }
     // `itemsKey` representa `items`, recriado a cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destinationZip, itemsKey])
+  }, [destinationZip, itemsKey, quoteNonce])
 
   const selectedShipping = options?.find((o) => o.id === serviceId) ?? null
   const subtotal = cart?.subtotal ?? 0
@@ -215,15 +222,28 @@ export default function CheckoutPage() {
     if (!addressId || !serviceId) return
     setPlacing(true)
     setError(null)
+    setTimeChanged(false)
     try {
       const order = await confirmCheckout({
         addressId,
         shippingServiceId: serviceId,
         ...(coupon ? { couponCode: coupon.code } : {}),
         ...(note.trim() ? { customerNote: note.trim() } : {}),
+        // O prazo que o cliente viu. Se crescer no confirm, a API recusa em vez
+        // de mudar a promessa calada.
+        ...(selectedShipping ? { expectedProductionDays: selectedShipping.productionDays } : {}),
       })
       router.replace(`/checkout/pedido/${order.id}`)
     } catch (err) {
+      // A pronta entrega acabou no meio do caminho: relê o carrinho (as linhas
+      // mostram o que passa a ser produzido) e recota (a data nova aparece).
+      if (err instanceof ApiError && err.code === ERROR_CODES.PRODUCTION_TIME_CHANGED) {
+        setTimeChanged(true)
+        await refreshCart()
+        setQuoteNonce((n) => n + 1)
+        setPlacing(false)
+        return
+      }
       // O cupom pode ter expirado ou esgotado desde que foi aplicado: sai do
       // resumo para o cliente ver o total novo antes de confirmar de novo.
       if (isCouponError(err)) {
@@ -352,7 +372,7 @@ export default function CheckoutPage() {
                     checked={serviceId === o.id}
                     onSelect={() => setServiceId(o.id)}
                     title={`${o.carrier} · ${o.service}`}
-                    description={`Chega em até ${o.deliveryDays} ${o.deliveryDays === 1 ? 'dia útil' : 'dias úteis'}`}
+                    description={deliveryLabel(o)}
                     aside={
                       o.priceCents === 0 ? (
                         <span className="font-medium text-success">Grátis</span>
@@ -362,6 +382,11 @@ export default function CheckoutPage() {
                     }
                   />
                 ))}
+                <p className="text-xs text-muted-foreground">
+                  {options[0] && options[0].productionDays > 0
+                    ? `As datas incluem até ${businessDaysLabel(options[0].productionDays)} de produção do item sob encomenda e valem para pagamento aprovado hoje.`
+                    : 'As datas valem para pagamento aprovado hoje.'}
+                </p>
               </fieldset>
             )}
           </section>
@@ -416,11 +441,22 @@ export default function CheckoutPage() {
                       {i.quantity}
                     </span>
                   </div>
-                  <span className="line-clamp-2 min-w-0 flex-1">{i.productName}</span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="line-clamp-2">{i.productName}</span>
+                    {i.madeToOrderQuantity > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {i.madeToOrderQuantity >= i.quantity
+                          ? 'Sob encomenda'
+                          : `${i.madeToOrderQuantity} sob encomenda`}
+                      </span>
+                    )}
+                  </span>
                   <span className="shrink-0 font-medium">{formatBRL(i.lineTotal)}</span>
                 </li>
               ))}
             </ul>
+
+            <MadeToOrderNotice items={items} className="mt-4" />
 
             <div className="mt-4 border-t border-border pt-4">
               {coupon ? (
@@ -513,12 +549,24 @@ export default function CheckoutPage() {
                   <dd>−{formatBRL(couponDiscount)}</dd>
                 </div>
               )}
+              {selectedShipping?.estimatedDeliveryAt && (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted-foreground">Entrega prevista</dt>
+                  <dd>até {formatSpDeliveryDay(selectedShipping.estimatedDeliveryAt)}</dd>
+                </div>
+              )}
               <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-border pt-3">
                 <dt className="font-medium">Total</dt>
                 <dd className="text-xl font-semibold tracking-tight">{formatBRL(total)}</dd>
               </div>
             </dl>
 
+            {timeChanged && (
+              <p role="alert" className="mt-4 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+                A pronta entrega de um item acabou agora há pouco, e o que faltava passa a ser produzido sob
+                encomenda. Confira a nova data de entrega e confirme de novo.
+              </p>
+            )}
             {error && (
               <p role="alert" className="mt-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}

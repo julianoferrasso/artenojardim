@@ -458,7 +458,7 @@ export const listStock = async (params: {
       id: true,
       sku: true,
       productId: true,
-      product: { select: { name: true } },
+      product: { select: { name: true, stockPolicy: true } },
       optionValues: { select: { optionValue: { select: { value: true } } } },
       level: { select: { onHand: true, reserved: true } },
       _count: { select: { stockNotifications: true } },
@@ -479,10 +479,15 @@ export const listStock = async (params: {
       reserved,
       available: onHand - reserved,
       waitingCount: v._count.stockNotifications,
+      stockPolicy: v.product.stockPolicy,
     }
   })
 
-  const filtered = params.lowStock ? all.filter((i) => i.available <= 0) : all
+  // "Estoque baixo" é o que deixou de vender. Sob encomenda e híbrido continuam
+  // vendendo com zero — listá-los aqui só enterraria o que pede reposição.
+  const filtered = params.lowStock
+    ? all.filter((i) => i.available <= 0 && i.stockPolicy === 'STOCK_ONLY')
+    : all
   const total = filtered.length
   const start = (params.page - 1) * params.perPage
   const items = filtered.slice(start, start + params.perPage)

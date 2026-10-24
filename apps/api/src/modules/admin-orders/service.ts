@@ -2,6 +2,7 @@ import {
   ERROR_CODES,
   CANCELABLE_FULFILLMENTS,
   canTransitionFulfillment,
+  estimateProductionDue,
   situationFilter,
   type AdminOrder,
   type AdminOrderListItem,
@@ -14,9 +15,10 @@ import {
   type InternalNoteInput,
   type AddOrderEventData,
   type PaginationMeta,
+  type ProductionSummary,
 } from '@ecommerce/shared/contracts'
 import { EVENTS, REFUND_TIMING_LABEL, type FulfillmentStatus } from '@ecommerce/shared/constants'
-import { spDayStart, spDayEnd } from '@ecommerce/shared/utils'
+import { spDayStart, spDayEnd, spDayKey } from '@ecommerce/shared/utils'
 import { Prisma, type $Enums } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
@@ -33,7 +35,14 @@ import {
 } from '../payments/service.js'
 import type { AutoRefundOutcome } from '../payments/domain/refund.js'
 import { appendMessage } from '../support/service.js'
-import { notifyOrderCanceled, notifyOrderRefunded, notifySupportReply } from '../notifications/service.js'
+import {
+  notifyOrderCanceled,
+  notifyOrderRefunded,
+  notifyProductionDue,
+  notifySupportReply,
+} from '../notifications/service.js'
+import { alertRaisedSince } from '../alerts/service.js'
+import { isProductionDigestTime, productionDeadlineState } from './domain/production.js'
 import {
   ADMIN_LIST_SELECT,
   ADMIN_ORDER_SELECT,
@@ -141,6 +150,8 @@ const buildWhere = (q: AdminOrderListQuery): Prisma.OrderWhereInput => {
     if (f.canceled === false) where.canceledAt = null
     if (f.paymentStatus) where.paymentStatus = { in: [...f.paymentStatus] }
     if (f.fulfillmentStatus) where.fulfillmentStatus = { in: [...f.fulfillmentStatus] }
+    if (f.madeToOrder === true) where.productionDays = { gt: 0 }
+    if (f.madeToOrder === false) where.productionDays = 0
   }
 
   if (q.customerId) where.customerId = q.customerId
@@ -194,6 +205,65 @@ export const listOrders = async (
 }
 
 export const getOrder = async (id: string): Promise<AdminOrder> => reload(id)
+
+// ── Produção ─────────────────────────────────────────────────────────────────
+
+type QueuedOrder = { number: number; dueAt: Date }
+
+/**
+ * As encomendas que esperam a produção: pagas, sem separação começada e não
+ * canceladas — a situação "Em produção". O prazo conta do primeiro pagamento
+ * aprovado. Loja artesanal tem poucas: ordenar em memória é mais simples que
+ * levar o calendário de dias úteis para o SQL.
+ */
+const productionQueue = async (): Promise<QueuedOrder[]> => {
+  const rows = await prisma.order.findMany({
+    where: {
+      storeId: getActiveStoreId(),
+      canceledAt: null,
+      paymentStatus: 'PAID',
+      fulfillmentStatus: 'UNFULFILLED',
+      productionDays: { gt: 0 },
+    },
+    select: {
+      number: true,
+      productionDays: true,
+      payments: { where: { paidAt: { not: null } }, orderBy: { paidAt: 'asc' }, take: 1, select: { paidAt: true } },
+    },
+  })
+  return rows
+    .flatMap((r) => {
+      const due = estimateProductionDue({ paidAt: r.payments[0]?.paidAt ?? null, productionDays: r.productionDays })
+      return due ? [{ number: r.number, dueAt: new Date(due) }] : []
+    })
+    .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())
+}
+
+/** O item "Encomendas em produção" do Dashboard. */
+export const getProductionSummary = async (now = new Date()): Promise<ProductionSummary> => {
+  const queue = await productionQueue()
+  const states = queue.map((o) => productionDeadlineState({ dueAt: o.dueAt, now }))
+  return {
+    inProduction: queue.length,
+    dueSoon: states.filter((s) => s === 'DUE_SOON').length,
+    overdue: states.filter((s) => s === 'OVERDUE').length,
+  }
+}
+
+/**
+ * O resumo diário para a equipe (job `production-deadlines`, de hora em hora):
+ * sai uma vez por dia útil, a partir das 8h, e só se houver encomenda atrasada
+ * ou vencendo até o próximo dia útil.
+ */
+export const sendProductionDigest = async (now = new Date()): Promise<void> => {
+  if (!isProductionDigestTime(now)) return
+  if (await alertRaisedSince('PRODUCTION_DUE', spDayStart(spDayKey(now)))) return
+
+  const queue = await productionQueue()
+  const overdue = queue.filter((o) => productionDeadlineState({ dueAt: o.dueAt, now }) === 'OVERDUE')
+  const dueSoon = queue.filter((o) => productionDeadlineState({ dueAt: o.dueAt, now }) === 'DUE_SOON')
+  await notifyProductionDue({ overdue, dueSoon })
+}
 
 // ── Expedição ────────────────────────────────────────────────────────────────
 
@@ -350,7 +420,8 @@ export const cancelOrderInternal = async (
         type: EVENTS.order.canceled,
         description: `Pedido cancelado: ${reason}`,
         metadataJson: {
-          restocked: wasPaid,
+          // Encomenda pura não tirou nada da prateleira: não há o que devolver.
+          restocked: wasPaid && stock.length > 0,
           paymentStatus: fresh.paymentStatus,
           by: actor.kind,
           ...(actor.kind === 'customer' && actor.reasonCode ? { reasonCode: actor.reasonCode } : {}),

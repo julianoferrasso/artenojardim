@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { optionalSlugSchema, moneySchema } from './common.js'
-import { productStatusSchema } from '../constants/enums.js'
+import { productStatusSchema, stockPolicySchema } from '../constants/enums.js'
 
 /**
  * Contratos do catálogo. O Product é marketing; a Variant é comércio. Preço,
@@ -13,8 +13,11 @@ import { productStatusSchema } from '../constants/enums.js'
  * O que a vitrine sabe do estoque: a SITUAÇÃO, nunca o número. A quantidade
  * exata deixaria qualquer um medir o ritmo de vendas fazendo polling — o mesmo
  * tipo de vazamento do custo. A faixa é decisão da API; a loja só desenha.
+ *
+ * MADE_TO_ORDER = comprável, mas produzido depois da compra: o produto é sob
+ * encomenda, ou é híbrido e a pronta entrega acabou. Nunca é "esgotado".
  */
-export const STOCK_STATUSES = ['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK'] as const
+export const STOCK_STATUSES = ['IN_STOCK', 'LOW_STOCK', 'OUT_OF_STOCK', 'MADE_TO_ORDER'] as const
 export const stockStatusSchema = z.enum(STOCK_STATUSES)
 export type StockStatus = z.infer<typeof stockStatusSchema>
 
@@ -200,6 +203,16 @@ export const pickVariantImage = <T extends ImageLike>(
 
 // ── Produto ───────────────────────────────────────────────────────────────────
 
+/** Prazo de produção em dias ÚTEIS após a confirmação do pagamento. CHECK igual no banco. */
+export const PRODUCTION_DAYS_MIN = 1
+export const PRODUCTION_DAYS_MAX = 60
+
+export const productionDaysSchema = z
+  .number()
+  .int('Informe o prazo em dias inteiros')
+  .min(PRODUCTION_DAYS_MIN, 'O prazo de produção é de pelo menos 1 dia útil')
+  .max(PRODUCTION_DAYS_MAX, `O prazo de produção vai até ${PRODUCTION_DAYS_MAX} dias úteis`)
+
 /*
  * Campos SEM `.default()`, base do create e do update. No Zod 4, `.partial()`
  * NÃO anula default: um update montado sobre o create transformava todo PATCH
@@ -220,6 +233,9 @@ const productFields = z.object({
   seoDescription: z.string().max(400).optional(),
   /** Aparece na seção "Destaques" da home — escolha editorial do lojista. */
   isFeatured: z.boolean(),
+  stockPolicy: stockPolicySchema,
+  /** Obrigatório fora de STOCK_ONLY. A regra cruzada vive no create e no service, nunca aqui. */
+  productionDays: productionDaysSchema.nullable(),
 })
 
 export const createProductSchema = productFields.extend({
@@ -228,6 +244,8 @@ export const createProductSchema = productFields.extend({
   categoryIds: productFields.shape.categoryIds.default([]),
   images: productFields.shape.images.default([]),
   isFeatured: productFields.shape.isFeatured.default(false),
+  stockPolicy: productFields.shape.stockPolicy.default('STOCK_ONLY'),
+  productionDays: productFields.shape.productionDays.default(null),
   /**
    * Toda criação manda ao menos uma variante. Um produto sem opções manda uma
    * variante com `options: []` — que o service materializa como "Default Title".
@@ -235,6 +253,18 @@ export const createProductSchema = productFields.extend({
    */
   variants: z.array(createVariantSchema).min(1, 'O produto precisa de ao menos uma variante'),
 })
+  // O refine vem POR ÚLTIMO, e nada deriva deste schema: no Zod 4, `.partial()`
+  // e `.extend()` sobre um objeto refinado lançam — no import, derrubando API,
+  // loja e admin juntos. O update valida a mesma regra no service, contra o banco.
+  .superRefine((p, ctx) => {
+    if (p.stockPolicy !== 'STOCK_ONLY' && p.productionDays === null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['productionDays'],
+        message: 'Informe o prazo de produção do produto sob encomenda',
+      })
+    }
+  })
 
 export type CreateProductInput = z.infer<typeof createProductSchema>
 
@@ -267,6 +297,9 @@ export const productSchema = z.object({
   priceRange: z.object({ min: z.number().int(), max: z.number().int() }),
   /** Somado entre as variações à venda: OUT_OF_STOCK só quando nenhuma tem estoque. */
   stockStatus: stockStatusSchema,
+  stockPolicy: stockPolicySchema,
+  /** null em STOCK_ONLY: o prazo guardado não vale enquanto o produto é só pronta entrega. */
+  productionDays: z.number().int().nullable(),
 })
 
 export type Product = z.infer<typeof productSchema>
@@ -284,6 +317,7 @@ export const productListItemSchema = z.object({
   updatedAt: z.string(),
   /** Mesmo agregado do `Product`: o card marca "Esgotado" sem abrir as variações. */
   stockStatus: stockStatusSchema,
+  stockPolicy: stockPolicySchema,
 })
 
 export type ProductListItem = z.infer<typeof productListItemSchema>
@@ -301,6 +335,8 @@ export const productListQuerySchema = z.object({
    * coerce transformaria "false" em true (string não-vazia é truthy).
    */
   featured: z.enum(['true', 'false']).optional(),
+  /** "Pronta entrega": só o que sai da prateleira agora (o sob encomenda fica de fora). */
+  ready: z.enum(['true', 'false']).optional(),
 })
 
 export type ProductListQuery = z.infer<typeof productListQuerySchema>

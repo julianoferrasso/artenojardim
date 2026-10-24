@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Truck, FileText, RotateCcw, MessageCircle } from 'lucide-react'
 import { PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL, REFUND_TIMING_LABEL } from '@ecommerce/shared/constants'
 import type { CustomerOrder, ReorderResult, SupportTopic } from '@ecommerce/shared/contracts'
+import { formatSpDeliveryDay } from '@ecommerce/shared/utils'
 import { ApiError } from '@/lib/api'
 import { useMyOrder, useReorder } from '@/lib/orders'
 import { useCart } from '@/lib/cart'
@@ -135,18 +136,27 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
             couponCode={order.couponCodeSnapshot}
           />
 
-          <OrderDeliveryCard address={order.shippingAddress} method={order.shippingMethod}>
+          <OrderDeliveryCard
+            address={order.shippingAddress}
+            method={order.shippingMethod}
+            productionDays={order.productionDays}
+          >
+            {order.productionDueAt && (
+              <p className="mt-2 text-muted-foreground">
+                Encomenda pronta até:{' '}
+                <span className="font-medium text-foreground">{formatSpDeliveryDay(order.productionDueAt)}</span>
+              </p>
+            )}
             {order.estimatedDeliveryAt ? (
               <p className="mt-2 text-muted-foreground">
                 Previsão de entrega:{' '}
                 <span className="font-medium text-foreground">
-                  {formatDateLong(order.estimatedDeliveryAt)}
+                  até {formatSpDeliveryDay(order.estimatedDeliveryAt)}
                 </span>
               </p>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">
-                O prazo de {order.shippingMethod.deliveryDays} dias úteis começa a contar após a
-                confirmação do pagamento.
+                Os prazos começam a contar após a confirmação do pagamento.
               </p>
             )}
 
@@ -251,6 +261,7 @@ export default function PedidoDetalhePage({ params }: { params: Promise<{ id: st
                 mode={order.cancelMode}
                 refundAmount={order.cancelRefundAmount}
                 paymentMethod={order.payment?.method ?? null}
+                inProduction={order.situation === 'IN_PRODUCTION'}
               />
             )}
           </div>

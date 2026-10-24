@@ -39,6 +39,8 @@ export const adminOrderListItemSchema = z.object({
   cancelRequested: z.boolean(),
   /** Cancelado com o dinheiro ainda na loja: o estorno automático falhou ou não houve. */
   refundPending: z.boolean(),
+  /** ISO. Até quando a encomenda paga tem de ficar pronta; null sem produção ou sem pagamento. */
+  productionDueAt: z.string().nullable(),
 })
 
 export type AdminOrderListItem = z.infer<typeof adminOrderListItemSchema>
@@ -55,6 +57,8 @@ export const adminOrderItemSchema = z.object({
   totalPrice: moneySchema,
   weight: z.number().int(),
   imageUrl: z.string().nullable(),
+  /** Unidades a produzir; o resto sai da prateleira (a separação mostra a origem). */
+  madeToOrderQuantity: z.number().int().nonnegative(),
 })
 
 export type AdminOrderItem = z.infer<typeof adminOrderItemSchema>
@@ -118,6 +122,12 @@ export const adminOrderSchema = z.object({
 
   shippingAddress: orderAddressSchema,
   shippingMethod: orderShippingMethodSchema,
+  /** Dias úteis de produção depois do pagamento; 0 = tudo pronta entrega. */
+  productionDays: z.number().int().nonnegative(),
+  /** ISO. Até quando produzir; null sem produção ou antes do pagamento. */
+  productionDueAt: z.string().nullable(),
+  /** ISO. Previsão de entrega (produção + postagem + transporte); null antes do pagamento. */
+  estimatedDeliveryAt: z.string().nullable(),
 
   items: z.array(adminOrderItemSchema),
 
@@ -147,6 +157,18 @@ export const adminOrderSchema = z.object({
 })
 
 export type AdminOrder = z.infer<typeof adminOrderSchema>
+
+/**
+ * Encomendas pagas ainda na produção, para o Dashboard. "Vence logo" = o prazo
+ * cai hoje ou no próximo dia útil; atrasada = o dia do prazo já passou.
+ */
+export const productionSummarySchema = z.object({
+  inProduction: z.number().int().nonnegative(),
+  dueSoon: z.number().int().nonnegative(),
+  overdue: z.number().int().nonnegative(),
+})
+
+export type ProductionSummary = z.infer<typeof productionSummarySchema>
 
 // ---------------------------------------------------------------------------
 // Inputs

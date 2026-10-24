@@ -27,6 +27,7 @@ export const SITUATION_LABEL: Record<OrderSituation, string> = {
   AWAITING_PAYMENT: 'Aguardando Pagamento',
   PAYMENT_FAILED: 'Pagamento Recusado',
   PAID: 'Pago',
+  IN_PRODUCTION: 'Em Produção',
   PICKING: 'Em Separação',
   SHIPPED: 'Enviado',
   DELIVERED: 'Entregue',
@@ -39,6 +40,7 @@ export const SITUATION_LABEL: Record<OrderSituation, string> = {
 export const SITUATION_ORDER: readonly OrderSituation[] = [
   'AWAITING_PAYMENT',
   'PAID',
+  'IN_PRODUCTION',
   'PICKING',
   'SHIPPED',
   'DELIVERED',

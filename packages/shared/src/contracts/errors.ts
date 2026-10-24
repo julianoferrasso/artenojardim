@@ -45,6 +45,9 @@ export const ERROR_CODES = {
   /// Produto que já esteve em algum pedido não pode ser excluído, só arquivado:
   /// o delete anularia o vínculo do OrderItem com a variante.
   PRODUCT_HAS_ORDERS: 'PRODUCT_HAS_ORDERS',
+  /// Produto sob encomenda (ou híbrido) sem prazo de produção: o cliente não
+  /// saberia quando recebe. 422 antes de gravar — a CHECK do banco viraria 500.
+  PRODUCTION_DAYS_REQUIRED: 'PRODUCTION_DAYS_REQUIRED',
 
   // Estoque
   INSUFFICIENT_STOCK: 'INSUFFICIENT_STOCK',
@@ -67,6 +70,9 @@ export const ERROR_CODES = {
   CART_EMPTY: 'CART_EMPTY',
   SHIPPING_UNAVAILABLE: 'SHIPPING_UNAVAILABLE',
   SHIPPING_QUOTE_EXPIRED: 'SHIPPING_QUOTE_EXPIRED',
+  /// A pronta entrega acabou entre a tela e o confirmar: parte do pedido passa a
+  /// ser produzida e o prazo cresceu. 409 para o cliente ver a data nova antes de pagar.
+  PRODUCTION_TIME_CHANGED: 'PRODUCTION_TIME_CHANGED',
   ADDRESS_REQUIRED: 'ADDRESS_REQUIRED',
   PAYMENT_FAILED: 'PAYMENT_FAILED',
   /// Cartão recusado pelo emissor: erro de negócio (402), não falha de servidor.

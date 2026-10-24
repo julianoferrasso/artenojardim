@@ -3,6 +3,7 @@ import { $Enums } from '@prisma/client'
 import {
   USER_ROLES,
   PRODUCT_STATUSES,
+  STOCK_POLICIES,
   PAYMENT_STATUSES,
   FULFILLMENT_STATUSES,
   PAYMENT_METHODS,
@@ -41,6 +42,7 @@ describe('enums: shared/constants vs schema.prisma', () => {
   const cases: Array<[string, Record<string, string> | undefined, readonly string[]]> = [
     ['UserRole', $Enums.UserRole, USER_ROLES],
     ['ProductStatus', ($Enums as Record<string, never>)['ProductStatus'], PRODUCT_STATUSES],
+    ['StockPolicy', ($Enums as Record<string, never>)['StockPolicy'], STOCK_POLICIES],
     ['PaymentStatus', ($Enums as Record<string, never>)['PaymentStatus'], PAYMENT_STATUSES],
     ['FulfillmentStatus', ($Enums as Record<string, never>)['FulfillmentStatus'], FULFILLMENT_STATUSES],
     ['PaymentMethod', ($Enums as Record<string, never>)['PaymentMethod'], PAYMENT_METHODS],

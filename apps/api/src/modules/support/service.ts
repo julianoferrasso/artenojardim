@@ -204,6 +204,7 @@ const THREAD_SELECT = {
       number: true,
       paymentStatus: true,
       fulfillmentStatus: true,
+      productionDays: true,
       canceledAt: true,
       cancelRequestedAt: true,
       cancelRequestReason: true,

@@ -21,6 +21,7 @@ export const ORDER_SITUATIONS = [
   'AWAITING_PAYMENT',
   'PAYMENT_FAILED',
   'PAID',
+  'IN_PRODUCTION',
   'PICKING',
   'SHIPPED',
   'DELIVERED',
@@ -36,6 +37,12 @@ export type SituationInput = {
   canceledAt: string | Date | null
   paymentStatus: PaymentStatus
   fulfillmentStatus: FulfillmentStatus
+  /**
+   * Obrigatório de propósito: cada select que deriva a situação precisa trazer o
+   * campo, senão a encomenda paga apareceria como "Pago" — "a separar" — em vez
+   * de "Em produção".
+   */
+  productionDays: number
 }
 
 /**
@@ -44,6 +51,10 @@ export type SituationInput = {
  * Cancelado vence tudo porque é o fim da linha operacional — não importa que a
  * expedição diga PICKING, ninguém vai separar. Reembolsado vem antes da
  * logística pela mesma razão: dinheiro devolvido encerra o caso.
+ *
+ * "Em produção" não é status do banco: é o pago, ainda sem separação, que tem
+ * item sob encomenda. A produção começa no pagamento e termina quando a loja
+ * marca "Em separação" — a transição que já existe.
  */
 export const deriveSituation = (o: SituationInput): OrderSituation => {
   if (o.canceledAt) return 'CANCELED'
@@ -63,7 +74,7 @@ export const deriveSituation = (o: SituationInput): OrderSituation => {
       break
   }
 
-  if (o.paymentStatus === 'PAID') return 'PAID'
+  if (o.paymentStatus === 'PAID') return o.productionDays > 0 ? 'IN_PRODUCTION' : 'PAID'
   if (o.paymentStatus === 'FAILED') return 'PAYMENT_FAILED'
   return 'AWAITING_PAYMENT'
 }
@@ -90,6 +101,8 @@ export type SituationFilter = {
   canceled?: boolean
   paymentStatus?: readonly PaymentStatus[]
   fulfillmentStatus?: readonly FulfillmentStatus[]
+  /** true = `productionDays > 0`; false = `productionDays = 0`. Separa "Pago" de "Em produção". */
+  madeToOrder?: boolean
 }
 
 const REFUNDED_PAYMENTS = ['REFUNDED', 'PARTIALLY_REFUNDED'] as const
@@ -114,7 +127,9 @@ export const situationFilter = (s: OrderSituation): SituationFilter => {
         fulfillmentStatus: ['PICKING', 'READY_TO_SHIP'],
       }
     case 'PAID':
-      return { canceled: false, paymentStatus: ['PAID'], fulfillmentStatus: ['UNFULFILLED'] }
+      return { canceled: false, paymentStatus: ['PAID'], fulfillmentStatus: ['UNFULFILLED'], madeToOrder: false }
+    case 'IN_PRODUCTION':
+      return { canceled: false, paymentStatus: ['PAID'], fulfillmentStatus: ['UNFULFILLED'], madeToOrder: true }
     case 'PAYMENT_FAILED':
       return { canceled: false, paymentStatus: ['FAILED'], fulfillmentStatus: ['UNFULFILLED'] }
     case 'AWAITING_PAYMENT':

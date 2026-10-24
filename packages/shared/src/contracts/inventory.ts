@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { movementTypeSchema } from '../constants/enums.js'
+import { movementTypeSchema, stockPolicySchema } from '../constants/enums.js'
 
 /**
  * Contratos do estoque. O admin registra movimentos que o ADMIN pode disparar
@@ -79,6 +79,8 @@ export const stockItemSchema = z.object({
   available: z.number().int(),
   /** Quantos pediram "Avise-me quando chegar" nesta variação — demanda para a produção. */
   waitingCount: z.number().int(),
+  /** Sob encomenda, o disponível não limita a venda — "0" ali não é problema. */
+  stockPolicy: stockPolicySchema,
 })
 
 export type StockItem = z.infer<typeof stockItemSchema>

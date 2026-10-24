@@ -89,6 +89,8 @@ const buildWhere = (customerId: string, query: CustomerOrderListQuery): Prisma.O
     if (filter.canceled === false) where.canceledAt = null
     if (filter.paymentStatus) where.paymentStatus = { in: [...filter.paymentStatus] }
     if (filter.fulfillmentStatus) where.fulfillmentStatus = { in: [...filter.fulfillmentStatus] }
+    if (filter.madeToOrder === true) where.productionDays = { gt: 0 }
+    if (filter.madeToOrder === false) where.productionDays = 0
   }
 
   const start = periodStart(query.period, new Date())
@@ -149,6 +151,7 @@ const CANCEL_STATE_SELECT = {
   id: true,
   paymentStatus: true,
   fulfillmentStatus: true,
+  productionDays: true,
   canceledAt: true,
   cancelRequestedAt: true,
   payments: {
@@ -194,8 +197,9 @@ const notCancelable = (fulfillment: string): never => {
  * transação do admin (estoque e cupom voltam pelo mesmo caminho). Se estava
  * pago, o estorno total sai na hora, sem ninguém da loja precisar agir.
  *
- * REQUEST — a caixa já está sendo montada: registra o pedido de cancelamento
- * (coluna + conversa) e avisa a equipe, que aprova (e estorna) ou recusa.
+ * REQUEST — a caixa já está sendo montada, ou a encomenda paga já está em
+ * produção: registra o pedido de cancelamento (coluna + conversa) e avisa a
+ * equipe, que aprova (e estorna) ou recusa.
  *
  * NONE — o pacote saiu: a conversa é o caminho (recusa na entrega, devolução).
  *
@@ -252,7 +256,11 @@ export const cancelOrder = async (
         id,
         canceledAt: null,
         cancelRequestedAt: null,
-        fulfillmentStatus: { in: ['PICKING', 'READY_TO_SHIP'] },
+        OR: [
+          { fulfillmentStatus: { in: ['PICKING', 'READY_TO_SHIP'] } },
+          // Encomenda paga: a produção começou no pagamento (customerCancelMode).
+          { fulfillmentStatus: 'UNFULFILLED', paymentStatus: 'PAID', productionDays: { gt: 0 } },
+        ],
       },
       data: { cancelRequestedAt: new Date(), cancelRequestReason: reason },
     })
@@ -284,6 +292,8 @@ export const cancelOrder = async (
   await notifyCancelRequested(id, {
     reason,
     refundAmount: paid ? Math.max(0, paid.amount - paid.refundedAmount) : 0,
+    // REQUEST sem separação começada só existe para encomenda em produção.
+    inProduction: row.fulfillmentStatus === 'UNFULFILLED',
   })
 
   return getOrder(customerId, id)
@@ -366,6 +376,7 @@ const EXPIRED_REASON = 'Pagamento não confirmado no prazo'
 
 const EXPIRY_SELECT = {
   paymentStatus: true,
+  paymentDueAt: true,
   payments: { select: { provider: true, method: true, status: true, expiresAt: true } },
 } satisfies Prisma.OrderSelect
 
@@ -392,11 +403,14 @@ const expireOrder = async (orderId: string, now: Date): Promise<boolean> => {
     where: { orderId, releasedAt: null },
     _max: { expiresAt: true },
   })
-  if (!_max.expiresAt) return false
+  // Pedido só com encomenda não reserva nada: vence pelo prazo de pagamento.
+  // Com reserva, é ela que manda — o Pix gerado estende a reserva, não o prazo.
+  const deadline = _max.expiresAt ?? order.paymentDueAt
+  if (!deadline) return false
 
   const decision = decideExpiry({
     paymentStatus: order.paymentStatus,
-    latestReservationExpiry: _max.expiresAt,
+    latestReservationExpiry: deadline,
     attempts: order.payments,
     now,
   })
@@ -423,16 +437,37 @@ const expireOrder = async (orderId: string, now: Date): Promise<boolean> => {
  * de situação no meio (409) não para o lote.
  */
 export const expireUnpaidOrders = async (now = new Date()): Promise<{ canceled: number; skipped: number }> => {
+  const dueBefore = new Date(now.getTime() - EXPIRY_GRACE_MS)
+
   // A reserva não tem FK para o pedido: o escopo da loja vem do Order, no load.
   const due = await prisma.inventoryReservation.findMany({
-    where: { releasedAt: null, expiresAt: { lt: new Date(now.getTime() - EXPIRY_GRACE_MS) } },
+    where: { releasedAt: null, expiresAt: { lt: dueBefore } },
     select: { orderId: true },
     distinct: ['orderId'],
   })
 
+  // Segunda origem: o pedido só com encomenda, que não reservou nada. Sem isto
+  // ele nunca venceria — e prenderia o cupom, "aguardando pagamento" para sempre.
+  // `some: {}` porque `every` é verdadeiro para pedido sem item.
+  const dueWithoutReservation = await prisma.order.findMany({
+    where: {
+      storeId: getActiveStoreId(),
+      paymentStatus: 'PENDING',
+      canceledAt: null,
+      paymentDueAt: { lt: dueBefore },
+      items: {
+        some: {},
+        every: { madeToOrderQuantity: { equals: prisma.orderItem.fields.quantity } },
+      },
+    },
+    select: { id: true },
+  })
+
+  const orderIds = new Set([...due.map((d) => d.orderId), ...dueWithoutReservation.map((o) => o.id)])
+
   let canceled = 0
   let skipped = 0
-  for (const { orderId } of due) {
+  for (const orderId of orderIds) {
     try {
       if (await expireOrder(orderId, now)) canceled++
       else skipped++

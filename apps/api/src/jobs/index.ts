@@ -2,13 +2,15 @@ import { logger } from '../config/logger.js'
 import { renewMelhorEnvioToken } from './melhor-envio-token.js'
 import { monitorSite } from './site-monitor.js'
 import { releaseExpiredReservations } from './release-reservations.js'
+import { checkProductionDeadlines } from './production-deadlines.js'
 
 /**
  * Varreduras periódicas — `jobs/` é cron; reação a fato consumado mora em `queues/`.
  *
- * `setInterval` e não node-cron: nenhum job aqui depende de hora do relógio, só
- * de frequência. Roda no worker (fork ×1, nunca cluster), então cada job executa
- * uma vez por intervalo — e não uma vez por instância.
+ * `setInterval` e não node-cron: o agendamento é só por frequência. O único job
+ * com hora marcada (o resumo da produção, às 8h) roda de hora em hora e decide
+ * dentro se é a hora. Roda no worker (fork ×1, nunca cluster), então cada job
+ * executa uma vez por intervalo — e não uma vez por instância.
  */
 
 type Job = { name: string; everyMs: number; run: () => Promise<void> }
@@ -20,6 +22,7 @@ const JOBS: Job[] = [
   { name: 'melhor-envio-token', everyMs: 6 * HOUR_MS, run: renewMelhorEnvioToken },
   { name: 'site-monitor', everyMs: 2 * MINUTE_MS, run: monitorSite },
   { name: 'release-reservations', everyMs: 5 * MINUTE_MS, run: releaseExpiredReservations },
+  { name: 'production-deadlines', everyMs: HOUR_MS, run: checkProductionDeadlines },
 ]
 
 /** A primeira execução espera o boot assentar antes de ir à rede. */

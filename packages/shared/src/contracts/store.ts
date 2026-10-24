@@ -258,6 +258,8 @@ export const publicStoreSchema = z.object({
   timezone: z.string(),
   flags: publicFlagsSchema,
   theme: publicThemeSchema,
+  /** Dias úteis para postar um pedido pronto — "Postamos em até N dias úteis". */
+  handlingDays: z.number().int().nonnegative(),
 })
 
 export type PublicStore = z.infer<typeof publicStoreSchema>

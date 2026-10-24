@@ -24,8 +24,10 @@ export const renderOrderConfirmation = (params: {
   totals: Array<{ label: string; value: string; strong?: boolean }>
   /** Uma linha só: "Rua X, 123 — Bairro, Cidade/UF". */
   shippingAddress: string
-  /** "até 12/08" ou nulo quando não há estimativa da transportadora. */
+  /** "até sáb., 14 de nov." ou nulo quando não há estimativa da transportadora. */
   estimatedDelivery: string | null
+  /** "até qua., 4 de nov." quando há item sob encomenda; nulo se é tudo pronta entrega. */
+  productionDue: string | null
 }): EmailContent => {
   const firstName = params.customerName.trim().split(/\s+/)[0] ?? ''
 
@@ -33,7 +35,9 @@ export const renderOrderConfirmation = (params: {
     branding: params.branding,
     heading: `Pedido #${params.orderNumber} confirmado`,
     paragraphs: [
-      `Obrigado, ${firstName}! Recebemos o seu pagamento e já estamos preparando o seu pedido.`,
+      params.productionDue
+        ? `Obrigado, ${firstName}! Recebemos o seu pagamento e já vamos começar a produzir a sua encomenda: ela fica pronta ${params.productionDue}, e então enviamos o pedido completo.`
+        : `Obrigado, ${firstName}! Recebemos o seu pagamento e já estamos preparando o seu pedido.`,
       `Entrega em: ${params.shippingAddress}.`,
       ...(params.estimatedDelivery
         ? [`Previsão de entrega: ${params.estimatedDelivery}.`]

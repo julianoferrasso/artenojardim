@@ -3,7 +3,7 @@ import type { ProductListItem } from '@ecommerce/shared/contracts'
 import { formatBRL, cn } from '@/lib/utils'
 import { ProductImage } from './product-image'
 import { FavoriteButton } from './favorite-button'
-import { SOLD_OUT_IMAGE_CLASS, SoldOutBadge } from './stock-status'
+import { AvailabilityHint, SOLD_OUT_IMAGE_CLASS, SoldOutBadge } from './stock-status'
 
 /**
  * Card de produto da vitrine. Server Component (sem 'use client'): renderiza HTML
@@ -59,6 +59,8 @@ export const ProductCard = ({
             {formatBRL(min)}
           </p>
         )}
+        {/* Pronta entrega × sob encomenda: é a pergunta de quem compra presente com data. */}
+        <AvailabilityHint status={product.stockStatus} />
         {showcase && (
           <span className="mt-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-primary-ink underline-offset-4 group-hover:underline">
             {soldOut ? 'Avise-me' : 'Comprar'}

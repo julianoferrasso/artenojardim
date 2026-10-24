@@ -2,9 +2,11 @@ import {
   PAYMENT_METHOD_LABEL,
   REFUND_TIMING_LABEL,
   SUPPORT_TOPIC_LABEL,
+  businessDaysLabel,
   type PaymentMethod,
 } from '@ecommerce/shared/constants'
 import type { SupportTopic } from '@ecommerce/shared/contracts'
+import { formatSpDeadline } from '@ecommerce/shared/utils'
 import type { NoticeContent } from '../../../integrations/email/index.js'
 import type { AutoRefundOutcome } from '../../payments/domain/refund.js'
 import { formatBRL } from '../../../utils/money.js'
@@ -100,14 +102,33 @@ export const customerCanceledNotice = (p: {
  * Reposição do "Avise-me quando chegar". Transacional (a pessoa pediu este
  * aviso, e só este): sem link de newsletter, e o texto diz que não vem outro —
  * a inscrição é apagada no envio.
+ *
+ * Com `productionDays`, o produto não voltou à prateleira: passou a ser feito sob
+ * encomenda. Dizer "voltou ao estoque" prometeria uma pronta entrega que não há.
  */
 export const customerBackInStockNotice = (p: {
   productName: string
   /** Opções da variação ("Lavanda / 300 g"). Null quando o produto não tem variação. */
   variantLabel: string | null
   productUrl: string
+  /** Preenchido quando o produto passou a ser sob encomenda. */
+  productionDays?: number | null
 }): NoticeContent => {
   const name = p.variantLabel ? `${p.productName} (${p.variantLabel})` : p.productName
+  if (p.productionDays) {
+    return {
+      subject: `Agora sob encomenda: ${name}`,
+      heading: 'Agora dá para encomendar',
+      paragraphs: [
+        `Olá! ${name} pode ser encomendado na loja.`,
+        `Produzimos depois da compra, em até ${businessDaysLabel(p.productionDays)} após a confirmação do pagamento, e enviamos em seguida.`,
+        'Este é o único aviso que você vai receber sobre esta peça.',
+      ],
+      ctaLabel: 'Ver o produto',
+      ctaUrl: p.productUrl,
+      footerNote: 'Você recebeu este e-mail porque pediu para ser avisado quando o produto voltasse.',
+    }
+  }
   return {
     subject: `Voltou: ${name}`,
     heading: 'Voltou ao estoque',
@@ -126,12 +147,16 @@ export const customerCancelRequestNotice = (p: {
   order: NoticeOrder
   refundAmount: number
   orderUrl: string
+  /** A encomenda já está em produção (e não em separação). Muda só a frase. */
+  inProduction?: boolean
 }): NoticeContent => ({
   subject: `Recebemos o pedido de cancelamento do #${p.order.number}`,
   heading: 'Pedido de cancelamento recebido',
   paragraphs: [
     `${hello(p.order)} Recebemos o seu pedido para cancelar o pedido #${p.order.number}.`,
-    'Como ele já estava sendo separado, nossa equipe vai analisar e responder em até 1 dia útil.',
+    p.inProduction
+      ? 'Como a sua encomenda já está em produção, nossa equipe vai analisar e responder em até 1 dia útil.'
+      : 'Como ele já estava sendo separado, nossa equipe vai analisar e responder em até 1 dia útil.',
     ...(p.refundAmount > 0
       ? [`Se o cancelamento for aprovado, o estorno de ${formatBRL(p.refundAmount)} é feito automaticamente.`]
       : []),
@@ -204,6 +229,8 @@ export const staffCanceledNotice = (p: {
   reason: string
   refund: AutoRefundOutcome
   orderUrl: string
+  /** Havia peça da prateleira reservada. Encomenda pura não reserva nada. */
+  reservedStock: boolean
 }): NoticeContent => {
   const failed = p.refund.status === 'failed'
   const refund =
@@ -211,7 +238,7 @@ export const staffCanceledNotice = (p: {
       ? `Estorno automático de ${formatBRL(p.refund.amount)} solicitado ao provedor.`
       : p.refund.status === 'failed'
         ? `O estorno automático de ${formatBRL(p.refund.amount)} foi RECUSADO pelo provedor. Reembolse pelo painel (botão Reembolsar no pedido).`
-        : 'Pedido sem pagamento: nada a estornar. A reserva de estoque foi liberada.'
+        : `Pedido sem pagamento: nada a estornar.${p.reservedStock ? ' A reserva de estoque foi liberada.' : ''}`
 
   return {
     subject: failed
@@ -229,11 +256,12 @@ export const staffCancelRequestNotice = (p: {
   order: NoticeOrder
   reason: string
   threadUrl: string
+  inProduction?: boolean
 }): NoticeContent => ({
   subject: `[Ação necessária] Pedido #${p.order.number} — cliente pediu cancelamento`,
   heading: `Pedido de cancelamento do #${p.order.number}`,
   paragraphs: [
-    `${p.order.customerName} pediu para cancelar um pedido que já está em separação. Motivo: ${p.reason}`,
+    `${p.order.customerName} pediu para cancelar ${p.inProduction ? 'uma encomenda que já está em produção' : 'um pedido que já está em separação'}. Motivo: ${p.reason}`,
     'Aprovar cancela o pedido e estorna o pagamento automaticamente. Recusar exige uma explicação, que vai para o cliente.',
   ],
   ctaLabel: 'Decidir no painel',
@@ -262,17 +290,37 @@ export const staffRefundFailedNotice = (p: {
 export type OrderSummary = NoticeOrder & {
   total: number
   method: PaymentMethod | null
-  items: { label: string; quantity: number }[]
+  /** `madeToOrderQuantity`: quantas unidades da linha são produzidas (o resto sai da prateleira). */
+  items: { label: string; quantity: number; madeToOrderQuantity: number }[]
   /** "Total Express Standard — Caxias do Sul/RS". Null sem frete gravado. */
   shipping: string | null
   couponCode: string | null
+  /** Dias úteis de produção; 0 = tudo pronta entrega. */
+  productionDays: number
+  /** Até quando produzir — só existe depois do pagamento. */
+  productionDueAt: Date | null
 }
 
 /** Pedido grande não vira mensagem de três telas: os primeiros itens e a contagem do resto. */
 const MAX_ITEMS_LISTED = 8
 
+const producePart = (item: OrderSummary['items'][number]): string => {
+  if (item.madeToOrderQuantity <= 0) return ''
+  return item.madeToOrderQuantity >= item.quantity ? ' — a produzir' : ` — ${item.madeToOrderQuantity} a produzir`
+}
+
+const reservesStock = (order: OrderSummary): boolean =>
+  order.items.some((item) => item.quantity > item.madeToOrderQuantity)
+
+/** O que fazer com o pedido pago: separar, ou produzir até a data. */
+const nextStep = (order: OrderSummary): string => {
+  if (order.productionDays <= 0) return 'Já pode separar.'
+  const due = order.productionDueAt ? ` até ${formatSpDeadline(order.productionDueAt)}` : ''
+  return `Tem encomenda: produzir${due} (${businessDaysLabel(order.productionDays)}).`
+}
+
 const itemLines = (items: OrderSummary['items']): string[] => [
-  ...items.slice(0, MAX_ITEMS_LISTED).map((item) => `${item.quantity}× ${item.label}`),
+  ...items.slice(0, MAX_ITEMS_LISTED).map((item) => `${item.quantity}× ${item.label}${producePart(item)}`),
   ...(items.length > MAX_ITEMS_LISTED ? [`… e mais ${items.length - MAX_ITEMS_LISTED} itens.`] : []),
 ]
 
@@ -285,7 +333,7 @@ export const staffOrderPaidNotice = (p: { order: OrderSummary; orderUrl: string 
   subject: `[Pedido pago] #${p.order.number} — ${formatBRL(p.order.total)}`,
   heading: `Novo pedido pago: #${p.order.number}`,
   paragraphs: [
-    `${p.order.customerName} pagou ${formatBRL(p.order.total)}${p.order.method ? ` (${PAYMENT_METHOD_LABEL[p.order.method]})` : ''}. Já pode separar.`,
+    `${p.order.customerName} pagou ${formatBRL(p.order.total)}${p.order.method ? ` (${PAYMENT_METHOD_LABEL[p.order.method]})` : ''}. ${nextStep(p.order)}`,
     ...itemLines(p.order.items),
     ...orderExtras(p.order),
   ],
@@ -301,7 +349,9 @@ export const staffOrderCreatedNotice = (p: { order: OrderSummary; orderUrl: stri
     `${p.order.customerName} fechou um pedido de ${formatBRL(p.order.total)}; o pagamento ainda não foi confirmado.`,
     ...itemLines(p.order.items),
     ...orderExtras(p.order),
-    'O estoque fica reservado enquanto o pedido estiver aberto. Se o pagamento não vier no prazo, o pedido é cancelado sozinho e a reserva volta para a loja.',
+    reservesStock(p.order)
+      ? 'O estoque fica reservado enquanto o pedido estiver aberto. Se o pagamento não vier no prazo, o pedido é cancelado sozinho e a reserva volta para a loja.'
+      : 'É tudo sob encomenda: nada fica reservado. Se o pagamento não vier no prazo, o pedido é cancelado sozinho.',
   ],
   ctaLabel: 'Abrir o pedido',
   ctaUrl: p.orderUrl,
@@ -315,6 +365,8 @@ export type LowStockItem = {
   sku: string
   onHand: number
   reserved: number
+  /** Híbrido: sem estoque ele continua vendendo, sob encomenda — não "esgota". */
+  madeToOrderFallback: boolean
 }
 
 const itemName = (item: LowStockItem): string =>
@@ -324,7 +376,12 @@ const units = (n: number): string => (n === 1 ? '1 unidade' : `${n} unidades`)
 
 const stockLine = (item: LowStockItem): string => {
   const available = item.onHand - item.reserved
-  const state = available <= 0 ? 'esgotado' : `${units(available)} ${available === 1 ? 'disponível' : 'disponíveis'}`
+  const state =
+    available <= 0
+      ? item.madeToOrderFallback
+        ? 'acabou a pronta entrega (segue vendendo sob encomenda)'
+        : 'esgotado'
+      : `${units(available)} ${available === 1 ? 'disponível' : 'disponíveis'}`
   // Reserva é pedido não pago: o físico ainda está na prateleira, e o cliente não vê.
   const reserved = item.reserved > 0 ? ` (${units(item.onHand)} em estoque, ${item.reserved} reservada${item.reserved === 1 ? '' : 's'} em pedidos não pagos)` : ''
   return `${itemName(item)}, SKU ${item.sku}: ${state}${reserved}.`
@@ -335,7 +392,7 @@ export const staffLowStockNotice = (p: {
   threshold: number
   stockUrl: string
 }): NoticeContent => {
-  const soldOut = p.items.filter((item) => item.onHand - item.reserved <= 0)
+  const soldOut = p.items.filter((item) => item.onHand - item.reserved <= 0 && !item.madeToOrderFallback)
   const single = p.items.length === 1 ? p.items[0] : undefined
   const heading = single
     ? `${soldOut.length > 0 ? 'Esgotado' : 'Estoque baixo'}: ${itemName(single)}`
@@ -352,6 +409,40 @@ export const staffLowStockNotice = (p: {
     ],
     ctaLabel: 'Abrir o estoque',
     ctaUrl: p.stockUrl,
+    footerNote: STAFF_FOOTER,
+  }
+}
+
+export type ProductionDueOrder = { number: number; dueAt: Date }
+
+const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+/**
+ * O resumo diário da produção: o que já passou do prazo e o que vence até o
+ * próximo dia útil. Só números de pedido — o título vai para o histórico de
+ * alertas, que não guarda nome de cliente.
+ */
+export const staffProductionDueNotice = (p: {
+  overdue: ProductionDueOrder[]
+  dueSoon: ProductionDueOrder[]
+  ordersUrl: string
+}): NoticeContent => {
+  const parts = [
+    p.overdue.length > 0 ? plural(p.overdue.length, 'atrasada', 'atrasadas') : null,
+    p.dueSoon.length > 0 ? plural(p.dueSoon.length, 'vence logo', 'vencem logo') : null,
+  ].filter((part): part is string => part !== null)
+  const heading = `Encomendas: ${parts.join(', ')}`
+
+  return {
+    subject: `[Produção] ${heading}`,
+    heading,
+    paragraphs: [
+      ...p.overdue.map((o) => `Pedido #${o.number}: o prazo de produção venceu ${formatSpDeadline(o.dueAt)}.`),
+      ...p.dueSoon.map((o) => `Pedido #${o.number}: fica pronto até ${formatSpDeadline(o.dueAt)}.`),
+      'Terminou a produção? Mude o pedido para "Em separação" no painel — o cliente acompanha por lá.',
+    ],
+    ctaLabel: 'Ver as encomendas',
+    ctaUrl: p.ordersUrl,
     footerNote: STAFF_FOOTER,
   }
 }

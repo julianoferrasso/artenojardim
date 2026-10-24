@@ -307,6 +307,7 @@ apps/api/
 │   ├── jobs/                   ← cron, não fila
 │   │   ├── reconcile-payments.ts
 │   │   ├── release-reservations.ts
+│   │   ├── production-deadlines.ts   resumo diário das encomendas vencendo
 │   │   ├── sync-tracking.ts
 │   │   └── cleanup-carts.ts
 │   ├── app.ts
@@ -766,6 +767,29 @@ Sem essa uniformidade, cada consumidor (carrinho, pedido, frete, estoque, busca)
   (Antes, "excluir" gravava `ARCHIVED` + `deletedAt` e o produto sumia até do admin; a migration `unarchive_soft_deleted_products` trouxe esses de volta.)
 - Mudar preço **não** afeta pedidos (snapshot) nem carrinhos (preço ao vivo — o cliente paga o preço vigente ao fechar).
 
+### Pronta entrega × sob encomenda (out/2026)
+
+A política de venda é **do produto** (`Product.stockPolicy`); o estoque continua **da variante**:
+
+| Política | Na loja | Sem estoque |
+|---|---|---|
+| `STOCK_ONLY` (pronta entrega) | "Pronta entrega" | "Esgotado" + Avise-me — o comportamento de antes |
+| `STOCK_THEN_MADE_TO_ORDER` (pronta entrega + sob encomenda) | "Pronta entrega" enquanto há peça | vira "Sob encomenda"; nunca esgota |
+| `MADE_TO_ORDER` (sob encomenda) | "Sob encomenda", sempre | não usa estoque |
+
+- `Product.productionDays`: dias **úteis** de produção, contados da confirmação do pagamento (1–60). Obrigatório
+  fora de `STOCK_ONLY` — validado no create (Zod), no update (service, contra o estado gravado: o PATCH pode
+  mandar só a política) e numa CHECK no banco. Em `STOCK_ONLY` fica guardado, para voltar preenchido.
+- **Armadilha do Zod 4.4.3:** `.partial()` e `.extend()` lançam sobre objeto refinado — no import, derrubando API,
+  loja e admin. Os campos novos entram em `productFields` sem default e sem refine; o `superRefine` vai no FIM do
+  `createProductSchema`, e nada deriva dele.
+- A loja recebe a situação `MADE_TO_ORDER` (além de IN/LOW/OUT) e, no detalhe, `stockPolicy` + `productionDays`.
+  As frases (vitrine, página do produto, prévia do admin) saem de UMA função: `availabilityCopy`
+  (`constants/availability-labels.ts`). JSON-LD: encomenda é `BackOrder` (o Google não aceita `MadeToOrder`).
+- Política que sai de `STOCK_ONLY`: quem pediu Avise-me recebe "agora pode ser encomendado" (uso único, como a reposição).
+- O filtro "Pronta entrega" da vitrine (`?ready=true` na API, `?pronta=1` na loja) traz o que tem estoque livre
+  e não é `MADE_TO_ORDER`.
+
 ---
 
 ## 9. Estoque — livro-razão
@@ -833,6 +857,21 @@ O ledger registra **fatos físicos**. Reserva é **intenção**. Misturá-los po
 - O disponível nunca sai negativo para a vitrine.
 - O detalhe público não leva `costPrice` nem variações inativas, que são as aposentadas, guardadas pelo
   histórico de pedidos.
+
+**Encomenda não reserva.** Cada linha do pedido é dividida por `splitLine` (`inventory/domain/availability.ts`):
+pronta entrega é tudo ou nada; sob encomenda é tudo produzido; o híbrido **leva o que há e produz o resto** — pedir
+3 com 2 na prateleira reserva 2 e produz 1. Mandar a linha inteira para a produção deixaria as 2 peças "à venda"
+no sistema, e o próximo cliente compraria uma pronta entrega que já foi embalada para outro. O pedido guarda a
+divisão em `OrderItem.madeToOrderQuantity`.
+
+Só a parte pronta vira `InventoryReservation` — e, no pagamento, `SALE`. O settle (MP e Stripe) e todo
+cancelamento já trabalham sobre reservas e movimentos `SALE`, então a parte produzida passa por eles sem efeito.
+Consequência para quem opera: peça tirada da prateleira para cobrir uma encomenda precisa de baixa manual
+(Ajuste) — a separação mostra a origem de cada unidade.
+
+Pedido **só com encomenda** não tem reserva, então não vencia pelo job: ganhou `Order.paymentDueAt` (o mesmo TTL)
+e o job tem uma segunda origem — `PENDING`, não cancelado, todos os itens produzidos, `paymentDueAt` vencido.
+`decideExpiry` não muda: o `PIX_OPEN` continua protegendo um Pix vivo.
 
 Com Pix e boleto a reserva ganha peso: o boleto leva até 3 dias. **TTL por método** via `Setting`: cartão 30 min, Pix 60 min, boleto 3 dias — ajustável sem deploy.
 
@@ -921,6 +960,19 @@ O passo 6 **recalcula do zero, a partir do banco**, ignorando integralmente o qu
 - total ← `checkout/domain/totals.ts`, função pura, testada isoladamente
 
 O request de `confirm` carrega, no máximo, **ids e escolhas**. Nunca valores. Um cliente que edite o preço no DevTools recebe o preço real.
+
+**A reserva vem antes do pedido** (desde a encomenda): é ela que decide quanto de cada linha é produzido, e isso
+vai para o snapshot e para `Order.productionDays` (o maior prazo entre as linhas com parte produzida). Itens em
+ordem de `variantId`, para duas confirmações com as mesmas peças travarem as linhas na mesma ordem. O híbrido
+reserva com `LEAST(qty, disponível)` numa CTE com `FOR UPDATE` — decidir e escrever no mesmo comando.
+
+O cliente manda `expectedProductionDays` (o prazo que ele VIU na cotação). Se a pronta entrega acabou no meio do
+caminho e o prazo cresceu, o confirm responde 409 `PRODUCTION_TIME_CHANGED` antes de esvaziar o carrinho; a loja
+relê o carrinho, recota e mostra a data nova. A promessa não muda calada.
+
+Pedido pago com encomenda tem a situação derivada **"Em produção"** (`IN_PRODUCTION`: pago + `UNFULFILLED` +
+`productionDays > 0`) — sem status novo no banco. A loja marca "Em separação" quando a peça fica pronta. O cliente
+não cancela sozinho uma encomenda paga: vira pedido de cancelamento (a produção começou no pagamento).
 
 ### O `PaymentIntent` e o `orderId`
 
@@ -1147,8 +1199,15 @@ POST /checkout/shipping  { cartId, zipCode }
   5. filtra serviços habilitados em Setting
   6. aplica regras: frete grátis acima de X
   7. ordena por preço
-→ [{ id, carrier:'Correios', service:'PAC', price:2350, deliveryDays:7 }]
+→ [{ id, carrier:'Correios', service:'PAC', price:2350, deliveryDays:7,
+     productionDays:5, estimatedDeliveryAt:'2026-11-14T…' }]
 ```
+
+**Prazo = produção + postagem + transporte, sempre em DATA.** `deliveryDays` é postagem (`shipping.additionalDays`,
+editável em Frete no admin, "Postamos em até N dias úteis" na loja) + transporte — é o número do snapshot e o que
+conta a partir do envio. A produção vem à parte (`productionDays`, o mesmo em todas as opções), e
+`estimatedDeliveryAt` soma tudo a partir de hoje. Dias úteis sem feriado, como em `addBusinessDays`. A loja mostra
+"Chega até sáb., 14 de nov." (Baymard: data lê como promessa; "dia útil" confunde).
 
 Cotação **nunca** é cacheada por cliente, mas é cacheada por `(CEP, peso arredondado, valor)` por ~30 min — a API do Melhor Envio tem rate limit e latência de 1–3s, e essa chamada está no caminho crítico do checkout.
 
@@ -1320,6 +1379,10 @@ do código de 6 dígitos que chegou nele (e-mail, chat do Telegram via `getUpdat
 modelo de autenticação da Meta). Falha de configuração do SERVIDOR nunca marca o destino: dev e
 produção dividem o banco. O antigo `notifications.staffEmail` virou o primeiro destino (migration
 `20261020120000_alerts`); a linha do Setting ficou, inerte.
+
+O `PRODUCTION_DUE` é o único alerta que não nasce de um fato: o job `production-deadlines` roda de hora em hora e,
+em dia útil a partir das 8h de Brasília, manda UM resumo das encomendas atrasadas ou vencendo até o próximo dia
+útil. A trava do "uma vez por dia" é o próprio `Alert` do tipo gravado hoje (`alertRaisedSince`).
 
 **Atendimento (`modules/support`).** A mensagem do cliente ("Falar com a loja" na página do pedido)
 vive em `SupportThread` (uma por pedido, `orderId` único) + `SupportMessage`; antes era só um

@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StripePayment } from './stripe-payment'
 import { MercadoPagoPayment } from './mercadopago-payment'
 import { buttonVariants } from '@/components/ui/button'
+import { ReadyByDate } from '@/components/ready-by-date'
 import { cn, formatBRL } from '@/lib/utils'
 
 /**
@@ -108,6 +109,25 @@ const OrderActions = ({ orderId, className }: { orderId: string; className?: str
   </div>
 )
 
+/**
+ * O que acontece agora: o pronto está garantido; o sob encomenda entra em
+ * produção. A data é calculada no navegador a partir de agora — o pagamento
+ * acabou de ser aprovado, e é dali que o prazo conta.
+ */
+const NextStep = ({ order }: { order: CustomerOrder }) => {
+  if (order.productionDays <= 0) return <>Estoque garantido — em breve preparamos seu envio.</>
+  const allMade = order.items.every((i) => i.madeToOrderQuantity >= i.quantity)
+  return (
+    <>
+      {allMade
+        ? 'Já vamos começar a produzir a sua encomenda.'
+        : 'As peças prontas estão garantidas, e já vamos começar a produzir a encomenda.'}{' '}
+      <ReadyByDate days={order.productionDays} prefix="Fica pronta até" /> Enviamos o pedido completo em
+      seguida.
+    </>
+  )
+}
+
 const PaidHero = ({ order }: { order: CustomerOrder }) => {
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -134,7 +154,7 @@ const PaidHero = ({ order }: { order: CustomerOrder }) => {
         <span className="font-medium text-foreground">{order.email}</span>.
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Estoque garantido — em breve preparamos seu envio.
+        <NextStep order={order} />
       </p>
       <OrderActions orderId={order.id} className="mt-6 w-full sm:w-auto" />
     </Card>
@@ -381,7 +401,11 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
             items={order.items.map((i) => ({ ...i, productSlug: null }))}
             title={`Itens (${itemCount})`}
           />
-          <OrderDeliveryCard address={order.shippingAddress} method={order.shippingMethod} />
+          <OrderDeliveryCard
+            address={order.shippingAddress}
+            method={order.shippingMethod}
+            productionDays={order.productionDays}
+          />
         </aside>
       </div>
     </main>

@@ -17,7 +17,8 @@ const order = (
   paymentStatus: PaymentStatus,
   fulfillmentStatus: FulfillmentStatus,
   canceledAt: string | null = null,
-) => ({ paymentStatus, fulfillmentStatus, canceledAt })
+  productionDays = 0,
+) => ({ paymentStatus, fulfillmentStatus, canceledAt, productionDays })
 
 const refunded = (p: PaymentStatus) => p === 'REFUNDED' || p === 'PARTIALLY_REFUNDED'
 
@@ -102,5 +103,22 @@ describe('cancelReasonText', () => {
 
   it('em "Outro" o texto do cliente é o motivo, sem prefixo', () => {
     expect(cancelReasonText({ reasonCode: 'OTHER', reason: 'mudei de ideia' })).toBe('mudei de ideia')
+  })
+})
+
+describe('customerCancelMode na encomenda', () => {
+  it('encomenda PAGA vira pedido de cancelamento: a produção começou no pagamento', () => {
+    expect(customerCancelMode(order('PAID', 'UNFULFILLED', null, 7))).toBe('REQUEST')
+  })
+
+  it('encomenda ainda não paga cancela na hora: nada foi produzido', () => {
+    expect(customerCancelMode(order('PENDING', 'UNFULFILLED', null, 7))).toBe('IMMEDIATE')
+    expect(customerCancelMode(order('FAILED', 'UNFULFILLED', null, 7))).toBe('IMMEDIATE')
+  })
+
+  it('o resto da escada não muda', () => {
+    expect(customerCancelMode(order('PAID', 'PICKING', null, 7))).toBe('REQUEST')
+    expect(customerCancelMode(order('PAID', 'SHIPPED', null, 7))).toBe('NONE')
+    expect(customerCancelMode(order('PAID', 'UNFULFILLED', '2026-01-01T00:00:00Z', 7))).toBe('NONE')
   })
 })

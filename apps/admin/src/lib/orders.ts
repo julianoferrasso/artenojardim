@@ -3,6 +3,7 @@ import { ROUTES } from '@ecommerce/shared/constants'
 import type {
   AdminOrder,
   AdminOrderListItem,
+  ProductionSummary,
   OrderSituation,
   UpdateFulfillmentInput,
   CancelOrderInput,
@@ -46,6 +47,13 @@ export const useOrders = (params: OrderListParams) =>
       if (params.sort) qs.set('sort', params.sort)
       return apiFetchPaginated<AdminOrderListItem>(`${ROUTES.admin.orders.list}?${qs}`)
     },
+  })
+
+/** Encomendas pagas ainda na produção: total, vencendo logo e atrasadas. */
+export const useProductionSummary = () =>
+  useQuery({
+    queryKey: ['orders', 'production-summary'],
+    queryFn: () => apiFetch<ProductionSummary>(ROUTES.admin.orders.productionSummary),
   })
 
 export const useOrder = (id: string | undefined) =>

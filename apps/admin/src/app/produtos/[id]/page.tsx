@@ -19,6 +19,7 @@ import { ImageUploader } from '@/components/image-uploader'
 import { ProductCampaignDialog } from '@/components/product-campaign-dialog'
 import { MoneyInput } from '@/components/money-input'
 import { RichTextEditor } from '@/components/rich-text-editor'
+import { AvailabilityEditor } from '@/components/availability-editor'
 import { toStock, useRecordMovement, useVariantLevel } from '@/lib/inventory'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -161,10 +162,17 @@ export default function ProductEditPage({ params }: { params: Promise<{ id: stri
 
         <ImagesEditor product={product} />
 
+        {/* `key`: depois de salvar, a seção recomeça do que a API gravou. */}
+        <AvailabilityEditor key={`${product.stockPolicy}:${product.productionDays}`} product={product} />
+
         <section className="rounded-lg border border-border bg-card p-6">
           <h2 className="mb-3 font-medium">Variações ({product.variants.length})</h2>
           <p className="mb-3 text-xs text-muted-foreground">
             Peso e dimensões são obrigatórios para o cálculo do frete.
+            {product.stockPolicy === 'MADE_TO_ORDER' &&
+              ' Este produto é sob encomenda: o estoque abaixo não limita a venda.'}
+            {product.stockPolicy === 'STOCK_THEN_MADE_TO_ORDER' &&
+              ' O estoque abaixo é a pronta entrega; o que faltar é produzido sob encomenda.'}
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

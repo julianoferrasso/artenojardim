@@ -1,6 +1,5 @@
-import type { ShippingOption } from '@ecommerce/shared/contracts'
 import { calculateShipping } from '../../../integrations/melhor-envio/index.js'
-import type { ShippingProvider } from '../types.js'
+import type { CarrierOption, ShippingProvider } from '../types.js'
 
 /**
  * Adapta o Melhor Envio ao contrato ShippingProvider. É FINO de propósito: só
@@ -33,7 +32,7 @@ export const melhorEnvioProvider: ShippingProvider = {
     return raw
       .filter((o): o is typeof o & { price: string } => !o.error && typeof o.price === 'string')
       .map(
-        (o): ShippingOption => ({
+        (o): CarrierOption => ({
           id: String(o.id),
           carrier: o.company?.name ?? '—',
           service: o.name,

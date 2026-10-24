@@ -1,7 +1,8 @@
 'use client'
 
-import { ROUTES } from '@ecommerce/shared/constants'
+import { ROUTES, businessDaysLabel } from '@ecommerce/shared/constants'
 import type { QuoteRequestInput, ShippingOption } from '@ecommerce/shared/contracts'
+import { formatSpDeliveryDay } from '@ecommerce/shared/utils'
 import { ApiError } from './api'
 
 /**
@@ -54,3 +55,13 @@ export const quoteShippingCached = (input: QuoteRequestInput): Promise<ShippingO
   })
   return promise
 }
+
+/**
+ * "Chega até sáb., 14 de nov." — DATA, e não "N dias úteis": dia útil confunde
+ * e a data é lida como promessa (Baymard). A API já somou produção, postagem e
+ * transporte; sem a data (cotação antiga em cache), cai no prazo em dias.
+ */
+export const deliveryLabel = (o: Pick<ShippingOption, 'deliveryDays' | 'productionDays' | 'estimatedDeliveryAt'>): string =>
+  o.estimatedDeliveryAt
+    ? `Chega até ${formatSpDeliveryDay(o.estimatedDeliveryAt)}`
+    : `Chega em até ${businessDaysLabel(o.deliveryDays + (o.productionDays ?? 0))}`

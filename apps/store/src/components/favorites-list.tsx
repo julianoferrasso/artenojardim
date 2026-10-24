@@ -11,7 +11,7 @@ import { ApiError } from '@/lib/api'
 import { formatBRL, cn } from '@/lib/utils'
 import { ProductImage } from './product-image'
 import { FavoriteButton } from './favorite-button'
-import { SOLD_OUT_IMAGE_CLASS, SoldOutBadge } from './stock-status'
+import { AvailabilityHint, SOLD_OUT_IMAGE_CLASS, SoldOutBadge } from './stock-status'
 import { Skeleton } from './ui/skeleton'
 import { buttonVariants } from './ui/button'
 
@@ -114,6 +114,7 @@ const FavoriteCard = ({ fav, product }: { fav: FavoriteEntry; product: Product }
             {formatBRL(min)}
           </p>
         )}
+        <AvailabilityHint status={product.stockStatus} />
       </div>
     </Link>
   )

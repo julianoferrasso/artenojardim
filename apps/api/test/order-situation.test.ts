@@ -21,7 +21,8 @@ const order = (
   paymentStatus: PaymentStatus,
   fulfillmentStatus: FulfillmentStatus,
   canceledAt: string | null = null,
-) => ({ paymentStatus, fulfillmentStatus, canceledAt })
+  productionDays = 0,
+) => ({ paymentStatus, fulfillmentStatus, canceledAt, productionDays })
 
 describe('deriveSituation', () => {
   it('cancelado vence qualquer outro eixo', () => {
@@ -48,6 +49,16 @@ describe('deriveSituation', () => {
 
   it('pago e ainda não separado é Pago', () => {
     expect(deriveSituation(order('PAID', 'UNFULFILLED'))).toBe('PAID')
+  })
+
+  it('pago com encomenda e ainda não separado é Em Produção', () => {
+    expect(deriveSituation(order('PAID', 'UNFULFILLED', null, 7))).toBe('IN_PRODUCTION')
+  })
+
+  it('encomenda não muda o resto: sem pagamento aguarda, separada é separação', () => {
+    expect(deriveSituation(order('PENDING', 'UNFULFILLED', null, 7))).toBe('AWAITING_PAYMENT')
+    expect(deriveSituation(order('PAID', 'PICKING', null, 7))).toBe('PICKING')
+    expect(deriveSituation(order('PAID', 'UNFULFILLED', '2026-01-01T00:00:00Z', 7))).toBe('CANCELED')
   })
 
   it('READY_TO_SHIP ainda é "Em Separação" para o operador', () => {
@@ -85,17 +96,22 @@ describe('situationFilter × deriveSituation', () => {
     if (filter.paymentStatus && !filter.paymentStatus.includes(o.paymentStatus)) return false
     if (filter.fulfillmentStatus && !filter.fulfillmentStatus.includes(o.fulfillmentStatus))
       return false
+    if (filter.madeToOrder === true && o.productionDays <= 0) return false
+    if (filter.madeToOrder === false && o.productionDays > 0) return false
     return true
   }
 
   it('cada pedido casa com o filtro da sua situação e só com ele', () => {
     for (const canceledAt of [null, '2026-01-01T00:00:00Z']) {
-      for (const p of PAYMENT_STATUSES) {
-        for (const f of FULFILLMENT_STATUSES) {
-          const o = order(p, f, canceledAt)
-          const own = deriveSituation(o)
-          const casam = ORDER_SITUATIONS.filter((s: OrderSituation) => matches(situationFilter(s), o))
-          expect(casam, `${p}/${f}/${canceledAt ? 'cancelado' : 'ativo'}`).toEqual([own])
+      for (const productionDays of [0, 7]) {
+        for (const p of PAYMENT_STATUSES) {
+          for (const f of FULFILLMENT_STATUSES) {
+            const o = order(p, f, canceledAt, productionDays)
+            const own = deriveSituation(o)
+            const casam = ORDER_SITUATIONS.filter((s: OrderSituation) => matches(situationFilter(s), o))
+            const label = `${p}/${f}/${canceledAt ? 'cancelado' : 'ativo'}/produção ${productionDays}`
+            expect(casam, label).toEqual([own])
+          }
         }
       }
     }

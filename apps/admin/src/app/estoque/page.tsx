@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { StockItem } from '@ecommerce/shared/contracts'
+import { STOCK_POLICY_LABEL } from '@ecommerce/shared/constants'
 import { useStock } from '@/lib/inventory'
 import { LedgerDrawer } from '@/components/ledger-drawer'
 import { cn } from '@/lib/utils'
@@ -68,11 +69,22 @@ function StockView() {
                       {item.variantLabel !== '—' && (
                         <span className="ml-1 text-xs text-muted-foreground">{item.variantLabel}</span>
                       )}
+                      {/* Sob encomenda, "0 disponível" não é problema: a venda não depende dele. */}
+                      {item.stockPolicy !== 'STOCK_ONLY' && (
+                        <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                          {STOCK_POLICY_LABEL[item.stockPolicy]}
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 text-muted-foreground">{item.sku}</td>
                     <td className="p-3 text-right">{item.onHand}</td>
                     <td className="p-3 text-right text-muted-foreground">{item.reserved}</td>
-                    <td className={cn('p-3 text-right font-medium', item.available <= 0 && 'text-warning')}>
+                    <td
+                      className={cn(
+                        'p-3 text-right font-medium',
+                        item.available <= 0 && item.stockPolicy === 'STOCK_ONLY' && 'text-warning',
+                      )}
+                    >
                       {item.available}
                     </td>
                     {/* Quem pediu "Avise-me quando chegar": a demanda que espera a próxima produção. */}

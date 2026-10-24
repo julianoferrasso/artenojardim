@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { SearchX } from 'lucide-react'
 import { listProducts } from '@/lib/catalog'
 import { ProductCard } from '@/components/product-card'
+import { ReadyFilterChip } from '@/components/ready-filter'
 
 // Busca é sempre dinâmica: a query string é infinita, cachear não faz sentido.
 export const dynamic = 'force-dynamic'
@@ -14,12 +15,14 @@ export const metadata: Metadata = {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>
+  searchParams: Promise<{ q?: string; pronta?: string }>
 }) {
-  const { q } = await searchParams
+  const { q, pronta } = await searchParams
   const term = q?.trim() ?? ''
+  const ready = pronta === '1'
+  const baseHref = `/busca?q=${encodeURIComponent(term)}`
 
-  const { data: products } = term ? await listProducts({ q: term }) : { data: [] }
+  const { data: products } = term ? await listProducts({ q: term, ready }) : { data: [] }
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
@@ -31,6 +34,12 @@ export default async function SearchPage({
         <p className="mt-4 text-muted-foreground">Digite algo na busca acima.</p>
       )}
 
+      {term && (
+        <div className="mt-3 flex items-center gap-2">
+          <ReadyFilterChip active={ready} href={ready ? baseHref : `${baseHref}&pronta=1`} />
+        </div>
+      )}
+
       {term && products.length === 0 && (
         <div className="mt-8 flex flex-col items-center gap-4 rounded-xl border border-dashed border-border bg-card/50 px-6 py-16 text-center">
           <span className="flex size-14 items-center justify-center rounded-full bg-secondary">
@@ -39,7 +48,9 @@ export default async function SearchPage({
           <div>
             <p className="font-display text-xl font-semibold">Nada por aqui</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Nenhum produto encontrado para “{term}”. Tente outra palavra.
+              {ready
+                ? `Nada a pronta entrega para “${term}” agora. Tire o filtro para ver também o que é feito sob encomenda.`
+                : `Nenhum produto encontrado para “${term}”. Tente outra palavra.`}
             </p>
           </div>
         </div>

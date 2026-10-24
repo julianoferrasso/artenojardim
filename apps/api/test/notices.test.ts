@@ -8,6 +8,8 @@ import {
   staffLowStockNotice,
   staffMessageNotice,
   staffOrderPaidNotice,
+  staffOrderCreatedNotice,
+  staffProductionDueNotice,
   staffShippingDisconnectedNotice,
   staffSiteDownNotice,
   staffSiteUpNotice,
@@ -100,6 +102,7 @@ describe('avisos à equipe', () => {
       reason: 'Comprei por engano',
       refund: { status: 'failed', amount: 5000, method: 'PIX' },
       orderUrl: url,
+      reservedStock: true,
     })
     expect(notice.subject.startsWith('[Ação necessária]')).toBe(true)
   })
@@ -110,9 +113,17 @@ describe('avisos à equipe', () => {
       reason: 'Comprei por engano',
       refund: { status: 'requested', amount: 5000, method: 'PIX' },
       orderUrl: url,
+      reservedStock: true,
     })
     expect(notice.subject.startsWith('[Cancelamento]')).toBe(true)
     expect(notice.paragraphs.join(' ')).toContain('Comprei por engano')
+  })
+
+  it('pedido sem pagamento só fala de reserva quando havia peça reservada', () => {
+    const withStock = staffCanceledNotice({ order, reason: 'x', refund: { status: 'none' }, orderUrl: url, reservedStock: true })
+    const madeToOrder = staffCanceledNotice({ order, reason: 'x', refund: { status: 'none' }, orderUrl: url, reservedStock: false })
+    expect(withStock.paragraphs.join(' ')).toContain('reserva de estoque foi liberada')
+    expect(madeToOrder.paragraphs.join(' ')).not.toContain('reserva')
   })
 
   it('mensagem do cliente leva o assunto e o texto inteiro', () => {
@@ -158,24 +169,71 @@ describe('alertas da equipe', () => {
     ...order,
     total: 18990,
     method: 'PIX',
-    items: Array.from({ length: 10 }, (_, i) => ({ label: `Vela ${i + 1}`, quantity: 1 })),
+    items: Array.from({ length: 10 }, (_, i) => ({ label: `Vela ${i + 1}`, quantity: 1, madeToOrderQuantity: 0 })),
     shipping: 'Jadlog .Package — Caxias do Sul/RS',
     couponCode: 'BEMVINDO10',
+    productionDays: 0,
+    productionDueAt: null,
   }
 
   it('pedido pago: valor e método no texto, nome do cliente fora do título', () => {
     const notice = staffOrderPaidNotice({ order: summary, orderUrl: url })
     expect(notice.heading).toBe('Novo pedido pago: #1042')
     expect(notice.heading).not.toContain('Maria')
-    expect(brl(notice.paragraphs[0]!)).toContain('Maria da Silva pagou R$ 189,90 (Pix)')
+    expect(brl(notice.paragraphs[0]!)).toContain('Maria da Silva pagou R$ 189,90 (Pix). Já pode separar.')
     expect(notice.paragraphs).toContain('… e mais 2 itens.')
     expect(notice.paragraphs).toContain('Entrega: Jadlog .Package — Caxias do Sul/RS.')
+  })
+
+  it('pedido pago com encomenda: o próximo passo é produzir, com a data', () => {
+    const notice = staffOrderPaidNotice({
+      order: {
+        ...summary,
+        items: [
+          { label: 'Vela A', quantity: 2, madeToOrderQuantity: 2 },
+          { label: 'Vela B', quantity: 3, madeToOrderQuantity: 1 },
+          { label: 'Vela C', quantity: 1, madeToOrderQuantity: 0 },
+        ],
+        productionDays: 7,
+        productionDueAt: new Date('2026-11-04T15:00:00Z'),
+      },
+      orderUrl: url,
+    })
+    expect(notice.paragraphs[0]).toContain('Tem encomenda: produzir até qua., 04/11 (7 dias úteis).')
+    expect(notice.paragraphs).toContain('2× Vela A — a produzir')
+    expect(notice.paragraphs).toContain('3× Vela B — 1 a produzir')
+    expect(notice.paragraphs).toContain('1× Vela C')
+  })
+
+  it('pedido aguardando pagamento só com encomenda não fala em reserva', () => {
+    const allMade = staffOrderCreatedNotice({
+      order: { ...summary, items: [{ label: 'Vela', quantity: 1, madeToOrderQuantity: 1 }], productionDays: 7 },
+      orderUrl: url,
+    })
+    expect(allMade.paragraphs.join(' ')).toContain('nada fica reservado')
+
+    const withStock = staffOrderCreatedNotice({ order: summary, orderUrl: url })
+    expect(withStock.paragraphs.join(' ')).toContain('O estoque fica reservado')
+  })
+
+  it('resumo da produção: atrasadas e vencendo, sem nome de cliente', () => {
+    const notice = staffProductionDueNotice({
+      overdue: [{ number: 19, dueAt: new Date('2026-10-20T15:00:00Z') }],
+      dueSoon: [
+        { number: 21, dueAt: new Date('2026-10-22T15:00:00Z') },
+        { number: 23, dueAt: new Date('2026-10-22T15:00:00Z') },
+      ],
+      ordersUrl: url,
+    })
+    expect(notice.heading).toBe('Encomendas: 1 atrasada, 2 vencem logo')
+    expect(notice.paragraphs[0]).toBe('Pedido #19: o prazo de produção venceu ter., 20/10.')
+    expect(notice.paragraphs[1]).toBe('Pedido #21: fica pronto até qui., 22/10.')
   })
 
   it('nenhum título de alerta da equipe leva o nome do cliente', () => {
     const headings = [
       staffMessageNotice({ order, topic: null, body: 'oi', threadUrl: url }).heading,
-      staffCanceledNotice({ order, reason: 'x', refund: { status: 'none' }, orderUrl: url }).heading,
+      staffCanceledNotice({ order, reason: 'x', refund: { status: 'none' }, orderUrl: url, reservedStock: true }).heading,
       staffOrderPaidNotice({ order: summary, orderUrl: url }).heading,
     ]
     for (const heading of headings) expect(heading).not.toContain('Maria')
@@ -183,7 +241,9 @@ describe('alertas da equipe', () => {
 
   it('estoque baixo de um item: produto e variante no título; reserva explicada', () => {
     const notice = staffLowStockNotice({
-      items: [{ productName: 'Vela Lavanda', variantLabel: '300 g', sku: 'VL-300', onHand: 3, reserved: 1 }],
+      items: [
+        { productName: 'Vela Lavanda', variantLabel: '300 g', sku: 'VL-300', onHand: 3, reserved: 1, madeToOrderFallback: false },
+      ],
       threshold: 2,
       stockUrl: url,
     })
@@ -196,17 +256,25 @@ describe('alertas da equipe', () => {
 
   it('esgotado e vários itens', () => {
     const one = staffLowStockNotice({
-      items: [{ productName: 'Vela', variantLabel: null, sku: 'V', onHand: 0, reserved: 0 }],
+      items: [{ productName: 'Vela', variantLabel: null, sku: 'V', onHand: 0, reserved: 0, madeToOrderFallback: false }],
       threshold: 2,
       stockUrl: url,
     })
     expect(one.heading).toBe('Esgotado: Vela')
     expect(one.paragraphs[0]).toContain('esgotado')
 
+    const hybrid = staffLowStockNotice({
+      items: [{ productName: 'Vela', variantLabel: null, sku: 'V', onHand: 0, reserved: 0, madeToOrderFallback: true }],
+      threshold: 2,
+      stockUrl: url,
+    })
+    expect(hybrid.heading).toBe('Estoque baixo: Vela')
+    expect(hybrid.paragraphs[0]).toContain('acabou a pronta entrega')
+
     const many = staffLowStockNotice({
       items: [
-        { productName: 'A', variantLabel: null, sku: 'A', onHand: 0, reserved: 0 },
-        { productName: 'B', variantLabel: null, sku: 'B', onHand: 2, reserved: 0 },
+        { productName: 'A', variantLabel: null, sku: 'A', onHand: 0, reserved: 0, madeToOrderFallback: false },
+        { productName: 'B', variantLabel: null, sku: 'B', onHand: 2, reserved: 0, madeToOrderFallback: false },
       ],
       threshold: 2,
       stockUrl: url,
@@ -252,6 +320,14 @@ describe('aviso de reposição (Avise-me)', () => {
 
   it('diz que é o único aviso — a inscrição some no envio', () => {
     const notice = customerBackInStockNotice({ productName: 'Vela Jardim', variantLabel: null, productUrl })
+    expect(notice.paragraphs.join(' ')).toContain('único aviso')
+  })
+
+  it('passou a ser sob encomenda: não promete estoque, diz o prazo', () => {
+    const notice = customerBackInStockNotice({ productName: 'Vela Jardim', variantLabel: null, productUrl, productionDays: 7 })
+    expect(notice.subject).toBe('Agora sob encomenda: Vela Jardim')
+    expect(notice.heading).not.toContain('estoque')
+    expect(notice.paragraphs.join(' ')).toContain('em até 7 dias úteis')
     expect(notice.paragraphs.join(' ')).toContain('único aviso')
   })
 })

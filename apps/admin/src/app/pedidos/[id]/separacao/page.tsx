@@ -60,6 +60,15 @@ export default function PickingListPage({ params }: { params: Promise<{ id: stri
               <td className="py-3">
                 <span className="font-medium">{item.productName}</span>
                 <span className="block text-xs">{item.variantName}</span>
+                {/* A origem importa na mesa: o que é da prateleira foi reservado; o
+                    produzido não pode sair da prateleira sem baixa no estoque. */}
+                {item.madeToOrderQuantity > 0 && (
+                  <span className="block text-xs font-semibold">
+                    {item.madeToOrderQuantity >= item.quantity
+                      ? 'Sob encomenda (produzido)'
+                      : `${item.quantity - item.madeToOrderQuantity} da prateleira + ${item.madeToOrderQuantity} produzido(s)`}
+                  </span>
+                )}
               </td>
               <td className="py-3 font-mono text-xs">{item.sku}</td>
               <td className="py-3 text-center text-lg font-bold">{item.quantity}</td>

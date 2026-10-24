@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { quoteRequestSchema } from '@ecommerce/shared/contracts'
+import { quoteRequestSchema, shippingSettingsSchema } from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticate, requireStaff } from '../../middlewares/authenticate.js'
 import { requireMinRole } from '../../middlewares/authorize.js'
@@ -39,3 +39,13 @@ shippingRoutes.get(
   controller.connectController,
 )
 shippingRoutes.get('/melhor-envio/status', authenticate, requireStaff, controller.statusController)
+
+// Prazo de postagem: muda a promessa de entrega da loja inteira — piso de ADMIN.
+shippingRoutes.get('/settings', authenticate, requireStaff, controller.getSettingsController)
+shippingRoutes.put(
+  '/settings',
+  authenticate,
+  requireMinRole('ADMIN'),
+  validate({ body: shippingSettingsSchema }),
+  controller.updateSettingsController,
+)

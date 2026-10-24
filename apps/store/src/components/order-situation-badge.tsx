@@ -17,6 +17,8 @@ const SITUATION_CLASS: Record<OrderSituation, string> = {
   AWAITING_PAYMENT: 'bg-warning/15 text-warning-foreground border-warning/30',
   PAYMENT_FAILED: 'bg-destructive/10 text-destructive border-destructive/30',
   PAID: 'bg-success/15 text-success border-success/30',
+  // Sálvia: a cor da encomenda na vitrine e no carrinho — é o mesmo assunto.
+  IN_PRODUCTION: 'bg-tertiary/15 text-foreground border-tertiary/40',
   PICKING: 'bg-primary/10 text-primary-ink border-primary-ink/40',
   SHIPPED: 'bg-primary/15 text-primary-ink border-primary-ink/40',
   DELIVERED: 'bg-success/20 text-success border-success/40',

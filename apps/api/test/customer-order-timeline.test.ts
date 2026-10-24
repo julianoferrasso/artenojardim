@@ -157,3 +157,34 @@ describe('escada de progresso', () => {
     expect(entries).toHaveLength(2)
   })
 })
+
+describe('passo "Em produção"', () => {
+  const paid = [
+    event(EVENTS.order.created, '2026-07-16T12:00:00Z'),
+    event(EVENTS.order.paid, '2026-07-16T12:05:00Z'),
+  ]
+
+  it('só existe na escada de quem comprou algo sob encomenda', () => {
+    const ready = buildCustomerTimeline(paid, { canceled: false, madeToOrder: false })
+    expect(ready.steps.map((s) => s.key)).not.toContain('IN_PRODUCTION')
+
+    const made = buildCustomerTimeline(paid, { canceled: false, madeToOrder: true })
+    expect(made.steps.map((s) => s.key)).toEqual([...CUSTOMER_TIMELINE_STEPS])
+  })
+
+  it('acende junto com o pagamento: a produção começa quando ele é aprovado', () => {
+    const { steps } = buildCustomerTimeline(paid, { canceled: false, madeToOrder: true })
+    const production = steps.find((s) => s.key === 'IN_PRODUCTION')
+    const payment = steps.find((s) => s.key === 'PAID')
+    expect(production?.reachedAt).toBe(payment?.reachedAt)
+    expect(production?.reachedAt).not.toBeNull()
+  })
+
+  it('sem pagamento, a produção ainda não começou', () => {
+    const { steps } = buildCustomerTimeline([event(EVENTS.order.created, '2026-07-16T12:00:00Z')], {
+      canceled: false,
+      madeToOrder: true,
+    })
+    expect(steps.find((s) => s.key === 'IN_PRODUCTION')?.reachedAt).toBeNull()
+  })
+})

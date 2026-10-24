@@ -30,10 +30,28 @@ export const shippingOptionSchema = z.object({
   carrier: z.string(),
   service: z.string(),
   priceCents: z.number().int().nonnegative(),
+  /**
+   * Dias ÚTEIS de postagem + transporte, contados do pagamento (pronta entrega)
+   * ou do fim da produção. É o número que vai para o snapshot do pedido.
+   */
   deliveryDays: z.number().int().nonnegative(),
+  /** Dias úteis de produção antes da postagem; 0 quando tudo é pronta entrega. Igual em todas as opções. */
+  productionDays: z.number().int().nonnegative(),
+  /** ISO. Limite superior da entrega se o pagamento for aprovado hoje: produção + postagem + transporte. */
+  estimatedDeliveryAt: z.string(),
 })
 
 export type ShippingOption = z.infer<typeof shippingOptionSchema>
+
+/** Prazo de postagem: quantos dias úteis a loja leva para postar um pedido pronto. */
+export const HANDLING_DAYS_MAX = 15
+
+/** O que o admin edita do frete. Frete grátis e serviços habilitados ainda não têm tela. */
+export const shippingSettingsSchema = z.object({
+  handlingDays: z.number().int().min(0).max(HANDLING_DAYS_MAX),
+})
+
+export type ShippingSettings = z.infer<typeof shippingSettingsSchema>
 
 /** Conexão da conta do provider de frete, para a tela Frete do admin. */
 export type ShippingProviderStatus = {

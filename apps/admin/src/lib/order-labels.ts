@@ -26,6 +26,8 @@ export const SITUATION_CLASS: Record<OrderSituation, string> = {
   AWAITING_PAYMENT: 'bg-warning/15 text-warning-foreground border-warning/30',
   PAYMENT_FAILED: 'bg-destructive/10 text-destructive border-destructive/30',
   PAID: 'bg-success/15 text-success border-success/30',
+  // Pago, mas a próxima ação é produzir, não separar: tom de "em andamento".
+  IN_PRODUCTION: 'bg-warning/10 text-warning-foreground border-warning/30',
   PICKING: 'bg-primary/10 text-primary border-primary/30',
   SHIPPED: 'bg-primary/15 text-primary border-primary/40',
   DELIVERED: 'bg-success/20 text-success border-success/40',

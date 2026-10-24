@@ -105,13 +105,27 @@ export type DeliveryEstimateInput = {
   /** Data do pagamento aprovado. */
   paidAt: Date | string | null
   deliveryDays: number
+  /** Dias úteis de produção (encomenda). Só contam antes do envio. */
+  productionDays?: number
 }
+
+const toDate = (value: Date | string): Date | null => {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** Inteiro positivo ou 0: `NaN` faria o `addBusinessDays` devolver a própria âncora. */
+const wholeDays = (days: number | undefined): number =>
+  days !== undefined && Number.isFinite(days) && days > 0 ? Math.floor(days) : 0
 
 /**
  * Âncora: envio, se houve; senão, pagamento. O prazo da transportadora começa a
  * contar quando o pacote entra na rede dela, não quando o cliente clicou em
  * comprar — ancorar na criação do pedido daria uma data que já nasce errada
  * para quem pagou por boleto.
+ *
+ * Ancorado no pagamento, a produção da encomenda vem antes do frete. Depois do
+ * envio ela já aconteceu, e somá-la de novo atrasaria a data à toa.
  *
  * Sem nenhuma das duas âncoras devolve null, e a UI diz que o prazo passa a
  * contar após a confirmação do pagamento.
@@ -121,8 +135,23 @@ export const estimateDelivery = (input: DeliveryEstimateInput): string | null =>
   if (!anchor) return null
   if (!Number.isFinite(input.deliveryDays) || input.deliveryDays <= 0) return null
 
-  const start = new Date(anchor)
-  if (Number.isNaN(start.getTime())) return null
+  const start = toDate(anchor)
+  if (!start) return null
 
-  return addBusinessDays(start, input.deliveryDays).toISOString()
+  const production = input.shippedAt ? 0 : wholeDays(input.productionDays)
+  return addBusinessDays(start, production + input.deliveryDays).toISOString()
+}
+
+/**
+ * Até quando a encomenda tem de ficar pronta: pagamento + dias úteis de
+ * produção. null sem produção ou sem pagamento — o relógio só anda depois dele.
+ */
+export const estimateProductionDue = (input: {
+  paidAt: Date | string | null
+  productionDays: number
+}): string | null => {
+  const days = wholeDays(input.productionDays)
+  if (days === 0 || !input.paidAt) return null
+  const start = toDate(input.paidAt)
+  return start ? addBusinessDays(start, days).toISOString() : null
 }

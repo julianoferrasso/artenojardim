@@ -19,6 +19,13 @@ export type CheckoutSummaryRequest = z.infer<typeof checkoutSummaryRequestSchema
 
 export const confirmCheckoutSchema = checkoutSummaryRequestSchema.extend({
   customerNote: z.string().max(500).optional(),
+  /**
+   * O prazo de produção que o cliente VIU (o `productionDays` da opção de frete).
+   * Se a confirmação der um prazo maior — a pronta entrega acabou no meio do
+   * caminho —, a API recusa com PRODUCTION_TIME_CHANGED em vez de mudar a promessa
+   * calada. Ausente = sem a guarda (cliente antigo).
+   */
+  expectedProductionDays: z.number().int().nonnegative().max(365).optional(),
 })
 
 export type ConfirmCheckoutInput = z.infer<typeof confirmCheckoutSchema>
@@ -33,10 +40,13 @@ export const checkoutSummarySchema = z.object({
       quantity: true,
       totalPrice: true,
       imageUrl: true,
+      madeToOrderQuantity: true,
     }),
   ),
   shippingAddress: orderAddressSchema,
   shippingMethod: orderShippingMethodSchema,
+  /** Dias úteis de produção do pedido, se fechasse agora (0 = tudo pronta entrega). */
+  productionDays: z.number().int().nonnegative(),
   subtotal: z.number().int(),
   discountTotal: z.number().int(),
   shippingTotal: z.number().int(),

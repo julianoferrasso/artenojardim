@@ -19,6 +19,7 @@ export const ALERT_EMOJI: Record<AlertEventType, string> = {
   ORDER_CANCELED_BY_CUSTOMER: '↩️',
   REFUND_FAILED: '💸',
   ORDER_CREATED: '🕓',
+  PRODUCTION_DUE: '⏳',
   CUSTOMER_MESSAGE: '💬',
   LOW_STOCK: '📦',
   SHIPPING_DISCONNECTED: '🚚',

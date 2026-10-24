@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { CustomerOrderListItem } from '@ecommerce/shared/contracts'
 import { PAYMENT_METHOD_LABEL } from '@ecommerce/shared/constants'
+import { formatSpDeliveryDay } from '@ecommerce/shared/utils'
 import { ProductImage } from '@/components/product-image'
 import { OrderSituationBadge } from '@/components/order-situation-badge'
 import { formatBRL, formatDate } from '@/lib/utils'
@@ -12,6 +13,8 @@ import { formatBRL, formatDate } from '@/lib/utils'
  * partir de md. Manter um markup de card e outro de tabela em paralelo é como
  * as duas versões divergem: alguém corrige o preço numa e esquece a outra.
  */
+const AWAITING_DELIVERY = new Set<CustomerOrderListItem['situation']>(['PAID', 'IN_PRODUCTION', 'PICKING', 'SHIPPED'])
+
 export const OrderCard = ({ order }: { order: CustomerOrderListItem }) => {
   const extraItems = order.itemCount - 1
 
@@ -45,6 +48,12 @@ export const OrderCard = ({ order }: { order: CustomerOrderListItem }) => {
             {/* Sem pagamento ainda não é "erro": é o boleto que não venceu. */}
             {order.paymentMethod ? PAYMENT_METHOD_LABEL[order.paymentMethod] : 'Aguardando pagamento'}
           </p>
+
+          {/* A pergunta de quem abre a lista é "quando chega?". Só antes do envio
+              terminar: entregue, devolvido ou cancelado não tem previsão. */}
+          {order.estimatedDeliveryAt && AWAITING_DELIVERY.has(order.situation) && (
+            <p className="mt-1 text-xs font-medium">Chega até {formatSpDeliveryDay(order.estimatedDeliveryAt)}</p>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 md:flex-col md:items-end md:gap-1">

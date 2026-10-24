@@ -3,6 +3,7 @@ import {
   buildCustomerTimeline,
   readOrderAttachments,
   estimateDelivery,
+  estimateProductionDue,
   customerCancelMode,
   type CustomerOrder,
   type CustomerOrderListItem,
@@ -40,6 +41,7 @@ export const CUSTOMER_LIST_SELECT = {
   fulfillmentStatus: true,
   canceledAt: true,
   shippingMethodJson: true,
+  productionDays: true,
   _count: { select: { items: true } },
   items: {
     orderBy: { totalPrice: 'desc' },
@@ -78,6 +80,7 @@ export const toCustomerListItem = (row: CustomerListRow): CustomerOrderListItem 
       shippedAt: null,
       paidAt: payment?.paidAt ?? null,
       deliveryDays: shippingMethodOf(row.shippingMethodJson).deliveryDays,
+      productionDays: row.productionDays,
     }),
   }
 }
@@ -100,6 +103,7 @@ export const CUSTOMER_ORDER_SELECT = {
   couponCodeSnapshot: true,
   shippingAddressJson: true,
   shippingMethodJson: true,
+  productionDays: true,
   customerNote: true,
   createdAt: true,
   items: {
@@ -114,6 +118,7 @@ export const CUSTOMER_ORDER_SELECT = {
       quantity: true,
       totalPrice: true,
       imageUrl: true,
+      madeToOrderQuantity: true,
       // Só para decidir se "comprar de novo" e o link do produto aparecem.
       variant: {
         select: {
@@ -164,7 +169,10 @@ const customerVisibleCancelReason = (row: CustomerOrderRow): string | null => {
 }
 
 export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
-  const { entries, steps } = buildCustomerTimeline(row.events, { canceled: !!row.canceledAt })
+  const { entries, steps } = buildCustomerTimeline(row.events, {
+    canceled: !!row.canceledAt,
+    madeToOrder: row.productionDays > 0,
+  })
   const attachments = readOrderAttachments(row.events)
 
   const paidPayment = row.payments.find(
@@ -189,6 +197,7 @@ export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
     couponCodeSnapshot: row.couponCodeSnapshot,
     shippingAddress: row.shippingAddressJson as unknown as Order['shippingAddress'],
     shippingMethod: shippingMethodOf(row.shippingMethodJson),
+    productionDays: row.productionDays,
     items: row.items.map((i) => ({
       id: i.id,
       variantId: i.variantId,
@@ -199,6 +208,7 @@ export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
       quantity: i.quantity,
       totalPrice: i.totalPrice,
       imageUrl: i.imageUrl,
+      madeToOrderQuantity: i.madeToOrderQuantity,
       productSlug: i.variant?.product.slug ?? null,
       reorderable:
         !!i.variantId &&
@@ -217,10 +227,15 @@ export const toCustomerOrderDTO = (row: CustomerOrderRow): CustomerOrder => {
           paidAt: payment.paidAt?.toISOString() ?? null,
         }
       : null,
+    // Depois do envio a produção já passou: a data some, fica a da entrega.
+    productionDueAt: shippedEvent
+      ? null
+      : estimateProductionDue({ paidAt: paidPayment?.paidAt ?? null, productionDays: row.productionDays }),
     estimatedDeliveryAt: estimateDelivery({
       shippedAt: shippedEvent?.createdAt ?? null,
       paidAt: paidPayment?.paidAt ?? null,
       deliveryDays: shippingMethodOf(row.shippingMethodJson).deliveryDays,
+      productionDays: row.productionDays,
     }),
     trackingCode: attachments.trackingCode,
     trackingUrl: attachments.trackingUrl,

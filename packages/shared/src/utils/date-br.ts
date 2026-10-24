@@ -136,3 +136,26 @@ export const addSpDays = (day: DayKey, n: number): DayKey => {
 /** Dia da semana no fuso brasileiro (0 = domingo). "É fim de semana?" é pergunta local. */
 export const spWeekday = (instant: Date): number =>
   WEEKDAY_INDEX[WEEKDAY_FORMATTER.format(instant)] ?? 0
+
+const DEADLINE_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: DEFAULT_TIMEZONE,
+  weekday: 'short',
+  day: '2-digit',
+  month: '2-digit',
+})
+
+const DELIVERY_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: DEFAULT_TIMEZONE,
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+})
+
+/** "qua., 04/11" — um prazo, no dia brasileiro. Curto, para painel, alerta e e-mail. */
+export const formatSpDeadline = (instant: Date | string): string => DEADLINE_FORMATTER.format(new Date(instant))
+
+/**
+ * "sáb., 14 de nov." — a data que o CLIENTE lê. Data, e não "N dias úteis": dia
+ * útil confunde, e a data é lida como promessa (Baymard).
+ */
+export const formatSpDeliveryDay = (instant: Date | string): string => DELIVERY_FORMATTER.format(new Date(instant))

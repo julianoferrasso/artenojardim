@@ -58,7 +58,7 @@ import {
  * `raiseAlert` — pelo `notify*` do módulo notifications, não direto.
  */
 
-export { raiseAlert, deliverAlert, type AlertSendJob, type AlertTypes } from './delivery.js'
+export { raiseAlert, deliverAlert, alertRaisedSince, type AlertSendJob, type AlertTypes } from './delivery.js'
 export type { AlertContent } from './domain/render.js'
 
 const SELECT = {

@@ -3,6 +3,7 @@ import {
   readOrderAttachments,
   addBusinessDays,
   estimateDelivery,
+  estimateProductionDue,
   periodStart,
 } from '@ecommerce/shared/contracts'
 
@@ -126,6 +127,51 @@ describe('estimateDelivery', () => {
       estimateDelivery({ shippedAt: 'não é data', paidAt: null, deliveryDays: 3 }),
     ).not.toThrow()
     expect(estimateDelivery({ shippedAt: 'não é data', paidAt: null, deliveryDays: 3 })).toBeNull()
+  })
+
+  it('encomenda: a produção vem antes do frete, contando do pagamento', () => {
+    // Quinta 16/07 + 3 dias úteis de produção + 2 de frete = quinta 23/07.
+    const iso = estimateDelivery({
+      shippedAt: null,
+      paidAt: '2026-07-16T12:00:00Z',
+      deliveryDays: 2,
+      productionDays: 3,
+    })
+    expect(iso?.slice(0, 10)).toBe('2026-07-23')
+  })
+
+  it('depois do envio a produção já passou e não soma de novo', () => {
+    const iso = estimateDelivery({
+      shippedAt: '2026-07-20T12:00:00Z',
+      paidAt: '2026-07-01T12:00:00Z',
+      deliveryDays: 2,
+      productionDays: 10,
+    })
+    expect(iso?.slice(0, 10)).toBe('2026-07-22')
+  })
+
+  it('produção inválida conta como zero, não estraga a data', () => {
+    const iso = estimateDelivery({
+      shippedAt: null,
+      paidAt: '2026-07-16T12:00:00Z',
+      deliveryDays: 2,
+      productionDays: NaN,
+    })
+    expect(iso?.slice(0, 10)).toBe('2026-07-20')
+  })
+})
+
+describe('estimateProductionDue', () => {
+  it('pagamento + dias úteis de produção', () => {
+    // Sexta 17/07 + 1 dia útil = segunda 20/07.
+    expect(estimateProductionDue({ paidAt: '2026-07-17T12:00:00Z', productionDays: 1 })?.slice(0, 10)).toBe(
+      '2026-07-20',
+    )
+  })
+
+  it('sem produção ou sem pagamento não há data — o relógio só anda depois de pagar', () => {
+    expect(estimateProductionDue({ paidAt: '2026-07-17T12:00:00Z', productionDays: 0 })).toBeNull()
+    expect(estimateProductionDue({ paidAt: null, productionDays: 7 })).toBeNull()
   })
 })
 

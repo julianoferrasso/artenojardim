@@ -18,7 +18,8 @@ import { buttonVariants } from './ui/button'
  * em separação liga para o suporte achando que houve erro.
  *
  * IMMEDIATE: ninguém começou a separar; acaba na hora, e o pago é estornado
- * automaticamente. REQUEST: a caixa já está sendo montada; a equipe decide.
+ * automaticamente. REQUEST: a caixa já está sendo montada, ou a encomenda paga
+ * já está em produção; a equipe decide.
  *
  * O valor do estorno vem pronto da API (`refundAmount`): a loja só mostra.
  *
@@ -33,11 +34,14 @@ export const CancelOrderDialog = ({
   mode,
   refundAmount,
   paymentMethod,
+  inProduction = false,
 }: {
   orderId: string
   mode: Exclude<CustomerCancelMode, 'NONE'>
   refundAmount: number
   paymentMethod: PaymentMethod | null
+  /** A encomenda paga está em produção — o pedido ainda não chegou à separação. */
+  inProduction?: boolean
 }) => {
   const [open, setOpen] = useState(false)
   const [reasonCode, setReasonCode] = useState<CustomerCancelReason | null>(null)
@@ -85,8 +89,9 @@ export const CancelOrderDialog = ({
         </p>
       ) : (
         <p className="mt-1 text-xs text-muted-foreground">
-          Seu pedido já está sendo separado, então o cancelamento passa pela nossa equipe, que responde em até 1
-          dia útil.
+          {inProduction
+            ? 'Sua encomenda já está em produção, então o cancelamento passa pela nossa equipe, que responde em até 1 dia útil.'
+            : 'Seu pedido já está sendo separado, então o cancelamento passa pela nossa equipe, que responde em até 1 dia útil.'}
         </p>
       )}
 

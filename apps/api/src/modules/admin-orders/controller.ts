@@ -25,6 +25,10 @@ export const listController = async (req: Request, res: Response): Promise<void>
   paginated(res, items, meta)
 }
 
+export const productionSummaryController = async (_req: Request, res: Response): Promise<void> => {
+  ok(res, await service.getProductionSummary())
+}
+
 export const detailController = async (req: Request, res: Response): Promise<void> => {
   ok(res, await service.getOrder(id(req)))
 }

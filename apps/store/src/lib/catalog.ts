@@ -36,12 +36,15 @@ export const listProducts = (params: {
   category?: string
   q?: string
   page?: number
+  /** Só o que sai da prateleira agora (o filtro "Pronta entrega"). */
+  ready?: boolean
 }): Promise<{ data: ProductListItem[]; meta: PaginationMeta }> => {
   const qs = new URLSearchParams()
   qs.set('page', String(params.page ?? 1))
   qs.set('perPage', '24')
   if (params.category) qs.set('categoryId', params.category)
   if (params.q) qs.set('q', params.q)
+  if (params.ready) qs.set('ready', 'true')
 
   // Busca é dinâmica (query infinita, cache inútil); listagem por categoria cacheia.
   return apiFetchPaginated<ProductListItem>(

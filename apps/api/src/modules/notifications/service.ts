@@ -1,5 +1,5 @@
 import { EVENTS, type PaymentMethod } from '@ecommerce/shared/constants'
-import type { SupportTopic } from '@ecommerce/shared/contracts'
+import { estimateProductionDue, type SupportTopic } from '@ecommerce/shared/contracts'
 import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
@@ -21,6 +21,7 @@ import {
   staffMessageNotice,
   staffOrderCreatedNotice,
   staffOrderPaidNotice,
+  staffProductionDueNotice,
   staffRefundFailedNotice,
   staffShippingDisconnectedNotice,
   staffSiteDownNotice,
@@ -28,6 +29,7 @@ import {
   type LowStockItem,
   type NoticeOrder,
   type OrderSummary,
+  type ProductionDueOrder,
   type SiteTargetStatus,
 } from './domain/notices.js'
 import { lowStockCrossing } from './domain/low-stock.js'
@@ -54,6 +56,7 @@ const conversationUrl = (orderId: string): string => `${orderPageUrl(orderId)}#c
 const adminOrderUrl = (orderId: string): string => adminUrl(`/pedidos/${orderId}`)
 const adminThreadUrl = (threadId: string): string => adminUrl(`/atendimento/${threadId}`)
 const adminStockUrl = (): string => adminUrl('/estoque')
+const adminProductionUrl = (): string => adminUrl('/pedidos?situacao=IN_PRODUCTION')
 const adminShippingUrl = (): string => adminUrl('/frete')
 
 type LoadedOrder = NoticeOrder & {
@@ -61,6 +64,8 @@ type LoadedOrder = NoticeOrder & {
   /** Null quando o cliente foi anonimizado (LGPD): não há a quem escrever. */
   customerEmail: string | null
   threadId: string | null
+  /** Alguma unidade saiu da prateleira (reserva). Encomenda pura não reserva. */
+  reservedStock: boolean
 }
 
 const loadOrder = async (orderId: string): Promise<LoadedOrder | null> => {
@@ -72,6 +77,7 @@ const loadOrder = async (orderId: string): Promise<LoadedOrder | null> => {
       email: true,
       customer: { select: { name: true, deletedAt: true } },
       supportThread: { select: { id: true } },
+      items: { select: { quantity: true, madeToOrderQuantity: true } },
     },
   })
   if (!row) return null
@@ -81,6 +87,7 @@ const loadOrder = async (orderId: string): Promise<LoadedOrder | null> => {
     customerName: row.customer.name,
     customerEmail: row.customer.deletedAt ? null : row.email,
     threadId: row.supportThread?.id ?? null,
+    reservedStock: row.items.some((item) => item.quantity > item.madeToOrderQuantity),
   }
 }
 
@@ -133,14 +140,20 @@ export const notifyOrderCanceled = (
     if (types) {
       await toStaff(
         types,
-        staffCanceledNotice({ order, reason: p.reason, refund: p.refund, orderUrl: adminOrderUrl(orderId) }),
+        staffCanceledNotice({
+          order,
+          reason: p.reason,
+          refund: p.refund,
+          orderUrl: adminOrderUrl(orderId),
+          reservedStock: order.reservedStock,
+        }),
       )
     }
   })
 
 export const notifyCancelRequested = (
   orderId: string,
-  p: { reason: string; refundAmount: number },
+  p: { reason: string; refundAmount: number; inProduction: boolean },
 ): Promise<void> =>
   safely('pedido de cancelamento', { orderId }, async () => {
     const order = await loadOrder(orderId)
@@ -148,7 +161,12 @@ export const notifyCancelRequested = (
 
     await toCustomer(
       order,
-      customerCancelRequestNotice({ order, refundAmount: p.refundAmount, orderUrl: orderPageUrl(orderId) }),
+      customerCancelRequestNotice({
+        order,
+        refundAmount: p.refundAmount,
+        orderUrl: orderPageUrl(orderId),
+        inProduction: p.inProduction,
+      }),
     )
     await toStaff(
       ['CANCELLATION_REQUESTED'],
@@ -156,6 +174,7 @@ export const notifyCancelRequested = (
         order,
         reason: p.reason,
         threadUrl: order.threadId ? adminThreadUrl(order.threadId) : adminOrderUrl(orderId),
+        inProduction: p.inProduction,
       }),
     )
   })
@@ -227,12 +246,20 @@ const loadOrderSummary = async (orderId: string): Promise<OrderSummary | null> =
       couponCodeSnapshot: true,
       shippingAddressJson: true,
       shippingMethodJson: true,
+      productionDays: true,
       customer: { select: { name: true } },
-      items: { orderBy: { id: 'asc' }, select: { productName: true, variantName: true, quantity: true } },
-      payments: { orderBy: { createdAt: 'desc' }, take: 1, select: { method: true } },
+      items: {
+        orderBy: { id: 'asc' },
+        select: { productName: true, variantName: true, quantity: true, madeToOrderQuantity: true },
+      },
+      payments: { orderBy: { createdAt: 'desc' }, take: 1, select: { method: true, paidAt: true } },
     },
   })
   if (!row) return null
+  const productionDueAt = estimateProductionDue({
+    paidAt: row.payments[0]?.paidAt ?? null,
+    productionDays: row.productionDays,
+  })
   return {
     number: row.number,
     customerName: row.customer.name,
@@ -243,9 +270,12 @@ const loadOrderSummary = async (orderId: string): Promise<OrderSummary | null> =
       label:
         item.variantName && item.variantName !== '—' ? `${item.productName} (${item.variantName})` : item.productName,
       quantity: item.quantity,
+      madeToOrderQuantity: item.madeToOrderQuantity,
     })),
     shipping: shippingLine(row.shippingMethodJson, row.shippingAddressJson),
     couponCode: row.couponCodeSnapshot,
+    productionDays: row.productionDays,
+    productionDueAt: productionDueAt ? new Date(productionDueAt) : null,
   }
 }
 
@@ -255,6 +285,16 @@ export const notifyOrderPaid = (orderId: string): Promise<void> =>
     const order = await loadOrderSummary(orderId)
     if (!order) return
     await toStaff(['ORDER_PAID'], staffOrderPaidNotice({ order, orderUrl: adminOrderUrl(orderId) }))
+  })
+
+/**
+ * O resumo diário das encomendas com prazo vencendo ou vencido. Quem decide a
+ * lista e a hora é o job; aqui só o texto e os destinos.
+ */
+export const notifyProductionDue = (p: { overdue: ProductionDueOrder[]; dueSoon: ProductionDueOrder[] }): Promise<void> =>
+  safely('prazo de produção', { overdue: p.overdue.length, dueSoon: p.dueSoon.length }, async () => {
+    if (p.overdue.length === 0 && p.dueSoon.length === 0) return
+    await toStaff(['PRODUCTION_DUE'], staffProductionDueNotice({ ...p, ordersUrl: adminProductionUrl() }))
   })
 
 /** Pedido criado, ainda sem pagamento. Nasce desligado na tela de Alertas. */
@@ -290,7 +330,7 @@ export const notifyStockChanges = (changes: StockChange[]): Promise<void> =>
       select: {
         id: true,
         sku: true,
-        product: { select: { name: true } },
+        product: { select: { name: true, stockPolicy: true } },
         optionValues: { select: { optionValue: { select: { value: true } } } },
       },
     })
@@ -298,7 +338,8 @@ export const notifyStockChanges = (changes: StockChange[]): Promise<void> =>
 
     const items: LowStockItem[] = crossed.flatMap((c) => {
       const variant = byId.get(c.variantId)
-      if (!variant) return []
+      // Sob encomenda o estoque não limita a venda: "acabou" não pede ação.
+      if (!variant || variant.product.stockPolicy === 'MADE_TO_ORDER') return []
       const label = variant.optionValues.map((o) => o.optionValue.value).join(' / ')
       return [
         {
@@ -307,6 +348,7 @@ export const notifyStockChanges = (changes: StockChange[]): Promise<void> =>
           sku: variant.sku,
           onHand: c.onHand,
           reserved: c.reserved,
+          madeToOrderFallback: variant.product.stockPolicy === 'STOCK_THEN_MADE_TO_ORDER',
         },
       ]
     })
@@ -324,7 +366,8 @@ export const notifyStockChanges = (changes: StockChange[]): Promise<void> =>
 const IMPLICIT_OPTION_VALUE = 'Default Title'
 
 /**
- * As variações voltaram a ter estoque: um e-mail para cada pedido de aviso, e a
+ * As variações voltaram a ter estoque — ou o produto passou a ser feito sob
+ * encomenda (`madeToOrder`): um e-mail para cada pedido de aviso, e a
  * inscrição some (uso único).
  *
  * Cada linha é REIVINDICADA apagando-a (`deleteMany` pelo id): só envia quem
@@ -333,7 +376,7 @@ const IMPLICIT_OPTION_VALUE = 'Default Title'
  * apagar, o aviso se perde; é preferível a avisar em dobro, e a pessoa pode
  * pedir de novo.
  */
-export const notifyBackInStock = (variantIds: string[]): Promise<void> =>
+export const notifyBackInStock = (variantIds: string[], opts: { madeToOrder?: boolean } = {}): Promise<void> =>
   safely('reposição', { variants: variantIds }, async () => {
     if (variantIds.length === 0) return
 
@@ -347,7 +390,9 @@ export const notifyBackInStock = (variantIds: string[]): Promise<void> =>
           select: {
             isActive: true,
             optionValues: { select: { optionValue: { select: { value: true } } } },
-            product: { select: { name: true, slug: true, status: true, deletedAt: true } },
+            product: {
+              select: { name: true, slug: true, status: true, deletedAt: true, productionDays: true },
+            },
           },
         },
       },
@@ -371,6 +416,7 @@ export const notifyBackInStock = (variantIds: string[]): Promise<void> =>
           productName: variant.product.name,
           variantLabel: label || null,
           productUrl: storeUrl(`/produtos/${variant.product.slug}`),
+          productionDays: opts.madeToOrder ? variant.product.productionDays : null,
         }),
       )
     }

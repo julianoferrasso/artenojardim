@@ -1,4 +1,5 @@
 import {
+  CART_MAX_LINE_QUANTITY,
   ERROR_CODES,
   pickVariantImage,
   type AddToCartInput,
@@ -11,7 +12,7 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { storage } from '../../integrations/storage/index.js'
 import { generateOpaqueToken } from '../../utils/crypto.js'
-import { availableOf } from '../inventory/domain/availability.js'
+import { availableOf, splitLine } from '../inventory/domain/availability.js'
 import { cartItemIssue } from './domain/item-issue.js'
 
 /**
@@ -84,6 +85,8 @@ const ITEM_SELECT = {
           slug: true,
           status: true,
           deletedAt: true,
+          stockPolicy: true,
+          productionDays: true,
           images: {
             orderBy: { position: 'asc' },
             select: { variantId: true, position: true, upload: { select: { key: true } } },
@@ -101,12 +104,18 @@ type ItemRow = Prisma.CartItemGetPayload<{ select: typeof ITEM_SELECT }>
 const toCartItem = (row: ItemRow): CartItem => {
   const v = row.variant
   const available = availableOf(v.level)
-  // Comprável = variante ativa, produto publicado e não apagado, e há estoque.
+  const policy = v.product.stockPolicy
+  // Comprável = variante ativa, produto publicado e não apagado, e há estoque —
+  // ou ele é produzido sob encomenda.
   const unavailableReason = cartItemIssue({
     active: v.isActive && v.product.status === 'ACTIVE' && !v.product.deletedAt,
+    policy,
     available,
     quantity: row.quantity,
   })
+  // O que aconteceria se o pedido fechasse agora. O confirm decide de novo, sob
+  // o lock da linha de estoque — isto é a previsão que o cliente vê.
+  const madeToOrderQuantity = splitLine({ policy, available, quantity: row.quantity })?.madeToOrder ?? 0
 
   // Mesma ordem de resolução que a galeria da loja usa — foto da variação
   // primeiro, foto do produto depois. Sem `take: 1` no select porque essa
@@ -127,6 +136,10 @@ const toCartItem = (row: ItemRow): CartItem => {
     available,
     purchasable: unavailableReason === null,
     unavailableReason,
+    stockPolicy: policy,
+    madeToOrderQuantity,
+    productionDays: madeToOrderQuantity > 0 ? v.product.productionDays : null,
+    maxQuantity: policy === 'STOCK_ONLY' ? Math.min(available, CART_MAX_LINE_QUANTITY) : CART_MAX_LINE_QUANTITY,
   }
 }
 
@@ -152,7 +165,8 @@ const touch = (cartId: string): Promise<unknown> =>
 
 type PurchasableCheck =
   | { ok: true; available: number }
-  | { ok: false; reason: 'MISSING' | 'UNAVAILABLE' | 'OUT_OF_STOCK'; available: number }
+  /** `available` = até quanto dá: o estoque (OUT_OF_STOCK) ou o teto da linha (LIMIT). */
+  | { ok: false; reason: 'MISSING' | 'UNAVAILABLE' | 'OUT_OF_STOCK' | 'LIMIT'; available: number }
 
 /**
  * Responde se dá para comprar, sem decidir o que fazer a respeito.
@@ -170,7 +184,7 @@ const checkPurchasable = async (
     where: { id: variantId, storeId: getActiveStoreId() },
     select: {
       isActive: true,
-      product: { select: { status: true, deletedAt: true } },
+      product: { select: { status: true, deletedAt: true, stockPolicy: true } },
       level: { select: { onHand: true, reserved: true } },
     },
   })
@@ -180,7 +194,12 @@ const checkPurchasable = async (
   if (!active) return { ok: false, reason: 'UNAVAILABLE', available: 0 }
 
   const available = availableOf(variant.level)
-  if (available < quantity) return { ok: false, reason: 'OUT_OF_STOCK', available }
+  // Pronta entrega pura esbarra no estoque; o resto é produzido.
+  if (variant.product.stockPolicy === 'STOCK_ONLY' && available < quantity) {
+    return { ok: false, reason: 'OUT_OF_STOCK', available }
+  }
+  // Sem estoque para segurar, é o teto da linha que segura (99 + 99 passava).
+  if (quantity > CART_MAX_LINE_QUANTITY) return { ok: false, reason: 'LIMIT', available: CART_MAX_LINE_QUANTITY }
 
   return { ok: true, available }
 }
@@ -193,6 +212,13 @@ const assertPurchasable = async (variantId: string, quantity: number): Promise<v
   if (check.reason === 'MISSING') throw notFound('Produto')
   if (check.reason === 'UNAVAILABLE') {
     throw businessError(ERROR_CODES.NOT_FOUND, 'Produto indisponível', 422)
+  }
+  if (check.reason === 'LIMIT') {
+    throw businessError(
+      ERROR_CODES.VALIDATION_ERROR,
+      `O limite é de ${CART_MAX_LINE_QUANTITY} unidades por item.`,
+      422,
+    )
   }
   throw businessError(
     ERROR_CODES.INSUFFICIENT_STOCK,
@@ -262,7 +288,8 @@ export const addItems = async (cartId: string, inputs: BulkAddInput[]): Promise<
       continue
     }
 
-    // Clampa no que existe: o disponível já desconta o que está no carrinho.
+    // Clampa no que existe (ou no teto da linha): o disponível já desconta o que
+    // está no carrinho.
     const room = check.ok ? input.quantity : Math.max(0, check.available - alreadyInCart)
 
     if (room === 0) {
@@ -362,7 +389,7 @@ export const mergeCarts = async (sessionToken: string, customerId: string): Prom
       await tx.cartItem.upsert({
         where: { cartId_variantId: { cartId: targetId, variantId: item.variantId } },
         create: { cartId: targetId, variantId: item.variantId, quantity: item.quantity },
-        update: { quantity: Math.min(99, (existing?.quantity ?? 0) + item.quantity) },
+        update: { quantity: Math.min(CART_MAX_LINE_QUANTITY, (existing?.quantity ?? 0) + item.quantity) },
       })
     }
     await tx.cart.delete({ where: { id: anon.id } })

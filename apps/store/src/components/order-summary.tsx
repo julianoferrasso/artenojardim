@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { OrderItem, OrderAddress, OrderShippingMethod } from '@ecommerce/shared/contracts'
+import { businessDaysLabel } from '@ecommerce/shared/constants'
 import { ProductImage } from '@/components/product-image'
 import { formatBRL } from '@/lib/utils'
 
@@ -53,6 +54,12 @@ export const OrderItemList = ({
             <p className="mt-0.5 text-xs text-muted-foreground">
               {i.quantity} × {formatBRL(i.unitPrice)}
             </p>
+            {i.madeToOrderQuantity > 0 && (
+              <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="size-1.5 shrink-0 rounded-full bg-tertiary" aria-hidden />
+                {i.madeToOrderQuantity >= i.quantity ? 'Sob encomenda' : `${i.madeToOrderQuantity} sob encomenda`}
+              </p>
+            )}
             {action?.(i)}
           </div>
 
@@ -66,10 +73,13 @@ export const OrderItemList = ({
 export const OrderDeliveryCard = ({
   address,
   method,
+  productionDays = 0,
   children,
 }: {
   address: OrderAddress
   method: OrderShippingMethod
+  /** Dias úteis de produção da encomenda; 0 = tudo pronta entrega. */
+  productionDays?: number
   children?: React.ReactNode
 }) => (
   <section className="rounded-xl border border-border bg-card p-5 shadow-soft text-sm">
@@ -84,9 +94,13 @@ export const OrderDeliveryCard = ({
       CEP {address.zipCode}
     </address>
     <p className="mt-3 border-t border-border pt-3 text-muted-foreground">
-      {method.carrier} · {method.service} · {method.deliveryDays}{' '}
-      {method.deliveryDays === 1 ? 'dia útil' : 'dias úteis'}
+      {method.carrier} · {method.service} · até {businessDaysLabel(method.deliveryDays)}
     </p>
+    {productionDays > 0 && (
+      <p className="mt-1 text-muted-foreground">
+        Produção: até {businessDaysLabel(productionDays)} após a confirmação do pagamento
+      </p>
+    )}
     {children}
   </section>
 )
