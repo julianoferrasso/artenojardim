@@ -208,7 +208,7 @@ export const publicThemeSchema = storeThemeSchema.omit({ logoId: true, faviconId
 
 export type PublicTheme = z.infer<typeof publicThemeSchema>
 
-const hexColorSchema = z
+export const hexColorSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/, 'Use uma cor no formato #rrggbb')
 

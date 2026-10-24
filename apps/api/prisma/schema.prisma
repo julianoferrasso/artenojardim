@@ -800,6 +800,10 @@ model Banner {
   /// Caminho relativo ("/categorias/velas") ou URL. Sem ele o slide não tem CTA.
   linkUrl     String?
   imageId     String?
+  /// Faixas de cor da borda da foto ({ source, left[], bottom[] } em hex), que
+  /// o admin amostra no upload e a loja prolonga atrás do texto. Formato em
+  /// contracts/banners.ts. Null = sem foto, ou foto sem cor (PNG transparente).
+  backdrop    Json?
 
   /// Ordem no carrossel. O front ordena por isto, não por data.
   position Int     @default(0)

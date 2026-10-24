@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { hexColorSchema } from './store.js'
 
 /**
  * Formato HTTP dos banners do carrossel da home. O admin valida os formulários
@@ -7,6 +8,23 @@ import { z } from 'zod'
  * Mínimo de propósito: sem agendamento e sem segmentação até um pedido real do
  * lojista (gatilhos de revisão em docs/arquitetura.md).
  */
+
+/**
+ * O fundo que prolonga a borda da foto para trás do texto. O admin amostra a
+ * foto no navegador; a loja só pinta — não baixa a foto para medir.
+ *
+ * `left` são faixas da borda esquerda, de cima para baixo (desktop: a foto fica
+ * à direita e o texto à esquerda). `bottom` são faixas da borda de baixo, da
+ * esquerda para a direita (celular: a foto fica em cima e o texto embaixo).
+ * `custom` é a cor escolhida à mão, gravada como uma faixa só nos dois lados.
+ */
+export const bannerBackdropSchema = z.object({
+  source: z.enum(['image', 'custom']),
+  left: z.array(hexColorSchema).min(1).max(8),
+  bottom: z.array(hexColorSchema).min(1).max(8),
+})
+
+export type BannerBackdrop = z.infer<typeof bannerBackdropSchema>
 
 export const createBannerSchema = z.object({
   title: z.string().min(1, 'Informe o título').max(140).trim(),
@@ -19,6 +37,8 @@ export const createBannerSchema = z.object({
    */
   linkUrl: z.string().max(500).trim().optional(),
   imageId: z.string().nullable().optional(),
+  // Sem .default(): o partial() do update o reaplicaria e apagaria o fundo salvo.
+  backdrop: bannerBackdropSchema.nullable().optional(),
   position: z.number().int().nonnegative().optional(),
   isActive: z.boolean().optional(),
 })
@@ -40,6 +60,10 @@ export const bannerSchema = z.object({
   imageId: z.string().nullable(),
   /** Derivada da key do Upload a cada leitura, nunca persistida. */
   imageUrl: z.string().nullable(),
+  /** Do Upload; null quando o navegador não conseguiu medir no envio. */
+  imageWidth: z.number().int().nullable(),
+  imageHeight: z.number().int().nullable(),
+  backdrop: bannerBackdropSchema.nullable(),
   position: z.number().int(),
   isActive: z.boolean(),
   createdAt: z.string(),
@@ -59,6 +83,9 @@ export const publicBannerSchema = bannerSchema.pick({
   buttonLabel: true,
   linkUrl: true,
   imageUrl: true,
+  imageWidth: true,
+  imageHeight: true,
+  backdrop: true,
 })
 
 export type PublicBanner = z.infer<typeof publicBannerSchema>

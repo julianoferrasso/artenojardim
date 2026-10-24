@@ -25,6 +25,8 @@ type Props = {
   autoAdvanceMs?: number
   className?: string
   trackClassName?: string
+  /** Ex.: o hero põe os dots por cima do slide em vez de numa faixa abaixo. */
+  dotsClassName?: string
 }
 
 export const SnapCarousel = ({
@@ -35,6 +37,7 @@ export const SnapCarousel = ({
   autoAdvanceMs,
   className,
   trackClassName,
+  dotsClassName,
 }: Props) => {
   const count = Children.count(children)
   const trackRef = useRef<HTMLDivElement>(null)
@@ -135,7 +138,7 @@ export const SnapCarousel = ({
       )}
 
       {showDots && count > 1 && (
-        <div className="mt-4 flex justify-center gap-2">
+        <div className={cn('mt-4 flex justify-center gap-2', dotsClassName)}>
           {Array.from({ length: count }, (_, i) => (
             <button
               key={i}

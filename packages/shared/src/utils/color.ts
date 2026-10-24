@@ -52,10 +52,22 @@ export const hexToOklch = (hex: string): Oklch => {
   const clean = hex.replace('#', '').trim()
   if (!/^[0-9a-fA-F]{6}$/.test(clean)) return { l: 0, c: 0, h: 0 }
 
-  const r = toLinear(parseInt(clean.slice(0, 2), 16) / 255)
-  const g = toLinear(parseInt(clean.slice(2, 4), 16) / 255)
-  const b = toLinear(parseInt(clean.slice(4, 6), 16) / 255)
+  return linearRgbToOklch(
+    toLinear(parseInt(clean.slice(0, 2), 16) / 255),
+    toLinear(parseInt(clean.slice(2, 4), 16) / 255),
+    toLinear(parseInt(clean.slice(4, 6), 16) / 255),
+  )
+}
 
+/** sRGB 0–255 → RGB linear 0–1. Exposta para quem faz média de pixels. */
+export const srgbByteToLinear = (byte: number): number => toLinear(byte / 255)
+
+/**
+ * RGB LINEAR (0–1) → OKLCH. Separada de `hexToOklch` para quem já tem o canal
+ * linear em mãos: a amostragem da foto do banner faz média de pixels no espaço
+ * linear e não pode passar por hex a cada pixel.
+ */
+export const linearRgbToOklch = (r: number, g: number, b: number): Oklch => {
   // RGB linear → LMS (resposta dos cones do olho), depois raiz cúbica.
   const lms1 = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
   const lms2 = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)

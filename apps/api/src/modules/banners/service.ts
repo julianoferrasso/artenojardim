@@ -1,6 +1,8 @@
 import {
   ERROR_CODES,
+  bannerBackdropSchema,
   type Banner,
+  type BannerBackdrop,
   type CreateBannerInput,
   type PublicBanner,
   type UpdateBannerInput,
@@ -25,14 +27,25 @@ const SELECT = {
   buttonLabel: true,
   linkUrl: true,
   imageId: true,
+  backdrop: true,
   position: true,
   isActive: true,
   createdAt: true,
   updatedAt: true,
-  image: { select: { key: true } },
+  image: { select: { key: true, width: true, height: true } },
 } satisfies Prisma.BannerSelect
 
 type Row = Prisma.BannerGetPayload<{ select: typeof SELECT }>
+
+/**
+ * O Json do banco passa pelo MESMO schema da escrita na volta: uma linha
+ * editada à mão no banco com formato errado vira "sem fundo" (a loja cai na cor
+ * do tema), em vez de um degradê quebrado na home.
+ */
+const parseBackdrop = (value: Prisma.JsonValue): BannerBackdrop | null => {
+  const parsed = bannerBackdropSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
+}
 
 const toDTO = (row: Row): Banner => ({
   id: row.id,
@@ -44,6 +57,9 @@ const toDTO = (row: Row): Banner => ({
   // URL derivada da key a cada leitura, nunca persistida — trocar de provedor
   // de storage não pode exigir um UPDATE.
   imageUrl: row.image ? storage().getPublicUrl(row.image.key) : null,
+  imageWidth: row.image?.width ?? null,
+  imageHeight: row.image?.height ?? null,
+  backdrop: row.image ? parseBackdrop(row.backdrop) : null,
   position: row.position,
   isActive: row.isActive,
   createdAt: row.createdAt.toISOString(),
@@ -52,8 +68,9 @@ const toDTO = (row: Row): Banner => ({
 
 /** A projeção pública: sem imageId/isActive/position — só o que o slide pinta. */
 const toPublicDTO = (row: Row): PublicBanner => {
-  const { id, title, subtitle, buttonLabel, linkUrl, imageUrl } = toDTO(row)
-  return { id, title, subtitle, buttonLabel, linkUrl, imageUrl }
+  const { id, title, subtitle, buttonLabel, linkUrl, imageUrl, imageWidth, imageHeight, backdrop } =
+    toDTO(row)
+  return { id, title, subtitle, buttonLabel, linkUrl, imageUrl, imageWidth, imageHeight, backdrop }
 }
 
 export const listPublicBanners = async (): Promise<PublicBanner[]> => {
@@ -92,6 +109,9 @@ export const createBanner = async (
 ): Promise<Banner> => {
   if (input.imageId) await assertImageOwned(input.imageId)
 
+  // `||` e não `??`: string vazia também precisa virar null (FK inexistente).
+  const imageId = input.imageId || null
+
   const row = await prisma.banner.create({
     data: {
       storeId: getActiveStoreId(),
@@ -99,8 +119,9 @@ export const createBanner = async (
       subtitle: input.subtitle ?? null,
       buttonLabel: input.buttonLabel ?? null,
       linkUrl: input.linkUrl ?? null,
-      // `||` e não `??`: string vazia também precisa virar null (FK inexistente).
-      imageId: input.imageId || null,
+      imageId,
+      // Fundo é a borda DA FOTO: sem foto, não há o que prolongar.
+      backdrop: imageId && input.backdrop ? input.backdrop : Prisma.DbNull,
       position: input.position ?? 0,
       isActive: input.isActive ?? true,
     },
@@ -139,6 +160,9 @@ export const updateBanner = async (
   if (input.imageId !== undefined) data.image = input.imageId
     ? { connect: { id: input.imageId } }
     : { disconnect: true }
+  if (input.backdrop !== undefined) data.backdrop = input.backdrop ?? Prisma.DbNull
+  // Tirar a foto leva o fundo junto, mesmo que o cliente não mande o backdrop.
+  if (input.imageId !== undefined && !input.imageId) data.backdrop = Prisma.DbNull
   if (input.position !== undefined) data.position = input.position
   if (input.isActive !== undefined) data.isActive = input.isActive
 
@@ -151,6 +175,7 @@ export const updateBanner = async (
       buttonLabel: current.buttonLabel,
       linkUrl: current.linkUrl,
       imageId: current.imageId,
+      backdrop: current.backdrop,
       position: current.position,
       isActive: current.isActive,
     },
@@ -160,6 +185,7 @@ export const updateBanner = async (
       buttonLabel: row.buttonLabel,
       linkUrl: row.linkUrl,
       imageId: row.imageId,
+      backdrop: row.backdrop,
       position: row.position,
       isActive: row.isActive,
     },
