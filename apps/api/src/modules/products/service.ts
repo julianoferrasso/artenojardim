@@ -17,6 +17,7 @@ import { appError, notFound, businessError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { slugify, uniqueSlug } from '../../utils/slug.js'
+import { sanitizeRichText } from '../../utils/rich-text.js'
 import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
 import { recordInitialStock } from '../inventory/service.js'
 import { deriveOptions, validateVariants, optionKey } from './domain/variants.js'
@@ -167,7 +168,7 @@ export const createProduct = async (
         storeId,
         name: input.name,
         slug,
-        description: input.description ?? null,
+        description: sanitizeRichText(input.description ?? ''),
         shortDescription: input.shortDescription ?? null,
         status: input.status,
         brand: input.brand ?? null,
@@ -398,7 +399,7 @@ export const updateProduct = async (
   const data: Prisma.ProductUpdateInput = {}
   if (input.name !== undefined) data.name = input.name
   if (nextSlug !== undefined) data.slug = nextSlug
-  if (input.description !== undefined) data.description = input.description
+  if (input.description !== undefined) data.description = sanitizeRichText(input.description)
   if (input.shortDescription !== undefined) data.shortDescription = input.shortDescription
   if (input.brand !== undefined) data.brand = input.brand
   if (input.tags !== undefined) data.tags = input.tags

@@ -195,6 +195,43 @@
   }
 }
 
+/*
+  Descrição do produto em HTML (editor do admin, saneado pela API). O preflight
+  zera margem e marcador de lista; aqui volta só o que as tags permitidas
+  (apps/api/src/utils/rich-text.ts) precisam. Cópia idêntica em
+  apps/admin/src/app/globals.css: o editor mostra o que a loja vai mostrar.
+*/
+@layer components {
+  .rich-text > * + * {
+    @apply mt-3;
+  }
+
+  /* Linha em branco do editor: <p></p> teria altura zero. */
+  .rich-text p:empty::before {
+    content: '\00a0';
+  }
+
+  .rich-text h2 {
+    @apply text-base font-semibold;
+  }
+
+  .rich-text strong {
+    @apply font-semibold;
+  }
+
+  .rich-text ul {
+    @apply list-disc pl-5;
+  }
+
+  .rich-text ol {
+    @apply list-decimal pl-5;
+  }
+
+  .rich-text li + li {
+    @apply mt-1;
+  }
+}
+
 @layer utilities {
   /*
    * Carrossel da galeria: o swipe é scroll nativo com scroll-snap, então a

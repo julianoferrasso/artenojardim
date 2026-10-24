@@ -7,6 +7,7 @@ import { useCreateProduct } from '@/lib/products'
 import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { VariantEditor } from '@/components/variant-editor'
 import { ImageUploader } from '@/components/image-uploader'
+import { RichTextEditor } from '@/components/rich-text-editor'
 import { useSendCampaign } from '@/lib/campaigns'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -99,13 +100,8 @@ export default function NewProductPage() {
             <input value={name} onChange={(e) => setName(e.target.value)} className={field} autoFocus />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium">Descrição</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
+            <span className="text-sm font-medium">Descrição</span>
+            <RichTextEditor value={description} onChange={setDescription} ariaLabel="Descrição" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium">Categorias</label>

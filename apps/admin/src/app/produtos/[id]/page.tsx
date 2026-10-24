@@ -18,6 +18,7 @@ import { useCategoryTree, flattenForSelect } from '@/lib/categories'
 import { ImageUploader } from '@/components/image-uploader'
 import { ProductCampaignDialog } from '@/components/product-campaign-dialog'
 import { MoneyInput } from '@/components/money-input'
+import { RichTextEditor } from '@/components/rich-text-editor'
 import { toStock, useRecordMovement, useVariantLevel } from '@/lib/inventory'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -281,7 +282,8 @@ function InfoEditor({ product }: { product: Product }) {
         input: {
           name,
           shortDescription: shortDescription || undefined,
-          description: description || undefined,
+          // Sempre enviada: vazia ('') é como o lojista apaga a descrição — a API grava null.
+          description,
           brand: brand || undefined,
           tags: parseTags(tags),
           categoryIds,
@@ -290,7 +292,12 @@ function InfoEditor({ product }: { product: Product }) {
         },
       },
       {
-        onSuccess: () => setSaved(true),
+        onSuccess: (p) => {
+          // A API saneia o HTML e pode devolver outra grafia (<br /> em vez de
+          // <br>). Sem adotar a dela, o dirty-check acusaria mudança logo após salvar.
+          setDescription(p.description ?? '')
+          setSaved(true)
+        },
         onError: (e) => setError(e instanceof ApiError ? e.message : 'Falha ao salvar.'),
       },
     )
@@ -306,14 +313,12 @@ function InfoEditor({ product }: { product: Product }) {
       <Field label="Descrição curta">
         <input value={shortDescription} onChange={(e) => setShort(e.target.value)} className={inputCls} />
       </Field>
-      <Field label="Descrição">
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </Field>
+      {/* Fora do <Field>, que é um <label>: lá dentro o clique no texto viraria
+          clique no botão Negrito da barra. */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">Descrição</span>
+        <RichTextEditor value={description} onChange={setDescription} ariaLabel="Descrição" />
+      </div>
 
       <Field label="Marca">
         <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inputCls} />

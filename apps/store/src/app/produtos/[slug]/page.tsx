@@ -123,10 +123,13 @@ export default async function ProductPage({ params }: { params: Promise<Params> 
       {product.shortDescription && (
         <p className="mt-8 text-sm text-muted-foreground">{product.shortDescription}</p>
       )}
+      {/* HTML saneado pela API na gravação (utils/rich-text.ts) — lá é a única
+          barreira; aqui não se saneia de novo. */}
       {product.description && (
-        <div className="prose prose-sm mt-2 max-w-none text-foreground">
-          <p className="whitespace-pre-wrap">{product.description}</p>
-        </div>
+        <div
+          className="rich-text mt-2 text-sm text-foreground"
+          dangerouslySetInnerHTML={{ __html: product.description }}
+        />
       )}
 
       <noscript>
