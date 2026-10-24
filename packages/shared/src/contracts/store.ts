@@ -164,6 +164,11 @@ export const storeThemeSchema = z.object({
    */
   badgeStyle: themeBadgeStyleSchema.default('filled'),
   logoId: z.string().nullable(),
+  /*
+   * Ícone da aba do navegador. `null` = o icon.png de fábrica da loja.
+   * `.default(null)` pelo mesmo motivo de `badgeStyle`: temas já gravados não têm a chave.
+   */
+  faviconId: z.string().nullable().default(null),
 })
 
 export type StoreTheme = z.infer<typeof storeThemeSchema>
@@ -192,11 +197,13 @@ export const DEFAULT_STORE_THEME: StoreTheme = {
   badgeStyle: 'filled',
   buttons: DEFAULT_STORE_BUTTONS,
   logoId: null,
+  faviconId: null,
 }
 
-/** O que a loja recebe: cores em OKLCH e a URL do logo já resolvida. */
-export const publicThemeSchema = storeThemeSchema.omit({ logoId: true }).extend({
+/** O que a loja recebe: cores em OKLCH e as URLs do logo e do favicon já resolvidas. */
+export const publicThemeSchema = storeThemeSchema.omit({ logoId: true, faviconId: true }).extend({
   logoUrl: z.string().nullable(),
+  faviconUrl: z.string().nullable(),
 })
 
 export type PublicTheme = z.infer<typeof publicThemeSchema>
@@ -234,6 +241,7 @@ export const updateStoreThemeSchema = z.object({
     secondary: updateButtonStyleSchema,
   }),
   logoId: z.string().nullable(),
+  faviconId: z.string().nullable(),
 })
 
 export type UpdateStoreThemeInput = z.infer<typeof updateStoreThemeSchema>
@@ -241,6 +249,7 @@ export type UpdateStoreThemeInput = z.infer<typeof updateStoreThemeSchema>
 /** O que o formulário do admin lê: as mesmas cores, de volta em hex. */
 export const adminThemeSchema = updateStoreThemeSchema.extend({
   logoUrl: z.string().nullable(),
+  faviconUrl: z.string().nullable(),
 })
 
 export type AdminTheme = z.infer<typeof adminThemeSchema>

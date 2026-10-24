@@ -33,6 +33,9 @@ export async function generateMetadata(): Promise<Metadata> {
       template: `%s | ${store?.name ?? 'Arte no Jardim'}`,
     },
     description: 'Velas e peças artesanais para deixar a sua casa mais acolhedora.',
+    // O padrão mora em public/ e não em app/icon.png: o ícone por convenção de
+    // arquivo o Next emite SEMPRE, ao lado deste — e a aba ficaria com dois.
+    icons: { icon: store?.theme?.faviconUrl ?? '/icon.png' },
     openGraph: {
       images: [store?.theme?.logoUrl ?? '/18521.jpg'],
     },

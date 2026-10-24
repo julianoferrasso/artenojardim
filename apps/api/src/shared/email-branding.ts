@@ -3,7 +3,7 @@ import { env } from '../config/env.js'
 import { logger } from '../config/logger.js'
 import { getSetting } from './settings.js'
 import { getActiveStoreId } from './store-context.js'
-import { resolveLogoUrl } from '../modules/store/service.js'
+import { resolveUploadUrl } from '../modules/store/service.js'
 import type { EmailBranding } from '../integrations/email/index.js'
 
 /**
@@ -36,7 +36,7 @@ export const getEmailBranding = async (): Promise<EmailBranding> => {
     const value: EmailBranding = {
       storeName: store.name,
       storeUrl,
-      logoUrl: await resolveLogoUrl(theme.logoId),
+      logoUrl: await resolveUploadUrl(theme.logoId),
     }
 
     cached = { value, at: Date.now() }

@@ -18,6 +18,7 @@ import {
   type ThemeBadgeStyle,
   type ThemeRadius,
   type UpdateStoreThemeInput,
+  type Upload,
 } from '@ecommerce/shared/contracts'
 import {
   contrastRatio,
@@ -319,11 +320,29 @@ const warnings = (values: UpdateStoreThemeInput): string[] => {
   return list
 }
 
+/**
+ * O navegador desenha o favicon num quadrado de 16–32 px: imagem retangular sai
+ * distorcida, e pequena demais fica borrada em tela de alta densidade. Avisa,
+ * nunca bloqueia — como as cores.
+ */
+const faviconWarning = ({ width, height }: Upload): string | null => {
+  if (!width || !height) return null
+  if (width !== height) {
+    return 'A imagem não é quadrada: na aba do navegador ela pode sair distorcida.'
+  }
+  if (width < 48) {
+    return 'A imagem é pequena e pode ficar borrada em telas de alta resolução. O ideal é 512 × 512 px.'
+  }
+  return null
+}
+
 export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
   const update = useUpdateStoreTheme()
   const [formError, setFormError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [logoUrl, setLogoUrl] = useState<string | null>(initial.logoUrl)
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(initial.faviconUrl)
+  const [faviconNotice, setFaviconNotice] = useState<string | null>(null)
 
   const {
     register,
@@ -344,6 +363,7 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
       badgeStyle: initial.badgeStyle,
       buttons: initial.buttons,
       logoId: initial.logoId,
+      faviconId: initial.faviconId,
     },
   })
 
@@ -523,6 +543,60 @@ export const StoreThemeForm = ({ initial }: { initial: AdminTheme }) => {
                 setValue('logoId', upload.id, { shouldDirty: true })
               }}
             />
+          )}
+        </section>
+
+        <section>
+          <h2 className="mb-1 text-sm font-medium">Favicon</h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            O ícone da loja na aba do navegador e nos favoritos. Use uma imagem quadrada — PNG de
+            512 × 512 px é o ideal. Sem favicon, a loja usa o ícone padrão.
+          </p>
+
+          <input type="hidden" {...register('faviconId')} />
+
+          {faviconUrl ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={faviconUrl}
+                alt="Favicon atual"
+                className="size-16 rounded-md border border-border object-contain"
+              />
+              {/* Na aba ele tem 16 px: é ali que o lojista precisa julgar se dá para reconhecer. */}
+              <div
+                aria-hidden
+                className="flex w-48 items-center gap-2 rounded-t-lg border border-b-0 border-border bg-card px-3 py-2"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={faviconUrl} alt="" className="size-4 shrink-0 object-contain" />
+                <span className="truncate text-xs">Sua loja</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFaviconUrl(null)
+                  setFaviconNotice(null)
+                  setValue('faviconId', null, { shouldDirty: true })
+                }}
+                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Remover
+              </button>
+            </div>
+          ) : (
+            <ImageUploader
+              folder="branding"
+              onUploaded={(upload) => {
+                setFaviconUrl(upload.url)
+                setFaviconNotice(faviconWarning(upload))
+                setValue('faviconId', upload.id, { shouldDirty: true })
+              }}
+            />
+          )}
+
+          {faviconNotice && (
+            <p className="mt-4 rounded-md bg-warning/15 px-3 py-2 text-sm">{faviconNotice}</p>
           )}
         </section>
 

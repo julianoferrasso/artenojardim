@@ -294,6 +294,7 @@ describe('storeThemeSchema — compatibilidade com tema já gravado', () => {
 
     expect(parsed.buttons).toEqual(DEFAULT_STORE_BUTTONS)
     expect(parsed.badgeStyle).toBe('filled')
+    expect(parsed.faviconId).toBeNull()
     // O que o lojista escolheu continua intacto.
     expect(parsed.primary).toEqual(GRAVADO.primary)
     expect(parsed.logoId).toBe(GRAVADO.logoId)

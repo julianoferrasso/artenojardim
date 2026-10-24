@@ -10,7 +10,7 @@ export default function AparenciaPage() {
     <div className="mx-auto max-w-5xl px-6 py-8">
       <h1 className="mb-1 text-xl font-semibold tracking-tight">Aparência</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        As cores e o logo da sua loja. Vale para a loja pública, não para este painel.
+        As cores, o logo e o favicon da sua loja. Vale para a loja pública, não para este painel.
       </p>
 
       {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}

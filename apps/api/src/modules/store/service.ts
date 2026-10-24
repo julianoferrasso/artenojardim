@@ -42,32 +42,53 @@ export const getPublicStore = async (): Promise<PublicStore> => {
 }
 
 /**
- * Resolve o `logoId` em URL. A URL é DERIVADA da key a cada leitura, nunca
- * persistida — trocar de provedor de storage não pode exigir um UPDATE.
+ * Resolve o `logoId`/`faviconId` em URL. A URL é DERIVADA da key a cada leitura,
+ * nunca persistida — trocar de provedor de storage não pode exigir um UPDATE.
  *
  * O filtro por storeId no lookup não é decorativo: sem ele, um id de upload de
  * outra loja viraria o logo desta. É a regra 3 aplicada onde importa.
  */
-const toPublicTheme = async ({ logoId, ...theme }: StoreTheme): Promise<PublicTheme> => ({
-  ...theme,
-  logoUrl: await resolveLogoUrl(logoId),
-})
+const toPublicTheme = async ({ logoId, faviconId, ...theme }: StoreTheme): Promise<PublicTheme> => {
+  const [logoUrl, faviconUrl] = await Promise.all([
+    resolveUploadUrl(logoId),
+    resolveUploadUrl(faviconId),
+  ])
+  return { ...theme, logoUrl, faviconUrl }
+}
 
-export const resolveLogoUrl = async (logoId: string | null): Promise<string | null> => {
-  if (!logoId) return null
+export const resolveUploadUrl = async (uploadId: string | null): Promise<string | null> => {
+  if (!uploadId) return null
 
   const upload = await prisma.upload.findFirst({
-    where: { id: logoId, storeId: getActiveStoreId() },
+    where: { id: uploadId, storeId: getActiveStoreId() },
     select: { key: true },
   })
 
-  // Logo apagado da biblioteca de mídia não derruba a loja: cai no fallback.
+  // Imagem apagada da biblioteca de mídia não derruba a loja: cai no fallback.
   return upload ? storage().getPublicUrl(upload.key) : null
+}
+
+/**
+ * Posse verificada no SERVICE, não na rota: `requireMinRole` diz quem é, não
+ * diz que este upload é desta loja. Sem isto, um id forjado vira o logo.
+ */
+const assertOwnUpload = async (uploadId: string | null): Promise<void> => {
+  if (!uploadId) return
+
+  const upload = await prisma.upload.findFirst({
+    where: { id: uploadId, storeId: getActiveStoreId() },
+    select: { id: true },
+  })
+  if (!upload) throw notFound('Upload')
 }
 
 /** O formulário do admin fala hex — o banco guarda OKLCH. Aqui é a volta. */
 export const getAdminTheme = async (): Promise<AdminTheme> => {
   const theme = await getSetting('theme')
+  const [logoUrl, faviconUrl] = await Promise.all([
+    resolveUploadUrl(theme.logoId),
+    resolveUploadUrl(theme.faviconId),
+  ])
 
   return {
     primary: oklchToHex(theme.primary),
@@ -82,7 +103,9 @@ export const getAdminTheme = async (): Promise<AdminTheme> => {
       secondary: toAdminButton(theme.buttons.secondary),
     },
     logoId: theme.logoId,
-    logoUrl: await resolveLogoUrl(theme.logoId),
+    logoUrl,
+    faviconId: theme.faviconId,
+    faviconUrl,
   }
 }
 
@@ -97,15 +120,7 @@ export const updateTheme = async (
   input: UpdateStoreThemeInput,
   context: AuditContext,
 ): Promise<AdminTheme> => {
-  // Posse verificada no SERVICE, não na rota: `requireMinRole` diz quem é, não
-  // diz que este upload é desta loja. Sem isto, um id forjado vira o logo.
-  if (input.logoId) {
-    const upload = await prisma.upload.findFirst({
-      where: { id: input.logoId, storeId: getActiveStoreId() },
-      select: { id: true },
-    })
-    if (!upload) throw notFound('Upload')
-  }
+  await Promise.all([assertOwnUpload(input.logoId), assertOwnUpload(input.faviconId)])
 
   const before = await getSetting('theme')
 
@@ -122,6 +137,7 @@ export const updateTheme = async (
       secondary: fromAdminButton(input.buttons.secondary),
     },
     logoId: input.logoId,
+    faviconId: input.faviconId,
   }
 
   await setSetting('theme', next)
@@ -168,4 +184,5 @@ const flatten = (theme: StoreTheme): Record<string, unknown> => ({
   // aninhados sempre pareceriam "mudou" na comparação por referência.
   buttons: JSON.stringify(theme.buttons),
   logoId: theme.logoId,
+  faviconId: theme.faviconId,
 })
