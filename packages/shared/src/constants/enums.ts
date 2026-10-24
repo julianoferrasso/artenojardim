@@ -115,6 +115,15 @@ export const INSTAGRAM_DISPLAY_MODES = ['IMAGE', 'EMBED'] as const
 export const instagramDisplayModeSchema = z.enum(INSTAGRAM_DISPLAY_MODES)
 export type InstagramDisplayMode = z.infer<typeof instagramDisplayModeSchema>
 
+/**
+ * Onde a foto do banner fica no slide (desktop). SIDE = presa à direita, com a
+ * altura do slide; COVER = cobre o slide inteiro, por trás do texto. No celular
+ * os dois empilham (foto em cima, texto embaixo).
+ */
+export const BANNER_LAYOUTS = ['SIDE', 'COVER'] as const
+export const bannerLayoutSchema = z.enum(BANNER_LAYOUTS)
+export type BannerLayout = z.infer<typeof bannerLayoutSchema>
+
 /** Situação de uma conversa do atendimento. OPEN = a vez é da loja responder. */
 export const SUPPORT_THREAD_STATUSES = ['OPEN', 'ANSWERED', 'CLOSED'] as const
 export const supportThreadStatusSchema = z.enum(SUPPORT_THREAD_STATUSES)

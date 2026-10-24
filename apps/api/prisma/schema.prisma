@@ -107,6 +107,12 @@ enum InstagramDisplayMode {
   EMBED
 }
 
+/// Onde a foto do banner fica no desktop: presa à direita ou cobrindo o slide.
+enum BannerLayout {
+  SIDE
+  COVER
+}
+
 /// Tipo do cupom. Espelha COUPON_TYPES em constants (guardado pelo drift).
 enum CouponType {
   PERCENTAGE
@@ -792,18 +798,23 @@ model Category {
 /// sem agendamento e sem segmentação até um pedido real do lojista. Hard
 /// delete: banner não é documento histórico.
 model Banner {
-  id          String  @id @default(cuid())
-  storeId     String
-  title       String
-  subtitle    String?
-  buttonLabel String?
+  id             String       @id @default(cuid())
+  storeId        String
+  title          String
+  subtitle       String?
+  buttonLabel    String?
   /// Caminho relativo ("/categorias/velas") ou URL. Sem ele o slide não tem CTA.
-  linkUrl     String?
-  imageId     String?
+  linkUrl        String?
+  imageId        String?
   /// Faixas de cor da borda da foto ({ source, left[], bottom[] } em hex), que
   /// o admin amostra no upload e a loja prolonga atrás do texto. Formato em
   /// contracts/banners.ts. Null = sem foto, ou foto sem cor (PNG transparente).
-  backdrop    Json?
+  backdrop       Json?
+  /// Default SIDE + desfoque ligado: o que os banners já existentes faziam na v1.
+  layout         BannerLayout @default(SIDE)
+  /// Desfoque atrás do texto: a foto se dissolve no fundo prolongado (SIDE) ou
+  /// fica desfocada com um véu atrás do título (COVER). Desligado = corte reto.
+  blurBehindText Boolean      @default(true)
 
   /// Ordem no carrossel. O front ordena por isto, não por data.
   position Int     @default(0)

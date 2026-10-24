@@ -1,3 +1,4 @@
+import type { BannerLayout } from '../constants/enums.js'
 import {
   contrastRatio,
   hexToOklch,
@@ -36,6 +37,8 @@ export type SampledBackdrop = {
   left: string[]
   /** Borda de baixo, da esquerda para a direita. */
   bottom: string[]
+  /** Metade esquerda da foto, de cima para baixo: onde o texto cai na foto de fundo. */
+  region: string[]
   /**
    * Borda com textura demais: o prolongamento vai parecer borrão. Por borda,
    * porque cada uma só aparece num tamanho de tela — a esquerda no computador,
@@ -57,6 +60,9 @@ const STRIP = 0.02
  * bandeja ou planta cortada pela borda de baixo, ~0.07.
  */
 const BUSY_DEVIATION = 0.05
+
+/** Largura da região do texto na foto de fundo: o texto ocupa ~a metade esquerda. */
+const REGION = 0.45
 
 /** Abaixo disto a faixa é transparente demais para ter cor (PNG recortado). */
 const MIN_ALPHA_WEIGHT = 0.5
@@ -128,9 +134,9 @@ const sampleStrip = (grid: PixelGrid, rect: Rect, axis: 'vertical' | 'horizontal
 }
 
 /**
- * As faixas da borda esquerda e da de baixo de uma foto. `null` quando uma das
- * bordas é toda transparente — aí não há cor para prolongar, e a loja cai no
- * fundo do tema.
+ * As faixas da borda esquerda, da de baixo e da metade esquerda de uma foto.
+ * `null` quando uma das bordas é toda transparente — aí não há cor para
+ * prolongar, e a loja cai no fundo do tema.
  */
 export const sampleBackdrop = (grid: PixelGrid): SampledBackdrop | null => {
   const { width, height } = grid
@@ -142,10 +148,13 @@ export const sampleBackdrop = (grid: PixelGrid): SampledBackdrop | null => {
   const left = sampleStrip(grid, { x0: 0, x1: columns, y0: 0, y1: height }, 'vertical')
   const bottom = sampleStrip(grid, { x0: 0, x1: width, y0: height - rows, y1: height }, 'horizontal')
   if (!left || !bottom) return null
+  // Contém a faixa da borda esquerda, então nunca é null quando `left` não é.
+  const region = sampleStrip(grid, { x0: 0, x1: Math.max(1, Math.round(width * REGION)), y0: 0, y1: height }, 'vertical')
 
   return {
     left: left.colors,
     bottom: bottom.colors,
+    region: region?.colors ?? left.colors,
     busy: { left: left.deviation > BUSY_DEVIATION, bottom: bottom.deviation > BUSY_DEVIATION },
   }
 }
@@ -185,6 +194,12 @@ export const backdropInk = (stops: string[]): Oklch => {
   return readableInk(darkRatio >= lightRatio ? dark : light, surfaces)
 }
 
+/** O pior contraste da tinta derivada sobre as faixas. */
+const worstContrast = (stops: string[]): number => {
+  const ink = backdropInk(stops)
+  return Math.min(...stops.map((s) => contrastRatio(ink, hexToOklch(s))))
+}
+
 /**
  * As faixas que ficam DEBAIXO do texto no desktop: o texto é centralizado na
  * vertical, então as pontas de cima e de baixo não o tocam. Com poucas faixas
@@ -192,13 +207,143 @@ export const backdropInk = (stops: string[]): Oklch => {
  */
 const textStops = (stops: string[]): string[] => (stops.length >= 4 ? stops.slice(1, -1) : stops)
 
-/**
- * As variáveis CSS do slide: fundo e tinta do celular (`--hero-*`) e do desktop
- * (`--hero-*-md`). Loja e prévia do admin usam esta mesma função.
- */
-export const deriveBannerVars = (backdrop: { left: string[]; bottom: string[] }): Record<string, string> => ({
-  '--hero-bg': backdropGradient(backdrop.bottom, 'to right'),
-  '--hero-ink': oklchToCss(backdropInk(backdrop.bottom)),
-  '--hero-bg-md': backdropGradient(backdrop.left, 'to bottom'),
-  '--hero-ink-md': oklchToCss(backdropInk(textStops(backdrop.left))),
+type Lab = { l: number; a: number; b: number }
+
+const toLab = ({ l, c, h }: Oklch): Lab => ({
+  l,
+  a: c * Math.cos((h * Math.PI) / 180),
+  b: c * Math.sin((h * Math.PI) / 180),
 })
+
+const fromLab = ({ l, a, b }: Lab): Oklch => ({
+  l,
+  c: Math.hypot(a, b),
+  h: ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360,
+})
+
+const mixLab = (from: Lab, to: Lab, amount: number): Lab => ({
+  l: from.l + (to.l - from.l) * amount,
+  a: from.a + (to.a - from.a) * amount,
+  b: from.b + (to.b - from.b) * amount,
+})
+
+const meanLab = (labs: Lab[]): Lab => ({
+  l: labs.reduce((sum, x) => sum + x.l, 0) / labs.length,
+  a: labs.reduce((sum, x) => sum + x.a, 0) / labs.length,
+  b: labs.reduce((sum, x) => sum + x.b, 0) / labs.length,
+})
+
+/**
+ * Quanto cada faixa vai em direção à média das faixas (0 = intacta, 1 = cor
+ * única). Mata o bandeado: um vaso vermelho na borda virava uma faixa
+ * vermelho-vivo entre marrons, atrás do título (print da cliente, 24/10/2026).
+ */
+const SOFT_TOWARD_MEAN = 0.5
+
+/** Multiplicador do croma: cores menos intensas que a borda real da foto. */
+const SOFT_CHROMA = 0.5
+
+/**
+ * Suaviza as faixas amostradas da foto: puxa cada uma para a média e tira
+ * intensidade. Aplicada na hora de PINTAR, não na amostragem — o banco guarda a
+ * borda fiel, e recalibrar aqui não exige reamostrar nem migrar nada.
+ */
+export const softenStops = (stops: string[]): string[] => {
+  const labs = stops.map((hex) => toLab(hexToOklch(hex)))
+  const mean = meanLab(labs)
+  return labs.map((lab) => {
+    const toward = fromLab(mixLab(lab, mean, SOFT_TOWARD_MEAN))
+    return oklchToHex({ ...toward, c: toward.c * SOFT_CHROMA })
+  })
+}
+
+/**
+ * Opacidade do véu atrás do texto na foto de fundo com desfoque. Vai DENTRO da
+ * cor (`--hero-tint`), não numa classe de opacidade: a tinta do texto é medida
+ * com este mesmo número, e dois lugares para ele sairiam de sincronia.
+ */
+const TINT_OPACITY = 0.45
+
+/** O que decide o visual do slide com foto. */
+export type BannerLook = {
+  layout: BannerLayout
+  blur: boolean
+  backdrop: { source: 'image' | 'custom'; left: string[]; bottom: string[]; region?: string[] } | null
+}
+
+type Resolved = {
+  vars: Record<string, string>
+  /** Faixas debaixo do texto; null = o texto está na cor secundária do tema. */
+  surfaces: { mobile: string[] | null; desktop: string[] | null }
+}
+
+const resolveLook = ({ layout, blur, backdrop }: BannerLook): Resolved => {
+  // Sem cor amostrada (leitura falhou, PNG transparente): nada a derivar, o
+  // slide usa a secundária do tema.
+  if (!backdrop) return { vars: {}, surfaces: { mobile: null, desktop: null } }
+
+  // Cor própria nunca é suavizada: o lojista escolheu aquela cor exata.
+  const soft = (stops: string[]): string[] => (backdrop.source === 'image' ? softenStops(stops) : stops)
+  const vars: Record<string, string> = {}
+  const surfaces: Resolved['surfaces'] = { mobile: null, desktop: null }
+
+  if (blur) {
+    const bottom = soft(backdrop.bottom)
+    vars['--hero-bg'] = backdropGradient(bottom, 'to right')
+    vars['--hero-ink'] = oklchToCss(backdropInk(bottom))
+    surfaces.mobile = bottom
+  }
+
+  if (layout === 'SIDE' && blur) {
+    const left = soft(backdrop.left)
+    vars['--hero-bg-md'] = backdropGradient(left, 'to bottom')
+    vars['--hero-ink-md'] = oklchToCss(backdropInk(textStops(left)))
+    surfaces.desktop = textStops(left)
+  }
+
+  if (layout === 'COVER') {
+    // `region` é sempre a FOTO (mesmo com cor própria): é o que fica debaixo do
+    // texto. Banner gravado antes dela cai na borda esquerda.
+    const region = backdrop.region ?? backdrop.left
+    let underText = textStops(region)
+    if (blur) {
+      // O véu é a média suavizada da região, ou a cor própria; o que o olho vê
+      // atrás do texto é a foto desfocada (≈ a média de cada faixa) com o véu
+      // por cima.
+      const tintLab =
+        backdrop.source === 'custom'
+          ? toLab(hexToOklch(backdrop.left[0] ?? '#ffffff'))
+          : meanLab(softenStops(region).map((hex) => toLab(hexToOklch(hex))))
+      const tint = fromLab(tintLab)
+      vars['--hero-tint'] = `oklch(${tint.l.toFixed(3)} ${tint.c.toFixed(3)} ${tint.h.toFixed(1)} / ${TINT_OPACITY})`
+      underText = underText.map((hex) => oklchToHex(fromLab(mixLab(toLab(hexToOklch(hex)), tintLab, TINT_OPACITY))))
+    }
+    vars['--hero-ink-md'] = oklchToCss(backdropInk(underText))
+    surfaces.desktop = underText
+  }
+
+  return { vars, surfaces }
+}
+
+/**
+ * As variáveis CSS do slide com foto, por modo:
+ * - `--hero-bg`/`--hero-ink`: celular com desfoque (borda de baixo prolongada);
+ * - `--hero-bg-md`/`--hero-ink-md`: desktop com a foto à direita e desfoque;
+ * - `--hero-tint`/`--hero-ink-md`: desktop com a foto de fundo (véu só com desfoque).
+ * Chave ausente = o slide usa a secundária do tema ali. Loja e prévia do admin
+ * usam esta mesma função.
+ */
+export const deriveBannerVars = (look: BannerLook): Record<string, string> => resolveLook(look).vars
+
+/**
+ * O pior contraste do texto em cada tamanho de tela, ou null onde o texto fica
+ * na secundária do tema (contraste garantido pelo tema). O admin avisa abaixo de
+ * MIN_CONTRAST — o caso típico é a foto de fundo sem desfoque.
+ */
+export const bannerTextContrast = (look: BannerLook): { mobile: number | null; desktop: number | null } => {
+  const { surfaces } = resolveLook(look)
+  return {
+    mobile: surfaces.mobile ? worstContrast(surfaces.mobile) : null,
+    desktop: surfaces.desktop ? worstContrast(surfaces.desktop) : null,
+  }
+}

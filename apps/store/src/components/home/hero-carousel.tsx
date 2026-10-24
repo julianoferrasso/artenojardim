@@ -27,6 +27,8 @@ const DEFAULT_SLIDE: PublicBanner = {
   imageWidth: null,
   imageHeight: null,
   backdrop: null,
+  layout: 'SIDE',
+  blurBehindText: true,
 }
 
 /** Altura mínima do slide no lg (`lg:min-h-120`): a base do `sizes` da foto. */
@@ -65,57 +67,96 @@ export const HeroCarousel = ({
 }
 
 /**
- * Slide com foto. A foto fica presa à direita com a altura toda do slide e a
- * largura da proporção dela; o resto é pintado com a cor da borda da foto
- * (amostrada no admin), e a borda da foto se dissolve nessa cor. Quadrada, o
- * texto cai sobre a cor prolongada; bem larga, a própria foto chega por trás do
- * texto — a geometria decide, sem limiar de proporção.
+ * Slide com foto. No desktop, o lojista escolhe a posição da foto:
+ * - SIDE: presa à direita com a altura do slide e a largura da proporção dela.
+ *   Com desfoque, o resto do slide é a cor da borda da foto (suavizada) e a
+ *   foto se dissolve nela, desfocando; sem desfoque, corte reto sobre a
+ *   secundária do tema.
+ * - COVER: a foto cobre o slide. Com desfoque, ela fica desfocada atrás do
+ *   texto com um véu na cor dela, sumindo para a direita; sem, fica nítida.
  *
- * No celular empilha: foto em cima, texto embaixo sobre a borda de BAIXO.
+ * No celular empilha em qualquer modo (uma foto larga cobrindo um slide em pé
+ * recortaria quase tudo): foto em cima, texto embaixo — sobre a borda de baixo
+ * prolongada, com desfoque, ou sobre a secundária, sem.
  */
 const PhotoSlide = ({ slide, imageUrl, first }: { slide: PublicBanner; imageUrl: string; first: boolean }) => {
   const ratio = slide.imageWidth && slide.imageHeight ? slide.imageWidth / slide.imageHeight : 4 / 3
-  // `?? null`: resposta antiga da API em cache não tem a chave — confiar no
-  // tipo aqui já derrubou o SSR da home uma vez (o `tertiary` do tema).
-  const backdrop = slide.backdrop ?? null
+  // `??`: resposta antiga da API em cache não tem as chaves — confiar no tipo
+  // aqui já derrubou o SSR da home uma vez (o `tertiary` do tema).
+  const layout = slide.layout ?? 'SIDE'
+  const blur = slide.blurBehindText ?? true
+  const cover = layout === 'COVER'
+  const vars = deriveBannerVars({ layout, blur, backdrop: slide.backdrop ?? null })
+  const has = (name: string) => name in vars
 
   const style = {
-    ...(backdrop ? deriveBannerVars(backdrop) : {}),
+    ...vars,
     '--photo-ratio': ratio,
     // No celular a foto ocupa a largura toda: quadrada viraria uma tela inteira
     // de foto, e uma 3:1 uma tira. Trava entre 4:3 e 16:9 e recorta o resto.
     '--photo-ratio-sm': Math.min(16 / 9, Math.max(4 / 3, ratio)),
   } as CSSProperties
 
+  const sizes = cover
+    ? '100vw'
+    : `(min-width: 768px) min(100vw, ${Math.ceil(DESKTOP_HEIGHT_PX * ratio)}px), 100vw`
+
   return (
     <div
       style={style}
       className={cn(
         'relative flex w-full flex-col overflow-hidden md:min-h-112 md:flex-row md:items-center lg:min-h-120',
-        backdrop
-          ? 'bg-(image:--hero-bg) text-(--hero-ink) md:bg-(image:--hero-bg-md) md:text-(--hero-ink-md)'
-          : 'bg-secondary text-secondary-foreground',
+        has('--hero-bg') ? 'bg-(image:--hero-bg) text-(--hero-ink)' : 'bg-secondary text-secondary-foreground',
+        // bg-none: sem fundo prolongado no desktop, o degradê do celular não vaza.
+        has('--hero-bg-md') ? 'md:bg-(image:--hero-bg-md)' : 'md:bg-secondary md:bg-none',
+        has('--hero-ink-md') ? 'md:text-(--hero-ink-md)' : 'md:text-secondary-foreground',
       )}
     >
       <div
         className={cn(
-          'relative w-full aspect-(--photo-ratio-sm) mask-b-from-75%',
-          // h-full explícito: só com inset-y, quando o max-w-full trava a largura
-          // de uma foto larga o aspect-ratio recalcula a ALTURA e a foto encolhe.
-          'md:absolute md:inset-y-0 md:right-0 md:h-full md:w-auto md:max-w-full md:aspect-(--photo-ratio)',
-          'md:mask-b-from-100% md:mask-l-from-80%',
+          'relative w-full overflow-hidden aspect-(--photo-ratio-sm)',
+          cover
+            ? 'md:absolute md:inset-0 md:aspect-auto md:h-full'
+            : // h-full explícito: só com inset-y, quando o max-w-full trava a largura
+              // de uma foto larga o aspect-ratio recalcula a ALTURA e a foto encolhe.
+              'md:absolute md:inset-y-0 md:right-0 md:h-full md:w-auto md:max-w-full md:aspect-(--photo-ratio)',
+          blur && 'max-md:mask-fade-b',
+          blur && !cover && 'md:mask-fade-l',
         )}
       >
         <Image
           src={imageUrl}
           alt=""
           fill
-          sizes={`(min-width: 768px) min(100vw, ${Math.ceil(DESKTOP_HEIGHT_PX * ratio)}px), 100vw`}
+          sizes={sizes}
           priority={first}
-          // Mais larga que a tela: recorta pela esquerda, onde fica o espaço do
-          // texto, e preserva o assunto da foto.
+          // Mais larga que o espaço: recorta pela esquerda, onde fica o texto,
+          // e preserva o assunto da foto.
           className="object-cover object-right"
         />
+
+        {blur && (
+          <>
+            {/* O desfoque é uma CÓPIA da foto (mesma URL, baixada uma vez), não
+                backdrop-filter: a máscara do contêiner isola o fundo, e o filtro
+                não enxergaria a foto. scale-110 esconde a franja clara que o
+                blur cria nas bordas. */}
+            <Image
+              src={imageUrl}
+              alt=""
+              fill
+              sizes={sizes}
+              aria-hidden
+              className={cn(
+                'scale-110 object-cover object-right max-md:mask-blur-b',
+                cover ? 'blur-2xl md:mask-veil-l' : 'blur-xl md:mask-blur-l',
+              )}
+            />
+            {cover && has('--hero-tint') && (
+              <div aria-hidden className="absolute inset-0 hidden bg-(--hero-tint) md:block md:mask-veil-l" />
+            )}
+          </>
+        )}
       </div>
 
       <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-6 md:py-12">

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { bannerLayoutSchema } from '../constants/enums.js'
 import { hexColorSchema } from './store.js'
 
 /**
@@ -17,11 +18,17 @@ import { hexColorSchema } from './store.js'
  * à direita e o texto à esquerda). `bottom` são faixas da borda de baixo, da
  * esquerda para a direita (celular: a foto fica em cima e o texto embaixo).
  * `custom` é a cor escolhida à mão, gravada como uma faixa só nos dois lados.
+ *
+ * `region` são faixas da METADE ESQUERDA da foto (de cima para baixo): é onde o
+ * texto cai quando a foto cobre o banner. É sempre a foto, mesmo com `custom`
+ * (a cor própria vira o véu, mas o texto continua sobre a foto). Opcional
+ * porque os banners gravados antes dele não o têm — quem pinta cai em `left`.
  */
 export const bannerBackdropSchema = z.object({
   source: z.enum(['image', 'custom']),
   left: z.array(hexColorSchema).min(1).max(8),
   bottom: z.array(hexColorSchema).min(1).max(8),
+  region: z.array(hexColorSchema).min(1).max(8).optional(),
 })
 
 export type BannerBackdrop = z.infer<typeof bannerBackdropSchema>
@@ -37,8 +44,11 @@ export const createBannerSchema = z.object({
    */
   linkUrl: z.string().max(500).trim().optional(),
   imageId: z.string().nullable().optional(),
-  // Sem .default(): o partial() do update o reaplicaria e apagaria o fundo salvo.
+  // Sem .default() nestes três: o partial() do update os reaplicaria e
+  // sobrescreveria o que está salvo.
   backdrop: bannerBackdropSchema.nullable().optional(),
+  layout: bannerLayoutSchema.optional(),
+  blurBehindText: z.boolean().optional(),
   position: z.number().int().nonnegative().optional(),
   isActive: z.boolean().optional(),
 })
@@ -64,6 +74,8 @@ export const bannerSchema = z.object({
   imageWidth: z.number().int().nullable(),
   imageHeight: z.number().int().nullable(),
   backdrop: bannerBackdropSchema.nullable(),
+  layout: bannerLayoutSchema,
+  blurBehindText: z.boolean(),
   position: z.number().int(),
   isActive: z.boolean(),
   createdAt: z.string(),
@@ -86,6 +98,8 @@ export const publicBannerSchema = bannerSchema.pick({
   imageWidth: true,
   imageHeight: true,
   backdrop: true,
+  layout: true,
+  blurBehindText: true,
 })
 
 export type PublicBanner = z.infer<typeof publicBannerSchema>

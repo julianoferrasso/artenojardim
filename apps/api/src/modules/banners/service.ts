@@ -28,6 +28,8 @@ const SELECT = {
   linkUrl: true,
   imageId: true,
   backdrop: true,
+  layout: true,
+  blurBehindText: true,
   position: true,
   isActive: true,
   createdAt: true,
@@ -60,6 +62,8 @@ const toDTO = (row: Row): Banner => ({
   imageWidth: row.image?.width ?? null,
   imageHeight: row.image?.height ?? null,
   backdrop: row.image ? parseBackdrop(row.backdrop) : null,
+  layout: row.layout,
+  blurBehindText: row.blurBehindText,
   position: row.position,
   isActive: row.isActive,
   createdAt: row.createdAt.toISOString(),
@@ -68,9 +72,20 @@ const toDTO = (row: Row): Banner => ({
 
 /** A projeção pública: sem imageId/isActive/position — só o que o slide pinta. */
 const toPublicDTO = (row: Row): PublicBanner => {
-  const { id, title, subtitle, buttonLabel, linkUrl, imageUrl, imageWidth, imageHeight, backdrop } =
-    toDTO(row)
-  return { id, title, subtitle, buttonLabel, linkUrl, imageUrl, imageWidth, imageHeight, backdrop }
+  const dto = toDTO(row)
+  return {
+    id: dto.id,
+    title: dto.title,
+    subtitle: dto.subtitle,
+    buttonLabel: dto.buttonLabel,
+    linkUrl: dto.linkUrl,
+    imageUrl: dto.imageUrl,
+    imageWidth: dto.imageWidth,
+    imageHeight: dto.imageHeight,
+    backdrop: dto.backdrop,
+    layout: dto.layout,
+    blurBehindText: dto.blurBehindText,
+  }
 }
 
 export const listPublicBanners = async (): Promise<PublicBanner[]> => {
@@ -122,6 +137,8 @@ export const createBanner = async (
       imageId,
       // Fundo é a borda DA FOTO: sem foto, não há o que prolongar.
       backdrop: imageId && input.backdrop ? input.backdrop : Prisma.DbNull,
+      layout: input.layout ?? 'SIDE',
+      blurBehindText: input.blurBehindText ?? true,
       position: input.position ?? 0,
       isActive: input.isActive ?? true,
     },
@@ -163,6 +180,8 @@ export const updateBanner = async (
   if (input.backdrop !== undefined) data.backdrop = input.backdrop ?? Prisma.DbNull
   // Tirar a foto leva o fundo junto, mesmo que o cliente não mande o backdrop.
   if (input.imageId !== undefined && !input.imageId) data.backdrop = Prisma.DbNull
+  if (input.layout !== undefined) data.layout = input.layout
+  if (input.blurBehindText !== undefined) data.blurBehindText = input.blurBehindText
   if (input.position !== undefined) data.position = input.position
   if (input.isActive !== undefined) data.isActive = input.isActive
 
@@ -176,6 +195,8 @@ export const updateBanner = async (
       linkUrl: current.linkUrl,
       imageId: current.imageId,
       backdrop: current.backdrop,
+      layout: current.layout,
+      blurBehindText: current.blurBehindText,
       position: current.position,
       isActive: current.isActive,
     },
@@ -186,6 +207,8 @@ export const updateBanner = async (
       linkUrl: row.linkUrl,
       imageId: row.imageId,
       backdrop: row.backdrop,
+      layout: row.layout,
+      blurBehindText: row.blurBehindText,
       position: row.position,
       isActive: row.isActive,
     },

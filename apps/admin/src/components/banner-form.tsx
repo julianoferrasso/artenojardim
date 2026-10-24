@@ -9,9 +9,19 @@ import {
   type CreateBannerInput,
   type Banner,
 } from '@ecommerce/shared/contracts'
-import { deriveBannerVars } from '@ecommerce/shared/utils'
+import type { BannerLayout } from '@ecommerce/shared/constants'
+import {
+  bannerTextContrast,
+  contrastForeground,
+  deriveBannerVars,
+  hexToOklch,
+  oklchToCss,
+  MIN_CONTRAST,
+  type BannerLook,
+} from '@ecommerce/shared/utils'
 import { useCreateBanner, useUpdateBanner } from '@/lib/banners'
 import { sampleImageBackdrop } from '@/lib/backdrop'
+import { useStoreTheme } from '@/lib/store-theme'
 import { ImageUploader } from '@/components/image-uploader'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -35,6 +45,7 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
     register,
     handleSubmit,
     setValue,
+    getValues,
     watch,
     formState: { errors },
   } = useForm<CreateBannerInput>({
@@ -47,10 +58,12 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
           linkUrl: initial.linkUrl ?? undefined,
           imageId: initial.imageId,
           backdrop: initial.backdrop,
+          layout: initial.layout,
+          blurBehindText: initial.blurBehindText,
           position: initial.position,
           isActive: initial.isActive,
         }
-      : { isActive: true, position: 0, backdrop: null },
+      : { isActive: true, position: 0, backdrop: null, layout: 'SIDE', blurBehindText: true },
   })
 
   // A imagem vive fora do fluxo de texto do RHF, como no form de categoria: o
@@ -63,6 +76,8 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
   )
 
   const backdrop = watch('backdrop') ?? null
+  const layout = watch('layout') ?? 'SIDE'
+  const blur = watch('blurBehindText') ?? true
   const title = watch('title')
   const [sampling, setSampling] = useState(false)
   const [sampleFailed, setSampleFailed] = useState(false)
@@ -72,8 +87,13 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
   // deixar a cor da foto anterior no banner.
   const sampleSeq = useRef(0)
 
+  /**
+   * `replace` grava as cores da foto (upload, ou voltar de "cor própria").
+   * `refresh` relê ao abrir: com cor própria, só atualiza `region` (as cores da
+   * foto debaixo do texto, que a cor própria não substitui) e o aviso.
+   */
   const sampleFromImage = useCallback(
-    async (url: string) => {
+    async (url: string, mode: 'replace' | 'refresh') => {
       const seq = ++sampleSeq.current
       setSampling(true)
       const result = await sampleImageBackdrop(url)
@@ -81,31 +101,45 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
       setSampling(false)
       setSampleFailed(!result)
       setEdgeBusy(result?.busy ?? NOT_BUSY)
+
+      const current = getValues('backdrop')
+      if (mode === 'refresh' && current?.source === 'custom') {
+        if (result) setValue('backdrop', { ...current, region: result.region })
+        return
+      }
       setValue(
         'backdrop',
-        result ? { source: 'image', left: result.left, bottom: result.bottom } : null,
-        { shouldDirty: true },
+        result ? { source: 'image', left: result.left, bottom: result.bottom, region: result.region } : null,
+        { shouldDirty: mode === 'replace' },
       )
     },
-    [setValue],
+    [getValues, setValue],
   )
 
-  // Banner antigo (sem fundo) ganha a cor ao abrir; o que já usa as cores da
-  // foto é relido para saber se a borda é carregada. Cor própria fica intocada.
-  // Congelado na abertura: um refetch da lista recria `initial`, e reler ali
-  // apagaria a cor própria que o lojista acabou de escolher.
-  const [imageOnOpen] = useState(() =>
-    initial?.imageUrl && initial.backdrop?.source !== 'custom' ? initial.imageUrl : null,
-  )
+  // Banner antigo (sem fundo ou sem `region`) se completa ao abrir, e o aviso de
+  // borda carregada volta. Congelado na abertura: um refetch da lista recria
+  // `initial`, e reler a cada refetch reescreveria o que o lojista está editando.
+  const [imageOnOpen] = useState(() => initial?.imageUrl ?? null)
   useEffect(() => {
-    if (imageOnOpen) void sampleFromImage(imageOnOpen)
+    if (imageOnOpen) void sampleFromImage(imageOnOpen, 'refresh')
   }, [imageOnOpen, sampleFromImage])
 
   const setCustomColor = (color: string) =>
-    setValue('backdrop', { source: 'custom', left: [color], bottom: [color] }, { shouldDirty: true })
+    setValue(
+      'backdrop',
+      { source: 'custom', left: [color], bottom: [color], region: backdrop?.region },
+      { shouldDirty: true },
+    )
+
+  const look: BannerLook = { layout, blur, backdrop }
+  const ratio = imageSize ? imageSize.width / imageSize.height : 4 / 3
+  const warnings = [
+    imageSize && resolutionWarning(imageSize, layout),
+    backdrop?.source === 'image' && blur && busyWarning(edgeBusy, layout),
+    !sampling && legibilityWarning(look),
+  ].filter((w): w is string => Boolean(w))
 
   const busy = create.isPending || update.isPending || sampling
-  const edgeWarning = backdrop?.source === 'image' ? busyWarning(edgeBusy) : null
 
   const onSubmit = (values: CreateBannerInput) => {
     setFormError(null)
@@ -189,65 +223,99 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
             folder="banners"
             onUploaded={(upload) => {
               setImageUrl(upload.url)
-              setImageSize(upload.width && upload.height ? { width: upload.width, height: upload.height } : null)
+              const size = upload.width && upload.height ? { width: upload.width, height: upload.height } : null
+              setImageSize(size)
               setValue('imageId', upload.id, { shouldDirty: true })
-              void sampleFromImage(upload.url)
+              // Sugestão pela proporção; o lojista troca abaixo se quiser.
+              if (size) setValue('layout', suggestLayout(size), { shouldDirty: true })
+              void sampleFromImage(upload.url, 'replace')
             }}
           />
         )}
         <p className="text-xs text-muted-foreground">
-          Qualquer proporção funciona: a foto fica à direita e a cor da borda dela preenche o resto
-          do banner. Uma foto bem larga (ex.: 1920×640), com o lado esquerdo livre, aparece por trás
-          do texto. Sem imagem, o slide usa um fundo decorativo.
+          Foto larga (ex.: 1920×640) funciona bem como fundo; quadrada ou em pé, à direita do texto.
+          Sem imagem, o slide usa um fundo decorativo.
         </p>
       </div>
 
       {imageUrl && (
-        <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1.5 text-sm font-medium">Fundo atrás do texto</legend>
+        <fieldset className="flex flex-col gap-3">
+          <legend className="mb-1.5 text-sm font-medium">Como a foto aparece</legend>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="backdrop-source"
-              checked={backdrop?.source !== 'custom'}
-              onChange={() => void sampleFromImage(imageUrl)}
-              className="size-4"
-            />
-            Cores da borda da foto
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="backdrop-source"
-              checked={backdrop?.source === 'custom'}
-              onChange={() => setCustomColor(middleColor(backdrop))}
-              className="size-4"
-            />
-            Cor própria
+          <div className="flex flex-col gap-1.5">
+            {LAYOUT_OPTIONS.map((option) => (
+              <label key={option.value} className="flex items-start gap-2 text-sm">
+                <input
+                  type="radio"
+                  value={option.value}
+                  {...register('layout')}
+                  className="mt-0.5 size-4 shrink-0"
+                />
+                <span>
+                  {option.label}
+                  <span className="block text-xs text-muted-foreground">{option.hint}</span>
+                </span>
+              </label>
+            ))}
+            <p className="text-xs text-muted-foreground">No celular, a foto fica sempre em cima do texto.</p>
+          </div>
+
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" {...register('blurBehindText')} className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Desfoque atrás do texto
+              <span className="block text-xs text-muted-foreground">
+                {layout === 'COVER'
+                  ? 'A foto fica desfocada atrás do título, com um véu na cor dela.'
+                  : 'A foto se dissolve aos poucos numa cor tirada da borda dela.'}{' '}
+                Desligado, a foto fica nítida, com corte reto.
+              </span>
+            </span>
           </label>
 
-          {backdrop?.source === 'custom' && (
-            <HexColorInput value={backdrop.left[0] ?? DEFAULT_CUSTOM} onChange={setCustomColor} />
+          {blur && (
+            <div className="flex flex-col gap-1.5 pl-6">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="backdrop-source"
+                  checked={backdrop?.source !== 'custom'}
+                  onChange={() => void sampleFromImage(imageUrl, 'replace')}
+                  className="size-4"
+                />
+                Cor tirada da foto
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="backdrop-source"
+                  checked={backdrop?.source === 'custom'}
+                  onChange={() => setCustomColor(middleColor(backdrop))}
+                  className="size-4"
+                />
+                Cor própria
+              </label>
+              {backdrop?.source === 'custom' && (
+                <HexColorInput value={backdrop.left[0] ?? DEFAULT_CUSTOM} onChange={setCustomColor} />
+              )}
+            </div>
           )}
 
           {sampling && <p className="text-xs text-muted-foreground">Lendo as cores da foto…</p>}
-          {!sampling && sampleFailed && backdrop?.source !== 'custom' && (
+          {!sampling && sampleFailed && blur && backdrop?.source !== 'custom' && (
             <p className="text-xs text-destructive">
               Não foi possível ler as cores desta foto. Escolha uma cor própria; sem ela, a loja usa
               a cor secundária do tema.
             </p>
           )}
-          {!sampling && edgeWarning && (
-            <p className="rounded-md bg-accent px-3 py-2 text-xs">{edgeWarning}</p>
-          )}
+          {!sampling &&
+            warnings.map((warning) => (
+              <p key={warning} className="rounded-md bg-accent px-3 py-2 text-xs">
+                {warning}
+              </p>
+            ))}
 
-          <BannerPreview
-            imageUrl={imageUrl}
-            ratio={imageSize ? imageSize.width / imageSize.height : 4 / 3}
-            backdrop={backdrop}
-            title={title || 'Título do banner'}
-          />
+          <BannerPreview imageUrl={imageUrl} ratio={ratio} look={look} title={title || 'Título do banner'} />
         </fieldset>
       )}
 
@@ -294,19 +362,62 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
   )
 }
 
+const LAYOUT_OPTIONS: { value: BannerLayout; label: string; hint: string }[] = [
+  { value: 'SIDE', label: 'Foto à direita', hint: 'Para foto quadrada ou em pé: o texto fica ao lado dela.' },
+  { value: 'COVER', label: 'Foto de fundo', hint: 'Para foto larga: ela cobre o banner, por trás do texto.' },
+]
+
+/** A partir desta proporção (largura ÷ altura) a foto é sugerida como fundo. */
+const COVER_SUGGESTION_RATIO = 1.6
+
+const suggestLayout = ({ width, height }: { width: number; height: number }): BannerLayout =>
+  width / height >= COVER_SUGGESTION_RATIO ? 'COVER' : 'SIDE'
+
+/**
+ * O slide tem ~480 a ~620px de altura no computador e cobre a tela toda de
+ * largura na foto de fundo; abaixo disto, a foto é ampliada e fica borrada (o
+ * primeiro banner real tinha 225×225).
+ */
+const MIN_SIDE_HEIGHT = 800
+const MIN_COVER_WIDTH = 1600
+
+const resolutionWarning = ({ width, height }: { width: number; height: number }, layout: BannerLayout): string | null => {
+  if (layout === 'COVER' && width < MIN_COVER_WIDTH) {
+    return `Esta foto tem só ${width}×${height} px. Como fundo ela cobre a tela inteira e vai ficar borrada. Use uma foto com pelo menos ${MIN_COVER_WIDTH} px de largura.`
+  }
+  if (layout === 'SIDE' && height < MIN_SIDE_HEIGHT) {
+    return `Esta foto tem só ${width}×${height} px. No banner ela aparece com até ~620 px de altura e vai ficar borrada. Use uma foto com pelo menos ${MIN_SIDE_HEIGHT} px de altura.`
+  }
+  return null
+}
+
 const DEFAULT_CUSTOM = '#f4ece4'
 const NOT_BUSY = { left: false, bottom: false }
 const HEX = /^#[0-9a-fA-F]{6}$/
 
 /**
- * Cada borda só aparece num tamanho de tela — a esquerda no computador, a de
- * baixo no celular —, então o aviso diz ONDE o fundo vai ficar borrado. Uma
- * foto larga com a bandeja cortada embaixo fica perfeita no computador.
+ * Cada borda só aparece onde é prolongada — a esquerda no computador (só com a
+ * foto à direita), a de baixo no celular —, então o aviso diz ONDE o fundo vai
+ * ficar borrado.
  */
-const busyWarning = (busy: { left: boolean; bottom: boolean }): string | null => {
-  const where = [busy.left && 'no computador', busy.bottom && 'no celular'].filter(Boolean).join(' e ')
+const busyWarning = (busy: { left: boolean; bottom: boolean }, layout: BannerLayout): string | null => {
+  const where = [busy.left && layout === 'SIDE' && 'no computador', busy.bottom && 'no celular']
+    .filter(Boolean)
+    .join(' e ')
   if (!where) return null
   return `A borda desta foto tem muitos detalhes, e o fundo prolongado pode parecer borrado ${where}. Prefira uma foto com fundo liso ou escolha uma cor própria.`
+}
+
+/** O texto vai ler mal? Mede com a mesma derivação da loja. */
+const legibilityWarning = (look: BannerLook): string | null => {
+  const { mobile, desktop } = bannerTextContrast(look)
+  const where = [desktop !== null && desktop < MIN_CONTRAST && 'no computador', mobile !== null && mobile < MIN_CONTRAST && 'no celular']
+    .filter(Boolean)
+    .join(' e ')
+  if (!where) return null
+  return look.blur
+    ? `O texto pode ficar difícil de ler ${where}: as cores atrás dele variam muito. Escolha uma cor própria.`
+    : `O texto pode ficar difícil de ler ${where}, direto sobre a foto. Ligue o desfoque.`
 }
 
 /** Ao trocar para "cor própria", parte da cor do meio da borda — não de um bege qualquer. */
@@ -347,61 +458,96 @@ const HexColorInput = ({ value, onChange }: { value: string; onChange: (hex: str
 }
 
 /**
- * Prévia do slide no desktop e no celular. A COR é a da loja (mesmo
- * `deriveBannerVars`); o tamanho é aproximado — o desktop numa caixa 8:3, que é
- * a proporção do slide numa tela de 1280px.
+ * Prévia do slide no desktop e no celular. Cores e máscaras são as da loja
+ * (mesmo `deriveBannerVars`, mesmas utilities copiadas no globals.css, e a
+ * secundária vem do tema da loja); o tamanho é aproximado — o desktop numa caixa
+ * 8:3, a proporção do slide numa tela de 1280px — e o desfoque é proporcional.
  */
 const BannerPreview = ({
   imageUrl,
   ratio,
-  backdrop,
+  look,
   title,
 }: {
   imageUrl: string
   ratio: number
-  backdrop: BannerBackdrop | null
+  look: BannerLook
   title: string
 }) => {
+  const theme = useStoreTheme()
+  const vars = deriveBannerVars(look)
+  const has = (name: string) => name in vars
+  const cover = look.layout === 'COVER'
+  const secondary = theme.data?.secondary
+
   const style = {
-    ...(backdrop ? deriveBannerVars(backdrop) : {}),
+    ...vars,
     '--photo-ratio': ratio,
     '--photo-ratio-sm': Math.min(16 / 9, Math.max(4 / 3, ratio)),
+    ...(secondary
+      ? {
+          '--store-secondary': secondary,
+          '--store-secondary-fg': oklchToCss(contrastForeground(hexToOklch(secondary))),
+        }
+      : {}),
   } as CSSProperties
-  // Sem fundo a loja usa a secundária DO TEMA DA LOJA, que o admin não carrega
-  // aqui — a prévia mostra um neutro em vez de fingir a cor.
-  const fallback = !backdrop && 'bg-muted text-foreground'
+  // Enquanto o tema carrega, um neutro em vez de fingir a cor.
+  const themeSurface = secondary ? 'bg-(--store-secondary) text-(--store-secondary-fg)' : 'bg-muted text-foreground'
 
   return (
     <div style={style} className="mt-1 flex items-start gap-2">
       <div
         className={cn(
           'relative flex aspect-8/3 flex-1 items-center overflow-hidden rounded-md border border-border',
-          backdrop && 'bg-(image:--hero-bg-md) text-(--hero-ink-md)',
-          fallback,
+          has('--hero-bg-md') ? 'bg-(image:--hero-bg-md)' : themeSurface,
+          has('--hero-ink-md') && 'text-(--hero-ink-md)',
         )}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imageUrl}
-          alt=""
-          className="absolute inset-y-0 right-0 aspect-(--photo-ratio) h-full max-w-full object-cover object-right mask-l-from-80%"
-        />
+        <div
+          className={cn(
+            'absolute overflow-hidden',
+            cover ? 'inset-0' : 'inset-y-0 right-0 aspect-(--photo-ratio) h-full max-w-full',
+            look.blur && !cover && 'mask-fade-l',
+          )}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="" className="absolute inset-0 size-full object-cover object-right" />
+          {look.blur && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt=""
+              className={cn(
+                'absolute inset-0 size-full scale-110 object-cover object-right',
+                cover ? 'blur-sm mask-veil-l' : 'blur-xs mask-blur-l',
+              )}
+            />
+          )}
+          {look.blur && cover && has('--hero-tint') && (
+            <div className="absolute inset-0 bg-(--hero-tint) mask-veil-l" />
+          )}
+        </div>
         <p className="relative w-1/2 px-3 font-display text-sm font-semibold leading-tight">{title}</p>
       </div>
 
       <div
         className={cn(
           'flex w-24 shrink-0 flex-col overflow-hidden rounded-md border border-border',
-          backdrop && 'bg-(image:--hero-bg) text-(--hero-ink)',
-          fallback,
+          has('--hero-bg') ? 'bg-(image:--hero-bg) text-(--hero-ink)' : themeSurface,
         )}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={imageUrl}
-          alt=""
-          className="aspect-(--photo-ratio-sm) w-full object-cover object-right mask-b-from-75%"
-        />
+        <div className={cn('relative aspect-(--photo-ratio-sm) w-full overflow-hidden', look.blur && 'mask-fade-b')}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="" className="absolute inset-0 size-full object-cover object-right" />
+          {look.blur && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt=""
+              className="absolute inset-0 size-full scale-110 object-cover object-right blur-xs mask-blur-b"
+            />
+          )}
+        </div>
         <p className="px-1.5 pb-3 pt-1 text-center font-display text-xs font-semibold leading-tight">
           {title}
         </p>

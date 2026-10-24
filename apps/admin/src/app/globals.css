@@ -248,3 +248,30 @@
     margin: 12mm;
   }
 }
+
+/*
+  Transições do banner com foto (components/home/hero-carousel.tsx). Curvas, não
+  retas: um degradê linear de opacidade deixa uma "linha" visível no meio da
+  transição. @utility para aceitar md:/max-md:. Cópia idêntica de
+  apps/store/src/app/globals.css: a prévia do banner desvanece igual à loja.
+*/
+/* A foto à direita se dissolve no fundo prolongado ao longo da metade esquerda
+   dela — mais que isso come o assunto de uma foto quadrada. */
+@utility mask-fade-l {
+  mask-image: linear-gradient(to right, transparent 0%, rgb(0 0 0 / 0.08) 8%, rgb(0 0 0 / 0.3) 20%, rgb(0 0 0 / 0.65) 33%, rgb(0 0 0 / 0.9) 43%, #000 50%);
+}
+/* No celular, a foto em cima se dissolve no texto embaixo. */
+@utility mask-fade-b {
+  mask-image: linear-gradient(to top, transparent 0%, rgb(0 0 0 / 0.1) 8%, rgb(0 0 0 / 0.4) 18%, rgb(0 0 0 / 0.8) 30%, #000 40%);
+}
+/* A cópia desfocada da foto à direita: forte na borda, some até ~56%. */
+@utility mask-blur-l {
+  mask-image: linear-gradient(to right, #000 0%, #000 25%, rgb(0 0 0 / 0.6) 37%, rgb(0 0 0 / 0.2) 47%, transparent 56%);
+}
+@utility mask-blur-b {
+  mask-image: linear-gradient(to top, #000 0%, #000 15%, rgb(0 0 0 / 0.5) 30%, transparent 50%);
+}
+/* Foto de fundo: desfoque + véu fortes onde o texto fica, somem para a direita. */
+@utility mask-veil-l {
+  mask-image: linear-gradient(to right, #000 0%, #000 42%, rgb(0 0 0 / 0.55) 56%, rgb(0 0 0 / 0.15) 68%, transparent 78%);
+}
