@@ -51,6 +51,38 @@ const assertVariantsValid = (variants: CreateVariantInput[]): void => {
   throw appError(ERROR_CODES.VALIDATION_ERROR, message, 422)
 }
 
+/**
+ * Texto opcional vazio vira null. É assim que o admin APAGA um campo (manda ''),
+ * e a loja usa `seoTitle ?? name`: um '' gravado deixaria o título da página vazio.
+ */
+const textOrNull = (value: string | undefined): string | null => value?.trim() || null
+
+/**
+ * SKU é único por loja. Checar antes dá a mensagem com o SKU culpado; o P2002 do
+ * banco só diz "storeId, sku" e chegava assim ao lojista.
+ */
+const assertSkusFree = async (skus: string[]): Promise<void> => {
+  const taken = await prisma.productVariant.findFirst({
+    where: { storeId: getActiveStoreId(), sku: { in: skus } },
+    select: { sku: true },
+  })
+  if (taken) {
+    throw businessError(ERROR_CODES.CONFLICT, `O SKU ${taken.sku} já é usado por outro produto.`, 409)
+  }
+}
+
+/** Mesma checagem do updateProductImages: uploads da loja, sem repetição. */
+const assertUploadsValid = async (uploadIds: string[]): Promise<void> => {
+  if (uploadIds.length === 0) return
+  if (new Set(uploadIds).size !== uploadIds.length) {
+    throw appError(ERROR_CODES.VALIDATION_ERROR, 'A mesma imagem aparece mais de uma vez', 422)
+  }
+  const count = await prisma.upload.count({ where: { id: { in: uploadIds }, storeId: getActiveStoreId() } })
+  if (count !== uploadIds.length) {
+    throw appError(ERROR_CODES.VALIDATION_ERROR, 'Uma ou mais imagens não existem', 422)
+  }
+}
+
 /** Categorias informadas existem e são da mesma loja? */
 const assertCategoriesValid = async (categoryIds: string[]): Promise<void> => {
   if (categoryIds.length === 0) return
@@ -155,6 +187,8 @@ export const createProduct = async (
 
   assertVariantsValid(input.variants)
   await assertCategoriesValid(input.categoryIds)
+  await assertUploadsValid(input.images.map((img) => img.uploadId))
+  await assertSkusFree(input.variants.map((v) => v.sku))
 
   // Publicar já na criação exige produto completo. DRAFT pode estar incompleto.
   if (input.status === 'ACTIVE') assertPublishable(input.images.length, input.variants)
@@ -170,12 +204,12 @@ export const createProduct = async (
         name: input.name,
         slug,
         description: sanitizeRichText(input.description ?? ''),
-        shortDescription: input.shortDescription ?? null,
+        shortDescription: textOrNull(input.shortDescription),
         status: input.status,
-        brand: input.brand ?? null,
+        brand: textOrNull(input.brand),
         tags: input.tags,
-        seoTitle: input.seoTitle ?? null,
-        seoDescription: input.seoDescription ?? null,
+        seoTitle: textOrNull(input.seoTitle),
+        seoDescription: textOrNull(input.seoDescription),
         isFeatured: input.isFeatured,
         stockPolicy: input.stockPolicy,
         productionDays: input.productionDays,
@@ -197,7 +231,17 @@ export const createProduct = async (
     return tx.product.findUniqueOrThrow({ where: { id: product.id }, select: PRODUCT_SELECT })
     // timeout generoso: a criação faz N inserts de variante em série, e em dev
     // isso atravessa o túnel SSH. Em produção o banco é loopback e é instantâneo.
-  }, { timeout: 20_000 })
+  }, { timeout: 20_000 }).catch((err) => {
+    // Corrida com outro cadastro entre o assertSkusFree e o insert.
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002' &&
+      JSON.stringify(err.meta ?? {}).includes('sku')
+    ) {
+      throw businessError(ERROR_CODES.CONFLICT, 'Um dos SKUs já é usado por outro produto.', 409)
+    }
+    throw err
+  })
 
   await audit({
     action: EVENTS.product.created,
@@ -433,11 +477,11 @@ export const updateProduct = async (
   if (input.name !== undefined) data.name = input.name
   if (nextSlug !== undefined) data.slug = nextSlug
   if (input.description !== undefined) data.description = sanitizeRichText(input.description)
-  if (input.shortDescription !== undefined) data.shortDescription = input.shortDescription
-  if (input.brand !== undefined) data.brand = input.brand
+  if (input.shortDescription !== undefined) data.shortDescription = textOrNull(input.shortDescription)
+  if (input.brand !== undefined) data.brand = textOrNull(input.brand)
   if (input.tags !== undefined) data.tags = input.tags
-  if (input.seoTitle !== undefined) data.seoTitle = input.seoTitle
-  if (input.seoDescription !== undefined) data.seoDescription = input.seoDescription
+  if (input.seoTitle !== undefined) data.seoTitle = textOrNull(input.seoTitle)
+  if (input.seoDescription !== undefined) data.seoDescription = textOrNull(input.seoDescription)
   if (input.isFeatured !== undefined) data.isFeatured = input.isFeatured
   if (input.stockPolicy !== undefined) data.stockPolicy = input.stockPolicy
   if (input.productionDays !== undefined) data.productionDays = input.productionDays

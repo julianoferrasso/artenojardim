@@ -48,6 +48,9 @@ export const useDeleteCategory = () => {
   })
 }
 
+/** `depth` indenta listas de checkbox; o `label` já vem indentado para o <select>. */
+type FlatCategory = { id: string; label: string; name: string; slug: string; isActive: boolean; depth: number }
+
 /** Achata a árvore em opções indentadas para o <select> de "categoria pai".
  *  Exclui a própria categoria e suas descendentes — mover para dentro de si é
  *  ciclo, e a API rejeita, mas some da lista para nem tentar. */
@@ -55,11 +58,11 @@ export const flattenForSelect = (
   tree: CategoryTreeNode[],
   excludeId?: string,
   depth = 0,
-): Array<{ id: string; label: string; slug: string; isActive: boolean }> => {
-  const out: Array<{ id: string; label: string; slug: string; isActive: boolean }> = []
+): FlatCategory[] => {
+  const out: FlatCategory[] = []
   for (const node of tree) {
     if (node.id === excludeId) continue // pula a subárvore inteira
-    out.push({ id: node.id, slug: node.slug, isActive: node.isActive, label:`${'  '.repeat(depth)}${node.name}` })
+    out.push({ id: node.id, slug: node.slug, isActive: node.isActive, name: node.name, depth, label:`${'  '.repeat(depth)}${node.name}` })
     out.push(...flattenForSelect(node.children, excludeId, depth + 1))
   }
   return out

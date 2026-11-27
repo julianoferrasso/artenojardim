@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ROUTES } from '@ecommerce/shared/constants'
 import type {
   StockItem,
@@ -34,6 +34,17 @@ export const useVariantLevel = (variantId: string) =>
     queryKey: ['inventory', 'level', variantId],
     queryFn: () => apiFetch<InventoryLevel>(ROUTES.inventory.level(variantId)),
   })
+
+/** O saldo de várias variações — mesma chave do useVariantLevel, então o cache é um só. */
+export const useVariantLevels = (variantIds: string[]): Record<string, InventoryLevel | undefined> => {
+  const results = useQueries({
+    queries: variantIds.map((id) => ({
+      queryKey: ['inventory', 'level', id],
+      queryFn: () => apiFetch<InventoryLevel>(ROUTES.inventory.level(id)),
+    })),
+  })
+  return Object.fromEntries(variantIds.map((id, i) => [id, results[i]?.data]))
+}
 
 export const useVariantLedger =(variantId: string | undefined) =>
   useQuery({

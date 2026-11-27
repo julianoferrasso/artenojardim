@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { PRODUCTION_DAYS_MAX, PRODUCTION_DAYS_MIN, type Product } from '@ecommerce/shared/contracts'
 import {
   STOCK_POLICIES,
@@ -10,9 +9,8 @@ import {
   businessDaysLabel,
   type StockPolicy,
 } from '@ecommerce/shared/constants'
-import { useUpdateProduct } from '@/lib/products'
 import { useShippingSettings } from '@/lib/shipping'
-import { ApiError } from '@/lib/api'
+import { DecimalInput } from '@/components/decimal-input'
 import { cn } from '@/lib/utils'
 
 /**
@@ -82,13 +80,15 @@ const Preview = ({ value, handlingDays }: { value: AvailabilityValue; handlingDa
   )
 }
 
-/** Os campos, controlados: a criação guarda no formulário dela; a edição salva sozinha. */
+/** Os campos, controlados: o formulário do produto guarda o valor e salva junto com o resto. */
 export const AvailabilityFields = ({
   value,
   onChange,
+  error,
 }: {
   value: AvailabilityValue
   onChange: (value: AvailabilityValue) => void
+  error?: string | undefined
 }) => {
   const { data: shipping } = useShippingSettings()
   const handlingDays = shipping?.handlingDays ?? null
@@ -124,18 +124,22 @@ export const AvailabilityFields = ({
             Prazo de produção
           </label>
           <div className="flex items-center gap-2">
-            <input
+            <DecimalInput
               id="production-days"
-              type="number"
-              inputMode="numeric"
-              min={PRODUCTION_DAYS_MIN}
-              max={PRODUCTION_DAYS_MAX}
+              integer
+              maxLength={2}
               value={value.productionDays}
-              onChange={(e) => onChange({ ...value, productionDays: e.target.value })}
-              className="h-9 w-24 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onChange={(productionDays) => onChange({ ...value, productionDays })}
+              aria-invalid={error ? true : undefined}
+              data-invalid={error ? 'true' : undefined}
+              className={cn(
+                'h-9 w-24 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                error && 'border-destructive',
+              )}
             />
             <span className="text-sm text-muted-foreground">dias úteis</span>
           </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
           <p className="text-xs text-muted-foreground">
             Contados da confirmação do pagamento até a peça ficar pronta. Depois a loja soma o prazo de postagem
             {handlingDays !== null ? ` (${businessDaysLabel(handlingDays)}, em Frete)` : ' (em Frete)'} e o do
@@ -146,78 +150,5 @@ export const AvailabilityFields = ({
 
       <Preview value={value} handlingDays={handlingDays} />
     </div>
-  )
-}
-
-/** A seção da tela de edição: salva só a política e o prazo, quando há mudança. */
-export const AvailabilityEditor = ({ product }: { product: Product }) => {
-  const update = useUpdateProduct()
-  const initial = toAvailabilityValue(product)
-  const [value, setValue] = useState<AvailabilityValue>(initial)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
-
-  const dirty = value.stockPolicy !== initial.stockPolicy || value.productionDays.trim() !== initial.productionDays
-
-  const save = () => {
-    const parsed = parseProductionDays(value)
-    if (!parsed.ok) {
-      setError(parsed.message)
-      return
-    }
-    setError(null)
-    setSaved(false)
-    update.mutate(
-      {
-        id: product.id,
-        input: {
-          stockPolicy: value.stockPolicy,
-          // Em pronta entrega o prazo guardado fica: voltando à encomenda, ele já vem preenchido.
-          ...(value.stockPolicy === 'STOCK_ONLY' ? {} : { productionDays: parsed.days }),
-        },
-      },
-      {
-        onSuccess: (p) => {
-          setValue(toAvailabilityValue(p))
-          setSaved(true)
-        },
-        onError: (e) => setError(e instanceof ApiError ? e.message : 'Falha ao salvar.'),
-      },
-    )
-  }
-
-  return (
-    <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-6">
-      <div>
-        <h2 className="font-medium">Disponibilidade</h2>
-        <p className="text-sm text-muted-foreground">Como este produto é vendido.</p>
-      </div>
-
-      <AvailabilityFields
-        value={value}
-        onChange={(next) => {
-          setValue(next)
-          setSaved(false)
-          setError(null)
-        }}
-      />
-
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={save}
-          disabled={!dirty || update.isPending}
-          className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-        >
-          {update.isPending ? 'Salvando…' : 'Salvar disponibilidade'}
-        </button>
-        {saved && !dirty && <span className="text-sm text-muted-foreground">Salvo ✓</span>}
-      </div>
-    </section>
   )
 }
