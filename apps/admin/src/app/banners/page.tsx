@@ -33,6 +33,8 @@ export default function BannersPage() {
   const onDelete = (banner: Banner) => {
     if (!confirm(`Excluir o banner "${banner.title}"?`)) return
     del.mutate(banner.id, {
+      // Excluir o banner que está aberto fecha o formulário: salvar depois daria 404.
+      onSuccess: () => setEditing((e) => (e?.mode === 'edit' && e.banner.id === banner.id ? null : e)),
       onError: (e) =>
         alert(e instanceof ApiError ? e.message : 'Não foi possível excluir o banner.'),
     })
@@ -56,6 +58,7 @@ export default function BannersPage() {
               isLoading={isLoading}
               error={Boolean(error)}
               deleting={del.isPending}
+              selectedId={editing?.mode === 'edit' ? editing.banner.id : null}
               onCreate={() => setEditing({ mode: 'create', placement: section.placement })}
               onEdit={(banner) => setEditing({ mode: 'edit', banner })}
               onDelete={onDelete}
@@ -90,6 +93,7 @@ const BannerList = ({
   isLoading,
   error,
   deleting,
+  selectedId,
   onCreate,
   onEdit,
   onDelete,
@@ -100,6 +104,8 @@ const BannerList = ({
   isLoading: boolean
   error: boolean
   deleting: boolean
+  /** O banner aberto no formulário, destacado na lista. */
+  selectedId: string | null
   onCreate: () => void
   onEdit: (banner: Banner) => void
   onDelete: (banner: Banner) => void
@@ -126,49 +132,63 @@ const BannerList = ({
         {banners.map((banner) => (
           <li
             key={banner.id}
-            className="group flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2"
-          >
-            {banner.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={banner.imageUrl}
-                alt=""
-                className="h-12 w-20 shrink-0 rounded object-cover"
-              />
-            ) : (
-              <span className="flex h-12 w-20 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
-                sem foto
-              </span>
+            className={cn(
+              'relative flex items-center gap-3 rounded-md border bg-card px-3 py-2 transition-colors hover:bg-accent/50',
+              banner.id === selectedId ? 'border-primary ring-1 ring-primary' : 'border-border',
             )}
-
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 text-sm">
-                <span className={cn('truncate', !banner.isActive && 'text-muted-foreground line-through')}>
-                  {banner.title}
+          >
+            {/* O card inteiro abre a edição: o ::after deste botão cobre o li, e
+                Editar/Excluir ficam por cima dele (relative + z-10). */}
+            <button
+              type="button"
+              onClick={() => onEdit(banner)}
+              aria-label={`Editar o banner "${banner.title}"`}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-ring"
+            >
+              {banner.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={banner.imageUrl}
+                  alt=""
+                  className="h-12 w-20 shrink-0 rounded object-cover"
+                />
+              ) : (
+                <span className="flex h-12 w-20 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                  sem foto
                 </span>
-                {!banner.isActive && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                    inativo
-                  </span>
-                )}
-              </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                posição {banner.position}
-                {banner.linkUrl ? ` · ${banner.linkUrl}` : ''}
-              </span>
-            </span>
+              )}
 
-            <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2 text-sm">
+                  <span className={cn('truncate', !banner.isActive && 'text-muted-foreground line-through')}>
+                    {banner.title}
+                  </span>
+                  {!banner.isActive && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                      inativo
+                    </span>
+                  )}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  posição {banner.position}
+                  {banner.linkUrl ? ` · ${banner.linkUrl}` : ' · sem botão'}
+                </span>
+              </span>
+            </button>
+
+            <span className="relative z-10 flex shrink-0 gap-1">
               <button
+                type="button"
                 onClick={() => onEdit(banner)}
-                className="rounded px-2 py-1 text-xs hover:bg-accent"
+                className="rounded border border-border px-2 py-1 text-xs hover:bg-accent"
               >
                 Editar
               </button>
               <button
+                type="button"
                 onClick={() => onDelete(banner)}
                 disabled={deleting}
-                className="rounded px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                className="rounded border border-destructive/30 px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
               >
                 Excluir
               </button>
