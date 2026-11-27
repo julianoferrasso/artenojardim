@@ -4,6 +4,7 @@ import type { PublicStore } from '@ecommerce/shared/contracts'
 import { NewsletterForm } from './newsletter-form'
 import { StoreLogo } from './store-logo'
 import { PaymentMethods } from './payment-icons'
+import { Flourish } from './section-heading'
 import {
   FacebookIcon,
   InstagramIcon,
@@ -88,8 +89,10 @@ export const SiteFooter = ({
   const whatsappHref = store?.phone ? `https://wa.me/55${store.phone.replace(/\D/g, '')}` : null
 
   return (
-    <footer className="border-t border-border bg-background">
-      <div className="mx-auto grid max-w-6xl gap-x-10 gap-y-8 px-4 py-10 md:grid-cols-[1.3fr_1fr_1fr] md:py-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+    <footer className="bg-background">
+      {/* O raminho dos títulos separa a página do rodapé, no lugar da borda. */}
+      <Flourish className="mx-auto mt-6 text-primary-ink/70 md:mt-8" />
+      <div className="mx-auto grid max-w-6xl gap-x-10 gap-y-8 px-4 pt-6 pb-10 md:grid-cols-[1.3fr_1fr_1fr] md:pt-8 md:pb-12 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         {/* Newsletter — sempre aberta, até no mobile: é a coluna que converte. */}
         <div className="md:pr-6 lg:col-span-1">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-foreground">
