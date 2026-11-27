@@ -36,6 +36,9 @@ export const ERROR_CODES = {
   /// documento é dado fiscal, não cadastro — corrigir depois reescreveria a
   /// identidade de uma venda já emitida.
   DOCUMENT_LOCKED: 'DOCUMENT_LOCKED',
+  /// Pedido sem CPF do destinatário: a transportadora exige na declaração de
+  /// conteúdo. O checkout reage pedindo o CPF, não mostrando o texto.
+  DOCUMENT_REQUIRED: 'DOCUMENT_REQUIRED',
 
   // Catálogo
   SLUG_ALREADY_EXISTS: 'SLUG_ALREADY_EXISTS',

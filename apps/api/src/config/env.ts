@@ -68,14 +68,8 @@ const baseSchema = z.object({
     .optional()
     .transform((v) => v || undefined),
 
-  // Frete via Melhor Envio (OAuth2). Opcional: sem isso a cotação responde um
-  // erro de negócio claro ("frete não configurado"), não derruba o boot. O
-  // access token NÃO vem daqui — é obtido pelo fluxo OAuth e guardado em Setting.
-  MELHOR_ENVIO_BASE_URL: z.string().url().default('https://melhorenvio.com.br'),
-  MELHOR_ENVIO_CLIENT_ID: z.string().optional(),
-  MELHOR_ENVIO_CLIENT_SECRET: z.string().optional(),
-  MELHOR_ENVIO_REDIRECT_URI: z.string().url().optional(),
-  MELHOR_ENVIO_CONTACT_EMAIL: z.string().email().optional(),
+  // Melhor Envio: as credenciais do app moram no Setting `melhor_envio_app`,
+  // editadas em /frete no admin — não aqui.
 
   // Pagamentos via Stripe. Opcionais: sem elas o boot sobe e a criação de
   // pagamento responde erro de negócio claro, não derruba a API. STRIPE_PUBLIC

@@ -135,6 +135,8 @@ export const EVENTS = {
     providerConnectStarted: 'shipping.provider_connect_started',
     /** Prazo de postagem mudou. Só auditoria. */
     settingsUpdated: 'shipping.settings_updated',
+    /** Credenciais do aplicativo do Melhor Envio mudaram. Só auditoria. */
+    providerAppUpdated: 'shipping.provider_app_updated',
   },
   store: {
     /** Cores, raio ou logo da loja mudaram. Vai para auditoria, não para fila. */

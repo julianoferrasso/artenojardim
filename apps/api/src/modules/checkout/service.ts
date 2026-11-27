@@ -43,7 +43,7 @@ type Prepared = {
   totals: Totals
   /** null também quando o cupom não mudaria nada (frete grátis num frete já zerado). */
   coupon: CheckoutCoupon | null
-  customer: { email: string; phone: string | null }
+  customer: { email: string; phone: string | null; document: string | null }
 }
 
 /** Passo comum a summary e confirm: valida e recalcula, sem criar nada. */
@@ -115,7 +115,7 @@ const prepare = async (customerId: string, req: CheckoutSummaryRequest): Promise
 
   const customer = await prisma.customer.findUniqueOrThrow({
     where: { id: customerId },
-    select: { email: true, phone: true },
+    select: { email: true, phone: true, document: true },
   })
 
   return { cartId, address, items, shipping, totals, coupon, customer }
@@ -264,6 +264,13 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
   )
   const storeId = getActiveStoreId()
 
+  // A transportadora exige o CPF do destinatário na declaração de conteúdo. Quem
+  // já tem um no cadastro não manda (e o do corpo é ignorado: congela no 1º pedido).
+  const newDocument = customer.document ? null : (input.document ?? null)
+  if (!customer.document && !newDocument) {
+    throw businessError(ERROR_CODES.DOCUMENT_REQUIRED, 'Informe o seu CPF para concluir o pedido.', 422)
+  }
+
   // Peso é snapshot no item; carrega das variantes (o carrinho não guarda peso).
   // O prazo de produção também: é o do produto AGORA, congelado no pedido.
   const variants = await prisma.productVariant.findMany({
@@ -285,6 +292,13 @@ export const confirm = async (customerId: string, input: ConfirmCheckoutInput): 
         // Antes do create: a contagem por cliente dentro do claim não pode
         // enxergar o próprio pedido que está nascendo.
         if (coupon) await claimCouponUse(tx, coupon, customerId)
+
+        if (newDocument) {
+          await tx.customer.update({
+            where: { id: customerId },
+            data: { document: newDocument, documentType: 'CPF' },
+          })
+        }
 
         // Em ordem de variantId: duas confirmações com as mesmas peças travam as
         // linhas de estoque na mesma ordem, e uma espera a outra em vez de deadlock.

@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { changeEmailSchema, type CustomerSessionItem } from '@ecommerce/shared/contracts'
+import { isValidCpf } from '@ecommerce/shared/constants'
 import {
   cancelEmailChange,
   changePassword,
@@ -17,7 +18,7 @@ import {
 } from '@/lib/account'
 import { ApiError } from '@/lib/api'
 import { useAuth, authErrorMessage } from '@/lib/auth'
-import { fieldClass, formatDateTime, submitButtonClass } from '@/lib/utils'
+import { fieldClass, formatDateTime, maskCpf, submitButtonClass } from '@/lib/utils'
 
 /**
  * Meus dados. Cinco blocos, cada um com o seu formulário e o seu estado.
@@ -178,7 +179,8 @@ function PersonalDataCard() {
 // ── CPF ──────────────────────────────────────────────────────────────────────
 
 const documentSchema = z.object({
-  document: z.string().min(11, 'Informe o CPF completo').max(18),
+  // A mesma conta da API (dígitos verificadores): errar aqui é descobrir só no checkout.
+  document: z.string().refine(isValidCpf, 'CPF inválido'),
 })
 
 type DocumentInput = z.infer<typeof documentSchema>
@@ -199,7 +201,7 @@ function DocumentCard() {
     formState: { errors, isSubmitting },
   } = useForm<DocumentInput>({
     resolver: zodResolver(documentSchema),
-    defaultValues: { document: customer?.document ?? '' },
+    defaultValues: { document: maskCpf(customer?.document ?? '') },
   })
 
   if (!customer) return null
@@ -213,7 +215,7 @@ function DocumentCard() {
           <p className="mt-1 text-sm text-muted-foreground">
             Não pode mais ser alterado: já existem pedidos emitidos com ele.
           </p>
-          <p className="mt-4 text-sm font-medium">{customer.document ?? '—'}</p>
+          <p className="mt-4 text-sm font-medium">{customer.document ? maskCpf(customer.document) : '—'}</p>
           <p className="mt-2 text-xs text-muted-foreground">
             Se estiver errado, fale conosco.
           </p>
@@ -247,7 +249,9 @@ function DocumentCard() {
                 id="d-doc"
                 inputMode="numeric"
                 placeholder="000.000.000-00"
-                {...register('document')}
+                autoComplete="off"
+                maxLength={14}
+                {...register('document', { onChange: (e) => (e.target.value = maskCpf(e.target.value)) })}
                 className={fieldClass}
               />
               {errors.document && (

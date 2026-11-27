@@ -103,6 +103,14 @@ const renew = async (refreshToken: string): Promise<string> => {
 }
 
 /**
+ * Esquece a conexão. Os tokens pertencem ao aplicativo que os emitiu: trocar de
+ * app (ou de ambiente) os torna inúteis, e o status precisa dizer "Desconectado".
+ */
+export const forgetConnection = async (): Promise<void> => {
+  await setSetting('melhor_envio_oauth', { state: null, accessToken: null, refreshToken: null, expiresAt: null })
+}
+
+/**
  * Renovação em andamento neste processo. O refresh token rotaciona: duas cotações
  * simultâneas renovando cada uma por conta própria gastariam o mesmo token, e a
  * segunda seria recusada — derrubando a conexão que a primeira acabou de renovar.

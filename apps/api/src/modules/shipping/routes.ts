@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { quoteRequestSchema, shippingSettingsSchema } from '@ecommerce/shared/contracts'
+import { meAppSettingsSchema, quoteRequestSchema, shippingSettingsSchema } from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticate, requireStaff } from '../../middlewares/authenticate.js'
 import { requireMinRole } from '../../middlewares/authorize.js'
@@ -39,6 +39,17 @@ shippingRoutes.get(
   controller.connectController,
 )
 shippingRoutes.get('/melhor-envio/status', authenticate, requireStaff, controller.statusController)
+
+// Credenciais do app: até a leitura é de ADMIN (Client ID e o final do segredo
+// não são da conta de quem só opera pedidos).
+shippingRoutes.get('/melhor-envio/app', authenticate, requireMinRole('ADMIN'), controller.getAppSettingsController)
+shippingRoutes.put(
+  '/melhor-envio/app',
+  authenticate,
+  requireMinRole('ADMIN'),
+  validate({ body: meAppSettingsSchema }),
+  controller.updateAppSettingsController,
+)
 
 // Prazo de postagem: muda a promessa de entrega da loja inteira — piso de ADMIN.
 shippingRoutes.get('/settings', authenticate, requireStaff, controller.getSettingsController)

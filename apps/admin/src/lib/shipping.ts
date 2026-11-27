@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ROUTES } from '@ecommerce/shared/constants'
-import type { ShippingProviderStatus, ShippingSettings } from '@ecommerce/shared/contracts'
+import type {
+  MeAppSettingsInput,
+  MeAppSettingsView,
+  ShippingProviderStatus,
+  ShippingSettings,
+} from '@ecommerce/shared/contracts'
 import { apiFetch } from './api'
 
 const KEY = ['shipping', 'provider-status']
@@ -34,5 +39,27 @@ export const useUpdateShippingSettings = () => {
     mutationFn: (input: ShippingSettings) =>
       apiFetch<ShippingSettings>(ROUTES.shipping.settings, { method: 'PUT', body: JSON.stringify(input) }),
     onSuccess: (settings) => qc.setQueryData(SETTINGS_KEY, settings),
+  })
+}
+
+const APP_KEY = ['shipping', 'provider-app']
+
+/** Credenciais do aplicativo do Melhor Envio. O segredo nunca vem: só o final. */
+export const useShippingProviderApp = () =>
+  useQuery({
+    queryKey: APP_KEY,
+    queryFn: () => apiFetch<MeAppSettingsView>(ROUTES.shipping.app),
+  })
+
+export const useUpdateShippingProviderApp = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: MeAppSettingsInput) =>
+      apiFetch<MeAppSettingsView>(ROUTES.shipping.app, { method: 'PUT', body: JSON.stringify(input) }),
+    onSuccess: (view) => {
+      qc.setQueryData(APP_KEY, view)
+      // Trocar de app ou de ambiente desconecta a conta.
+      void qc.invalidateQueries({ queryKey: KEY })
+    },
   })
 }

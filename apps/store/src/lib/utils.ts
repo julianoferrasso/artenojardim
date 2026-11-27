@@ -33,6 +33,15 @@ export const maskCep = (v: string): string => {
   return d.length > 5 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
 }
 
+/** Máscara de digitação do CPF ("000.000.000-00"). A API normaliza para 11 dígitos. */
+export const maskCpf = (v: string): string => {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.length > 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
+  if (d.length > 6) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+  if (d.length > 3) return `${d.slice(0, 3)}.${d.slice(3)}`
+  return d
+}
+
 export const formatDate = (value: string | Date): string =>
   new Intl.DateTimeFormat(DEFAULT_LOCALE, { dateStyle: 'short' }).format(new Date(value))
 

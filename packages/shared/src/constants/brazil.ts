@@ -41,6 +41,29 @@ export const DOCUMENT_TYPES = ['CPF', 'CNPJ'] as const
 export const documentTypeSchema = z.enum(DOCUMENT_TYPES)
 export type DocumentType = z.infer<typeof documentTypeSchema>
 
+/**
+ * Dígitos verificadores do CPF (módulo 11). Sequência repetida (111.111.111-11)
+ * passa na conta mas não existe: a Receita nunca emite, e é o "CPF de teste" que
+ * todo mundo digita.
+ */
+export const isValidCpf = (value: string): boolean => {
+  const d = value.replace(/\D/g, '')
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false
+  const check = (len: number): number => {
+    let sum = 0
+    for (let i = 0; i < len; i++) sum += Number(d[i]) * (len + 1 - i)
+    const rest = (sum * 10) % 11
+    return rest === 10 ? 0 : rest
+  }
+  return check(9) === Number(d[9]) && check(10) === Number(d[10])
+}
+
+/** CPF normalizado: 11 dígitos, sem máscara, com dígitos verificadores válidos. */
+export const cpfSchema = z
+  .string()
+  .transform((v) => v.replace(/\D/g, ''))
+  .pipe(z.string().refine(isValidCpf, 'CPF inválido'))
+
 /** CEP normalizado: 8 dígitos, sem hífen. A máscara é da UI, o dado é limpo. */
 export const zipCodeSchema = z
   .string()

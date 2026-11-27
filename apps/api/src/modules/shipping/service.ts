@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type {
+  MeAppSettingsInput,
+  MeAppSettingsView,
   QuoteRequestInput,
   ShippingOption,
   ShippingProviderStatus,
@@ -10,18 +12,21 @@ import { EVENTS } from '@ecommerce/shared/constants'
 import { prisma } from '../../config/prisma.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { getSetting, setSetting } from '../../shared/settings.js'
-import { appError, isAppError, notFound } from '../../shared/errors.js'
+import { appError, isAppError, notFound, validationError } from '../../shared/errors.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import {
   buildAuthorizeUrl,
   completeAuthorization,
+  forgetConnection,
   getConnectionStatus,
   getValidAccessToken,
+  meRedirectUri,
   savePendingState,
 } from '../../integrations/melhor-envio/index.js'
 import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
 import { availableOf, productionDaysOf, splitLine } from '../inventory/domain/availability.js'
 import { toPackages, type PackItem } from './domain/packing.js'
+import { planAppSettingsUpdate, toAppSettingsView } from './domain/provider-app.js'
 import { activeProvider } from './providers/index.js'
 
 /**
@@ -162,6 +167,38 @@ export const updateShippingSettings = async (
   return input
 }
 
+// ─── Aplicativo do provider (credenciais, editadas no admin) ─────────────────
+
+export const getProviderAppSettings = async (): Promise<MeAppSettingsView> =>
+  toAppSettingsView(await getSetting('melhor_envio_app'), meRedirectUri())
+
+/**
+ * Grava as credenciais do app. Trocar de app ou de ambiente desconecta a conta
+ * (os tokens eram do app anterior): o admin vê "Desconectado" e reconecta.
+ */
+export const updateProviderAppSettings = async (
+  input: MeAppSettingsInput,
+  context: AuditContext,
+): Promise<MeAppSettingsView> => {
+  const plan = planAppSettingsUpdate(await getSetting('melhor_envio_app'), input)
+  if (!plan.ok) {
+    throw validationError([{ field: 'clientSecret', message: 'Informe o Client Secret do aplicativo.' }])
+  }
+  if (Object.keys(plan.changes).length === 0) return toAppSettingsView(plan.next, meRedirectUri())
+
+  await setSetting('melhor_envio_app', plan.next)
+  if (plan.resetConnection) await forgetConnection()
+
+  await audit({
+    action: EVENTS.shipping.providerAppUpdated,
+    entityType: 'Store',
+    entityId: getActiveStoreId(),
+    changes: { ...plan.changes, ...(plan.resetConnection ? { connection: { from: 'connected', to: 'reset' } } : {}) },
+    context,
+  })
+  return toAppSettingsView(plan.next, meRedirectUri())
+}
+
 // ─── OAuth do provider (conexão da conta do lojista, uma vez) ────────────────
 
 /**
@@ -183,7 +220,7 @@ export const startProviderConnection = async (
     context,
   })
 
-  return { authorizeUrl: buildAuthorizeUrl(state) }
+  return { authorizeUrl: await buildAuthorizeUrl(state) }
 }
 
 /** Callback: valida o state, troca o código por tokens e persiste. */

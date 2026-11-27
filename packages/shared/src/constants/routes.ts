@@ -69,6 +69,8 @@ export const ROUTES = {
     connect: `${base}/shipping/melhor-envio/connect`,
     callback: `${base}/shipping/melhor-envio/callback`,
     status: `${base}/shipping/melhor-envio/status`,
+    /** Credenciais do aplicativo do Melhor Envio (ADMIN). GET lê, PUT grava. */
+    app: `${base}/shipping/melhor-envio/app`,
     /** Prazo de postagem (ADMIN). GET lê, PUT grava. */
     settings: `${base}/shipping/settings`,
   },

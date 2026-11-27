@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { cpfSchema } from '../constants/brazil.js'
 
 /**
  * O que o CLIENTE pode alterar de si mesmo, pela área da conta.
@@ -14,10 +15,9 @@ export const updateCustomerProfileSchema = z
     /// Aceita máscara: quem digita "(51) 99999-9999" não deve ver erro. A
     /// normalização, se um dia importar, é do lado de quem consome.
     phone: z.string().max(20).nullable().optional(),
-    /// CPF/CNPJ, corrigível SÓ enquanto não houver pedido — depois vira dado
-    /// fiscal e o service recusa com DOCUMENT_LOCKED. Quem digitou errado no
-    /// checkout não tinha, até aqui, nenhum caminho de correção.
-    document: z.string().min(11).max(18).nullable().optional(),
+    /// CPF, corrigível SÓ enquanto não houver pedido — depois vira dado fiscal
+    /// e o service recusa com DOCUMENT_LOCKED. Gravado só com os 11 dígitos.
+    document: cpfSchema.nullable().optional(),
     acceptsMarketing: z.boolean().optional(),
   })
   .refine((v) => Object.values(v).some((field) => field !== undefined), {

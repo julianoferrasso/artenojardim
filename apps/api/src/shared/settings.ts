@@ -4,6 +4,7 @@ import {
   storeThemeSchema,
   DEFAULT_STORE_THEME,
   type PublicFlags,
+  ME_ENVIRONMENTS,
 } from '@ecommerce/shared/contracts'
 import { prisma } from '../config/prisma.js'
 import { getActiveStoreId } from './store-context.js'
@@ -63,6 +64,24 @@ export const SETTING_SCHEMAS = {
       expiresAt: z.number().int().nullable(),
     }),
     default: { state: null, accessToken: null, refreshToken: null, expiresAt: null },
+    cache: false,
+  },
+  /**
+   * Aplicativo do Melhor Envio (o app 26048 do painel deles), editado em /frete
+   * no admin. Até nov/2026 vivia no .env, e trocar o segredo exigia SSH.
+   *
+   * O segredo fica em texto, como os tokens do `melhor_envio_oauth`: é o mesmo
+   * nível de risco, e a API nunca o devolve (o admin vê só o final).
+   * SEM cache: API e worker leem — o worker renova o token com este segredo.
+   */
+  melhor_envio_app: {
+    schema: z.object({
+      environment: z.enum(ME_ENVIRONMENTS).default('production'),
+      clientId: z.string().nullable().default(null),
+      clientSecret: z.string().nullable().default(null),
+      contactEmail: z.string().nullable().default(null),
+    }),
+    default: { environment: 'production', clientId: null, clientSecret: null, contactEmail: null },
     cache: false,
   },
   /**

@@ -1,7 +1,7 @@
 import { ERROR_CODES } from '@ecommerce/shared/contracts'
-import { env } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
 import { appError, externalServiceError } from '../../shared/errors.js'
+import { getMeAppConfig, meRedirectUri } from './config.js'
 
 /**
  * OAuth2 do Melhor Envio.
@@ -44,31 +44,26 @@ type TokenResponse = {
 }
 
 /** Config obrigatória do OAuth. Ausente → frete não configurado (erro de negócio). */
-export const meOAuthConfig = (): {
+const meOAuthConfig = async (): Promise<{
   baseUrl: string
   clientId: string
   clientSecret: string
   redirectUri: string
-} => {
-  const { MELHOR_ENVIO_CLIENT_ID, MELHOR_ENVIO_CLIENT_SECRET, MELHOR_ENVIO_REDIRECT_URI } = env
-  if (!MELHOR_ENVIO_CLIENT_ID || !MELHOR_ENVIO_CLIENT_SECRET || !MELHOR_ENVIO_REDIRECT_URI) {
+}> => {
+  const { baseUrl, clientId, clientSecret } = await getMeAppConfig()
+  if (!clientId || !clientSecret) {
     throw appError(
       ERROR_CODES.SHIPPING_UNAVAILABLE,
-      'Frete não configurado: faltam as credenciais do Melhor Envio.',
+      'Frete não configurado: preencha as credenciais do Melhor Envio em Frete, no admin.',
       503,
     )
   }
-  return {
-    baseUrl: env.MELHOR_ENVIO_BASE_URL,
-    clientId: MELHOR_ENVIO_CLIENT_ID,
-    clientSecret: MELHOR_ENVIO_CLIENT_SECRET,
-    redirectUri: MELHOR_ENVIO_REDIRECT_URI,
-  }
+  return { baseUrl, clientId, clientSecret, redirectUri: meRedirectUri() }
 }
 
 /** URL de consentimento. `state` é o anti-CSRF, validado no callback. */
-export const buildAuthorizeUrl = (state: string): string => {
-  const c = meOAuthConfig()
+export const buildAuthorizeUrl = async (state: string): Promise<string> => {
+  const c = await meOAuthConfig()
   const params = new URLSearchParams({
     client_id: c.clientId,
     redirect_uri: c.redirectUri,
@@ -94,11 +89,10 @@ const rejectionReason = async (res: Response): Promise<Record<string, string>> =
   return picked
 }
 
-const postToken = async (body: Record<string, string>): Promise<MeTokens> => {
-  const c = meOAuthConfig()
+const postToken = async (baseUrl: string, body: Record<string, string>): Promise<MeTokens> => {
   let res: Response
   try {
-    res = await fetch(`${c.baseUrl}/oauth/token`, {
+    res = await fetch(`${baseUrl}/oauth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body),
@@ -139,9 +133,9 @@ const postToken = async (body: Record<string, string>): Promise<MeTokens> => {
 }
 
 /** Troca o código de autorização por tokens (uma vez, no callback). */
-export const exchangeCodeForTokens = (code: string): Promise<MeTokens> => {
-  const c = meOAuthConfig()
-  return postToken({
+export const exchangeCodeForTokens = async (code: string): Promise<MeTokens> => {
+  const c = await meOAuthConfig()
+  return postToken(c.baseUrl, {
     grant_type: 'authorization_code',
     client_id: c.clientId,
     client_secret: c.clientSecret,
@@ -151,9 +145,9 @@ export const exchangeCodeForTokens = (code: string): Promise<MeTokens> => {
 }
 
 /** Renova o access token pelo refresh token (automático, antes de expirar). */
-export const refreshTokens = (refreshToken: string): Promise<MeTokens> => {
-  const c = meOAuthConfig()
-  return postToken({
+export const refreshTokens = async (refreshToken: string): Promise<MeTokens> => {
+  const c = await meOAuthConfig()
+  return postToken(c.baseUrl, {
     grant_type: 'refresh_token',
     client_id: c.clientId,
     client_secret: c.clientSecret,

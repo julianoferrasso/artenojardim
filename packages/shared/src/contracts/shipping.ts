@@ -59,3 +59,32 @@ export type ShippingProviderStatus = {
   /** ISO. Vencimento do access token atual — renovado sozinho bem antes disso. */
   expiresAt: string | null
 }
+
+// ─── Aplicativo do Melhor Envio (credenciais, editadas no admin) ─────────────
+
+/** Produção e sandbox são contas e apps DIFERENTES no Melhor Envio. */
+export const ME_ENVIRONMENTS = ['production', 'sandbox'] as const
+export type MeEnvironment = (typeof ME_ENVIRONMENTS)[number]
+
+/**
+ * O que o admin grava. `clientSecret` vazio ou ausente = manter o atual: o
+ * segredo nunca volta da API, então o formulário não tem como reenviá-lo.
+ */
+export const meAppSettingsSchema = z.object({
+  environment: z.enum(ME_ENVIRONMENTS),
+  clientId: z.string().trim().min(1, 'Informe o Client ID').max(64),
+  clientSecret: z.string().trim().max(200).optional(),
+  contactEmail: z.string().trim().email('Informe um e-mail válido'),
+})
+
+export type MeAppSettingsInput = z.infer<typeof meAppSettingsSchema>
+
+/** O que o admin lê. Do segredo, só os 4 últimos caracteres. */
+export type MeAppSettingsView = {
+  environment: MeEnvironment
+  clientId: string | null
+  clientSecretHint: string | null
+  contactEmail: string | null
+  /** Para colar no painel do Melhor Envio: é derivado do endereço da loja, não editável. */
+  redirectUri: string
+}

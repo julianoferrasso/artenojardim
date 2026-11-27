@@ -45,6 +45,7 @@ const SENSITIVE_FIELDS = new Set([
   'tokenHash',
   'accessToken',
   'refreshToken',
+  'clientSecret',
   'document',
   'cvc',
 ])

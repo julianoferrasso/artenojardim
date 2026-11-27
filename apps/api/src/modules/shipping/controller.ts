@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import type { QuoteRequestInput, ShippingSettings } from '@ecommerce/shared/contracts'
+import type { MeAppSettingsInput, QuoteRequestInput, ShippingSettings } from '@ecommerce/shared/contracts'
 import { ok } from '../../shared/http.js'
 import * as service from './service.js'
 import type { OAuthCallbackInput } from './schemas.js'
@@ -39,6 +39,21 @@ export const updateSettingsController = async (req: Request, res: Response): Pro
   ok(
     res,
     await service.updateShippingSettings(req.body as ShippingSettings, {
+      userId: req.auth?.sub,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    }),
+  )
+}
+
+export const getAppSettingsController = async (_req: Request, res: Response): Promise<void> => {
+  ok(res, await service.getProviderAppSettings())
+}
+
+export const updateAppSettingsController = async (req: Request, res: Response): Promise<void> => {
+  ok(
+    res,
+    await service.updateProviderAppSettings(req.body as MeAppSettingsInput, {
       userId: req.auth?.sub,
       ip: req.ip,
       userAgent: req.get('user-agent'),

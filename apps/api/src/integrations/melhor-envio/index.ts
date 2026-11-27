@@ -9,5 +9,7 @@ export {
   getConnectionStatus,
   savePendingState,
   getValidAccessToken,
+  forgetConnection,
 } from './token.js'
+export { meRedirectUri } from './config.js'
 export { calculateShipping, type MeProduct, type MeCalculateOption } from './quote.js'

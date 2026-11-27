@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { orderAddressSchema, orderShippingMethodSchema, orderItemSchema } from './orders.js'
 import { couponCodeSchema } from './coupons.js'
+import { cpfSchema } from '../constants/brazil.js'
 
 /**
  * Contratos de checkout. O front manda IDS e ESCOLHAS, nunca valores: o endereço
@@ -26,6 +27,11 @@ export const confirmCheckoutSchema = checkoutSummaryRequestSchema.extend({
    * calada. Ausente = sem a guarda (cliente antigo).
    */
   expectedProductionDays: z.number().int().nonnegative().max(365).optional(),
+  /**
+   * CPF de quem ainda não tem um no cadastro — a transportadora exige na
+   * declaração de conteúdo. Quem já tem não manda: o CPF congela no 1º pedido.
+   */
+  document: cpfSchema.optional(),
 })
 
 export type ConfirmCheckoutInput = z.infer<typeof confirmCheckoutSchema>

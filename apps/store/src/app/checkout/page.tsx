@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronDown, Lock, MessageSquare, Plus, TicketPercent } from 'lucide-react'
+import { ChevronDown, IdCard, Lock, MessageSquare, Plus, TicketPercent } from 'lucide-react'
 import { ERROR_CODES, type Address, type AppliedCoupon, type ShippingOption } from '@ecommerce/shared/contracts'
-import { businessDaysLabel } from '@ecommerce/shared/constants'
+import { businessDaysLabel, isValidCpf } from '@ecommerce/shared/constants'
 import { formatSpDeliveryDay } from '@ecommerce/shared/utils'
 import { useAuth } from '@/lib/auth'
 import { useCart } from '@/lib/cart'
@@ -13,7 +13,7 @@ import { listAddresses } from '@/lib/addresses'
 import { deliveryLabel, quoteShipping } from '@/lib/shipping'
 import { confirmCheckout } from '@/lib/checkout'
 import { validateCoupon, couponErrorMessage, isCouponError } from '@/lib/coupons'
-import { formatBRL, cn, maskCep } from '@/lib/utils'
+import { formatBRL, cn, maskCep, maskCpf } from '@/lib/utils'
 import { ApiError } from '@/lib/api'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -59,7 +59,7 @@ const EmptyNote = ({ children }: { children: React.ReactNode }) => (
 )
 
 export default function CheckoutPage() {
-  const { customer, loading: authLoading } = useAuth()
+  const { customer, loading: authLoading, applyProfile } = useAuth()
   const { cart, loading: cartLoading, refresh: refreshCart } = useCart()
   const { cep: savedCep, ready: cepReady, setCep: saveCep } = useShippingCep()
   const router = useRouter()
@@ -88,6 +88,9 @@ export default function CheckoutPage() {
   const [quoteNonce, setQuoteNonce] = useState(0)
   /** A pronta entrega acabou entre a tela e o confirmar: o prazo cresceu. */
   const [timeChanged, setTimeChanged] = useState(false)
+  /** Só para quem não tem CPF no cadastro: a transportadora exige na declaração de conteúdo. */
+  const [cpf, setCpf] = useState('')
+  const [cpfTouched, setCpfTouched] = useState(false)
 
   const items = (cart?.items ?? []).filter((i) => i.purchasable)
   const itemsKey = items.map((i) => `${i.variantId}:${i.quantity}`).join(',')
@@ -202,6 +205,9 @@ export default function CheckoutPage() {
   const total = subtotal + shippingPrice - couponDiscount
   const freeShippingAlready = coupon?.type === 'FREE_SHIPPING' && !!selectedShipping && shippingPrice === 0
   const itemCount = items.reduce((n, i) => n + i.quantity, 0)
+  const needsCpf = !!customer && !customer.document
+  const cpfValid = isValidCpf(cpf)
+  const cpfError = needsCpf && cpfTouched && !cpfValid ? 'CPF inválido. Confira os números.' : null
 
   const applyCoupon = async () => {
     const code = couponInput.trim()
@@ -220,6 +226,11 @@ export default function CheckoutPage() {
 
   const place = async () => {
     if (!addressId || !serviceId) return
+    if (needsCpf && !cpfValid) {
+      setCpfTouched(true)
+      document.getElementById('checkout-cpf')?.focus()
+      return
+    }
     setPlacing(true)
     setError(null)
     setTimeChanged(false)
@@ -232,7 +243,11 @@ export default function CheckoutPage() {
         // O prazo que o cliente viu. Se crescer no confirm, a API recusa em vez
         // de mudar a promessa calada.
         ...(selectedShipping ? { expectedProductionDays: selectedShipping.productionDays } : {}),
+        ...(needsCpf ? { document: cpf } : {}),
       })
+      // O CPF foi gravado junto com o pedido (e já congelou): a sessão em memória
+      // ainda não sabe.
+      if (needsCpf && customer) applyProfile({ ...customer, document: cpf.replace(/\D/g, ''), documentLocked: true })
       router.replace(`/checkout/pedido/${order.id}`)
     } catch (err) {
       // A pronta entrega acabou no meio do caminho: relê o carrinho (as linhas
@@ -246,6 +261,12 @@ export default function CheckoutPage() {
       }
       // O cupom pode ter expirado ou esgotado desde que foi aplicado: sai do
       // resumo para o cliente ver o total novo antes de confirmar de novo.
+      if (err instanceof ApiError && err.code === ERROR_CODES.DOCUMENT_REQUIRED) {
+        setCpfTouched(true)
+        setError('Informe o seu CPF para continuar.')
+        setPlacing(false)
+        return
+      }
       if (isCouponError(err)) {
         setCoupon(null)
         setCouponOpen(true)
@@ -390,6 +411,42 @@ export default function CheckoutPage() {
               </fieldset>
             )}
           </section>
+
+          {needsCpf && (
+            <section aria-labelledby="cpf-title">
+              <SectionTitle id="cpf-title" step={3}>
+                CPF do destinatário
+              </SectionTitle>
+              <Card className="p-5">
+                <label htmlFor="checkout-cpf" className="flex items-center gap-1.5 text-sm font-medium">
+                  <IdCard className="size-4 text-primary-ink" aria-hidden />
+                  CPF
+                </label>
+                <input
+                  id="checkout-cpf"
+                  value={cpf}
+                  onChange={(e) => setCpf(maskCpf(e.target.value))}
+                  onBlur={() => setCpfTouched(true)}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="000.000.000-00"
+                  maxLength={14}
+                  aria-invalid={!!cpfError}
+                  aria-describedby="checkout-cpf-help"
+                  className="mt-1.5 h-10 w-full max-w-60 rounded-lg border border-input bg-card px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 aria-invalid:border-destructive"
+                />
+                {cpfError ? (
+                  <p role="alert" className="mt-1.5 text-xs text-destructive">
+                    {cpfError}
+                  </p>
+                ) : (
+                  <p id="checkout-cpf-help" className="mt-1.5 text-xs text-muted-foreground">
+                    Exigido pela transportadora na declaração de envio. Pedimos uma vez só.
+                  </p>
+                )}
+              </Card>
+            </section>
+          )}
 
           {/* Observação */}
           <div className="rounded-lg border border-border bg-card">

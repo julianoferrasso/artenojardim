@@ -42,7 +42,8 @@ O que **não** pode esquecer:
   carregado automático) — ex.: frete Melhor Envio, checkout, dimensões provisórias das velas.
 - **O que aconteceu por último:** `git log --oneline -15`.
 - **Roadmap completo e decisões:** [docs/arquitetura.md](docs/arquitetura.md) (§21 Roadmap).
-- **Credenciais** (Mercado Pago, Stripe, Melhor Envio, DB) vivem em `apps/api/.env` — fora do git, nunca em log.
+- **Credenciais** (Mercado Pago, Stripe, DB) vivem em `apps/api/.env` — fora do git, nunca em log.
+  As do **Melhor Envio** (Client ID/Secret, ambiente, e-mail) ficam no admin, em **/frete** (Setting `melhor_envio_app`).
 - **Pagamentos:** Mercado Pago (Checkout Transparente, Orders API) é o provedor ativo; o Stripe está
   em standby e volta com `PAYMENT_PROVIDER=stripe`. O ambiente do MP é `MP_ENVIRONMENT=test|production`
   (os dois pares de credenciais convivem no `.env`; os de teste têm sufixo `_TEST`). Obrigatória em

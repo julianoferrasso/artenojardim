@@ -1,5 +1,5 @@
-import { env } from '../../config/env.js'
 import { externalServiceError } from '../../shared/errors.js'
+import { getMeAppConfig } from './config.js'
 import { getValidAccessToken } from './token.js'
 
 /**
@@ -8,23 +8,18 @@ import { getValidAccessToken } from './token.js'
  * sem isso a API responde 403.
  */
 
-const userAgent = (): string => {
-  const email = env.MELHOR_ENVIO_CONTACT_EMAIL ?? 'contato@artenojardim.com.br'
-  return `Arte no Jardim (${email})`
-}
-
 export const meRequest = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
-  const token = await getValidAccessToken()
+  const [token, { baseUrl, userAgent }] = await Promise.all([getValidAccessToken(), getMeAppConfig()])
 
   let res: Response
   try {
-    res = await fetch(`${env.MELHOR_ENVIO_BASE_URL}${path}`, {
+    res = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        'User-Agent': userAgent(),
+        'User-Agent': userAgent,
         ...init.headers,
       },
       signal: AbortSignal.timeout(15000),
