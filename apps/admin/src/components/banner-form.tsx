@@ -1,13 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
-import { useForm } from 'react-hook-form'
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   createBannerSchema,
   type BannerBackdrop,
   type CreateBannerInput,
   type Banner,
+  type Upload,
 } from '@ecommerce/shared/contracts'
 import type { BannerLayout, BannerPlacement } from '@ecommerce/shared/constants'
 import {
@@ -24,6 +25,11 @@ import { flattenForSelect, useCategoryTree } from '@/lib/categories'
 import { sampleImageBackdrop } from '@/lib/backdrop'
 import { useStoreTheme } from '@/lib/store-theme'
 import { ImageUploader } from '@/components/image-uploader'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
@@ -33,13 +39,25 @@ type Props = {
   placement?: BannerPlacement
   onDone: () => void
   onCancel: () => void
+  /** Avisa a página quando há alteração não salva (para confirmar antes de fechar). */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 /**
- * Formulário de criar/editar banner da home (topo ou meio). O MESMO
- * createBannerSchema que a API usa valida aqui.
+ * Formulário de criar/editar banner da home (topo ou meio), aberto dentro do
+ * card do banner. O MESMO createBannerSchema que a API usa valida aqui.
+ *
+ * Campos à esquerda, prévia fixa à direita (por container query: o card pode
+ * ser estreito mesmo numa tela larga) e a barra de salvar presa no pé.
  */
-export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDone, onCancel }: Props) => {
+export const BannerForm = ({
+  initial,
+  placement: initialPlacement = 'HERO',
+  onDone,
+  onCancel,
+  onDirtyChange,
+}: Props) => {
+  const uid = useId()
   const create = useCreateBanner()
   const update = useUpdateBanner()
   const [formError, setFormError] = useState<string | null>(null)
@@ -50,14 +68,17 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
     setValue,
     getValues,
     watch,
-    formState: { errors },
+    control,
+    formState: { errors, isDirty },
   } = useForm<CreateBannerInput>({
     resolver: zodResolver(createBannerSchema),
+    // Todo campo com valor inicial, '' nos textos: sem isso o RHF lê '' do input
+    // vazio, compara com undefined e acusa "alterações não salvas" num form intocado.
     defaultValues: initial
       ? {
           title: initial.title,
-          subtitle: initial.subtitle ?? undefined,
-          buttonLabel: initial.buttonLabel ?? undefined,
+          subtitle: initial.subtitle ?? '',
+          buttonLabel: initial.buttonLabel ?? '',
           linkCategoryId: initial.linkCategoryId,
           imageId: initial.imageId,
           backdrop: initial.backdrop,
@@ -68,6 +89,10 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
           isActive: initial.isActive,
         }
       : {
+          title: '',
+          subtitle: '',
+          buttonLabel: '',
+          imageId: null,
           isActive: true,
           position: 0,
           backdrop: null,
@@ -91,6 +116,7 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
   const layout = watch('layout') ?? 'SIDE'
   const blur = watch('blurBehindText') ?? true
   const title = watch('title')
+  const subtitle = watch('subtitle')
   const placement = watch('placement') ?? 'HERO'
   const buttonLabel = watch('buttonLabel')?.trim()
   const linkCategoryId = watch('linkCategoryId') || null
@@ -106,6 +132,10 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
         : !buttonLabel && linkCategoryId
           ? 'Escreva o texto do botão: sem ele, o banner aparece sem botão.'
           : null
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange])
+
+  // "Trocar foto" mostra o uploader sem jogar fora a atual até chegar a nova.
+  const [replacingImage, setReplacingImage] = useState(false)
   const [sampling, setSampling] = useState(false)
   const [sampleFailed, setSampleFailed] = useState(false)
   // Não é gravado: só serve para o aviso, e é refeito a cada amostragem.
@@ -188,247 +218,422 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
     }
   }
 
-  const field =
-    'h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  const onImageUploaded = (upload: Upload) => {
+    setReplacingImage(false)
+    setImageUrl(upload.url)
+    const size = upload.width && upload.height ? { width: upload.width, height: upload.height } : null
+    setImageSize(size)
+    setValue('imageId', upload.id, { shouldDirty: true })
+    // Sugestão pela proporção; o lojista troca abaixo se quiser.
+    if (size) setValue('layout', suggestLayout(size), { shouldDirty: true })
+    void sampleFromImage(upload.url, 'replace')
+  }
+
+  const removeImage = () => {
+    sampleSeq.current++
+    setSampling(false)
+    setSampleFailed(false)
+    setEdgeBusy(NOT_BUSY)
+    setReplacingImage(false)
+    setImageUrl(null)
+    setImageSize(null)
+    setValue('imageId', null, { shouldDirty: true })
+    setValue('backdrop', null, { shouldDirty: true })
+  }
+
+  const saveLabel = sampling
+    ? 'Lendo a foto…'
+    : create.isPending || update.isPending
+      ? 'Salvando…'
+      : initial
+        ? 'Salvar alterações'
+        : 'Criar banner'
 
   return (
-    <form
-      onSubmit={handleSubmit(onSubmit)}
-      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5"
-      noValidate
-    >
-      <h2 className="font-medium">{initial ? 'Editar banner' : 'Novo banner'}</h2>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="placement" className="text-sm font-medium">Onde aparece</label>
-        <select id="placement" {...register('placement')} className={field}>
-          {PLACEMENT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="title" className="text-sm font-medium">Título</label>
-        <input id="title" autoFocus {...register('title')} className={cn(field, errors.title && 'border-destructive')} />
-        {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="subtitle" className="text-sm font-medium">Subtítulo</label>
-        <textarea
-          id="subtitle"
-          rows={2}
-          {...register('subtitle')}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="buttonLabel" className="text-sm font-medium">Texto do botão</label>
-        <input id="buttonLabel" placeholder="Ex.: Ver produtos" {...register('buttonLabel')} className={field} />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="linkCategoryId" className="text-sm font-medium">Link do botão</label>
-        {/* Só monta com as opções na mão: o select não-controlado do RHF pega o
-            valor salvo ao montar, e sem a opção ainda ele mostraria "Sem link". */}
-        {categoryTree.isLoading ? (
-          <p className="text-xs text-muted-foreground">Carregando categorias…</p>
-        ) : (
-          <select id="linkCategoryId" {...register('linkCategoryId')} className={field}>
-            <option value="">Sem link (banner sem botão)</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-                {category.isActive ? '' : ' (inativa)'}
-              </option>
-            ))}
-          </select>
-        )}
-        {categoryTree.error && (
-          <p className="text-xs text-destructive">Não foi possível carregar as categorias.</p>
-        )}
-        {linkCategory && (
-          <p className="text-xs text-muted-foreground">Leva para /categorias/{linkCategory.slug}</p>
-        )}
-        {linkWarning && <p className="rounded-md bg-accent px-3 py-2 text-xs">{linkWarning}</p>}
-      </div>
-
-      <input type="hidden" {...register('imageId')} />
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium">Imagem</span>
-        {imageUrl ? (
-          <div className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl} alt="" className="h-20 w-32 rounded-md border border-border object-cover" />
-            <button
-              type="button"
-              onClick={() => {
-                sampleSeq.current++
-                setSampling(false)
-                setSampleFailed(false)
-                setEdgeBusy(NOT_BUSY)
-                setImageUrl(null)
-                setImageSize(null)
-                setValue('imageId', null, { shouldDirty: true })
-                setValue('backdrop', null, { shouldDirty: true })
-              }}
-              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent"
-            >
-              Remover
-            </button>
-          </div>
-        ) : (
-          <ImageUploader
-            folder="banners"
-            onUploaded={(upload) => {
-              setImageUrl(upload.url)
-              const size = upload.width && upload.height ? { width: upload.width, height: upload.height } : null
-              setImageSize(size)
-              setValue('imageId', upload.id, { shouldDirty: true })
-              // Sugestão pela proporção; o lojista troca abaixo se quiser.
-              if (size) setValue('layout', suggestLayout(size), { shouldDirty: true })
-              void sampleFromImage(upload.url, 'replace')
-            }}
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="@container">
+      {/* Onde e quando o banner aparece: no topo, à vista, sem rolar. */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b border-dashed border-border px-5 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Lugar</span>
+          <Controller
+            control={control}
+            name="placement"
+            render={({ field }) => (
+              <Segmented
+                ariaLabel="Lugar na home"
+                value={field.value ?? 'HERO'}
+                options={PLACEMENT_OPTIONS}
+                onChange={field.onChange}
+              />
+            )}
           />
-        )}
-        <p className="text-xs text-muted-foreground">
-          Foto larga (ex.: 1920×640) funciona bem como fundo; quadrada ou em pé, à direita do texto.
-          Sem imagem, o slide usa um fundo decorativo.
-        </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Label htmlFor={`${uid}-position`} title="Ordem entre os banners do mesmo lugar (menor primeiro)">
+            Posição
+          </Label>
+          <Input
+            id={`${uid}-position`}
+            type="number"
+            min={0}
+            aria-invalid={Boolean(errors.position)}
+            {...register('position', { valueAsNumber: true })}
+            className="h-8 w-16"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Controller
+            control={control}
+            name="isActive"
+            render={({ field }) => (
+              <Switch id={`${uid}-active`} checked={field.value ?? true} onCheckedChange={field.onChange} />
+            )}
+          />
+          <Label htmlFor={`${uid}-active`}>Visível na loja</Label>
+        </div>
+
       </div>
 
-      {imageUrl && (
-        <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1.5 text-sm font-medium">Como a foto aparece</legend>
+      <div className="grid gap-8 p-5 @3xl:grid-cols-[minmax(0,1fr)_20rem] @5xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div className="flex min-w-0 flex-col gap-8">
+          <Group title="Texto">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor={`${uid}-title`}>Título</Label>
+                <Counter value={title} max={TITLE_MAX} />
+              </div>
+              <Input
+                id={`${uid}-title`}
+                autoFocus={!initial}
+                aria-invalid={Boolean(errors.title)}
+                placeholder="Ex.: Detalhes que tornam tudo especial."
+                {...register('title')}
+              />
+              {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+            </div>
 
-          <div className="flex flex-col gap-1.5">
-            {LAYOUT_OPTIONS.map((option) => (
-              <label key={option.value} className="flex items-start gap-2 text-sm">
-                <input
-                  type="radio"
-                  value={option.value}
-                  {...register('layout')}
-                  className="mt-0.5 size-4 shrink-0"
-                />
-                <span>
-                  {option.label}
-                  <span className="block text-xs text-muted-foreground">{option.hint}</span>
-                </span>
-              </label>
-            ))}
-            <p className="text-xs text-muted-foreground">No celular, a foto fica sempre em cima do texto.</p>
-          </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor={`${uid}-subtitle`}>Subtítulo</Label>
+                <Counter value={subtitle} max={SUBTITLE_MAX} />
+              </div>
+              <Textarea
+                id={`${uid}-subtitle`}
+                rows={3}
+                aria-invalid={Boolean(errors.subtitle)}
+                placeholder="Uma frase curta que complementa o título."
+                {...register('subtitle')}
+              />
+            </div>
 
-          <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" {...register('blurBehindText')} className="mt-0.5 size-4 shrink-0" />
-            <span>
-              Desfoque atrás do texto
-              <span className="block text-xs text-muted-foreground">
-                {layout === 'COVER'
-                  ? 'A foto fica desfocada atrás do título, com um véu na cor dela.'
-                  : 'A foto se dissolve aos poucos numa cor tirada da borda dela.'}{' '}
-                Desligado, a foto fica nítida, com corte reto.
-              </span>
-            </span>
-          </label>
+            <div className="grid gap-4 @md:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${uid}-button`}>Texto do botão</Label>
+                <Input id={`${uid}-button`} placeholder="Ex.: Ver produtos" {...register('buttonLabel')} />
+              </div>
 
-          {blur && (
-            <div className="flex flex-col gap-1.5 pl-6">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="backdrop-source"
-                  checked={backdrop?.source !== 'custom'}
-                  onChange={() => void sampleFromImage(imageUrl, 'replace')}
-                  className="size-4"
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${uid}-link`}>Link do botão</Label>
+                {/* Só monta com as opções na mão: o select não-controlado do RHF pega o
+                    valor salvo ao montar, e sem a opção ainda ele mostraria "Sem link". */}
+                {categoryTree.isLoading ? (
+                  <div className="flex h-9 items-center rounded-md border border-input px-3 text-sm text-muted-foreground">
+                    Carregando categorias…
+                  </div>
+                ) : (
+                  <select id={`${uid}-link`} {...register('linkCategoryId')} className={selectClass}>
+                    <option value="">Sem link (sem botão)</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.label}
+                        {category.isActive ? '' : ' (inativa)'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {categoryTree.error && (
+              <p className="text-xs text-destructive">Não foi possível carregar as categorias.</p>
+            )}
+            {linkWarning ? (
+              <Notice>{linkWarning}</Notice>
+            ) : (
+              linkCategory && (
+                <p className="-mt-2 text-xs text-muted-foreground">
+                  O botão leva para <span className="font-mono">/categorias/{linkCategory.slug}</span>
+                </p>
+              )
+            )}
+          </Group>
+
+          <Group title="Foto">
+            <input type="hidden" {...register('imageId')} />
+            {imageUrl && !replacingImage ? (
+              <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/40 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imageUrl} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />
+                <div className="flex min-w-0 flex-col gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {imageSize ? `${imageSize.width} × ${imageSize.height} px` : 'Foto enviada'}
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setReplacingImage(true)}>
+                      Trocar foto
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={removeImage}
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <ImageUploader folder="banners" onUploaded={onImageUploaded} />
+                {replacingImage && (
+                  <button
+                    type="button"
+                    onClick={() => setReplacingImage(false)}
+                    className="self-start text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    Manter a foto atual
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Foto larga (ex.: 1920×640) funciona bem como fundo; quadrada ou em pé, à direita do texto.
+              Sem foto, o banner usa um fundo decorativo.
+            </p>
+          </Group>
+
+          {imageUrl && (
+            <Group title="Aparência">
+              <div role="radiogroup" aria-label="Posição da foto" className="grid gap-3 @md:grid-cols-2">
+                {LAYOUT_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      'flex cursor-pointer flex-col gap-3 rounded-lg border p-3 transition-colors',
+                      'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+                      layout === option.value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/40 hover:bg-accent/40',
+                    )}
+                  >
+                    <input type="radio" value={option.value} {...register('layout')} className="sr-only" />
+                    <LayoutSketch layout={option.value} active={layout === option.value} />
+                    <span>
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="block text-xs text-muted-foreground">{option.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="-mt-1 text-xs text-muted-foreground">No celular, a foto fica sempre em cima do texto.</p>
+
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                <div>
+                  <Label htmlFor={`${uid}-blur`}>Desfoque atrás do texto</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {layout === 'COVER'
+                      ? 'A foto fica desfocada atrás do título, com um véu na cor dela.'
+                      : 'A foto se dissolve aos poucos numa cor tirada da borda dela.'}{' '}
+                    Desligado, a foto fica nítida, com corte reto.
+                  </p>
+                </div>
+                <Controller
+                  control={control}
+                  name="blurBehindText"
+                  render={({ field }) => (
+                    <Switch
+                      id={`${uid}-blur`}
+                      checked={field.value ?? true}
+                      onCheckedChange={field.onChange}
+                      className="mt-0.5"
+                    />
+                  )}
                 />
-                Cor tirada da foto
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="backdrop-source"
-                  checked={backdrop?.source === 'custom'}
-                  onChange={() => setCustomColor(middleColor(backdrop))}
-                  className="size-4"
-                />
-                Cor própria
-              </label>
-              {backdrop?.source === 'custom' && (
-                <HexColorInput value={backdrop.left[0] ?? DEFAULT_CUSTOM} onChange={setCustomColor} />
+              </div>
+
+              {blur && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-sm font-medium">Cor do fundo</span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Segmented
+                      ariaLabel="Cor do fundo"
+                      value={backdrop?.source === 'custom' ? 'custom' : 'image'}
+                      options={BACKDROP_SOURCE_OPTIONS}
+                      onChange={(source) =>
+                        source === 'custom'
+                          ? setCustomColor(middleColor(backdrop))
+                          : void sampleFromImage(imageUrl, 'replace')
+                      }
+                    />
+                    {backdrop?.source === 'custom' && (
+                      <HexColorInput value={backdrop.left[0] ?? DEFAULT_CUSTOM} onChange={setCustomColor} />
+                    )}
+                  </div>
+                </div>
               )}
+
+              {sampling && <p className="text-xs text-muted-foreground">Lendo as cores da foto…</p>}
+              {!sampling && sampleFailed && blur && backdrop?.source !== 'custom' && (
+                <p className="text-xs text-destructive">
+                  Não foi possível ler as cores desta foto. Escolha uma cor própria; sem ela, a loja usa
+                  a cor secundária do tema.
+                </p>
+              )}
+            </Group>
+          )}
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-3 @3xl:sticky @3xl:top-4 @3xl:self-start">
+          <h3 className={groupTitleClass}>Prévia</h3>
+          {imageUrl ? (
+            <div className="flex flex-col gap-1.5">
+              <BannerPreview imageUrl={imageUrl} ratio={ratio} look={look} title={title || 'Título do banner'} />
+              <div className="flex gap-2 text-xs text-muted-foreground">
+                <span className="flex-1">Computador</span>
+                <span className="w-24 text-center">Celular</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex aspect-8/3 items-center justify-center rounded-md border border-dashed border-border bg-muted/40 px-6 text-center text-xs text-muted-foreground">
+              Sem foto, a loja usa o fundo decorativo do tema.
             </div>
           )}
-
-          {sampling && <p className="text-xs text-muted-foreground">Lendo as cores da foto…</p>}
-          {!sampling && sampleFailed && blur && backdrop?.source !== 'custom' && (
-            <p className="text-xs text-destructive">
-              Não foi possível ler as cores desta foto. Escolha uma cor própria; sem ela, a loja usa
-              a cor secundária do tema.
-            </p>
-          )}
-          {!sampling &&
-            warnings.map((warning) => (
-              <p key={warning} className="rounded-md bg-accent px-3 py-2 text-xs">
-                {warning}
-              </p>
-            ))}
-
-          <BannerPreview imageUrl={imageUrl} ratio={ratio} look={look} title={title || 'Título do banner'} />
-        </fieldset>
-      )}
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="position" className="text-sm font-medium">Posição</label>
-        <input
-          id="position"
-          type="number"
-          min={0}
-          {...register('position', { valueAsNumber: true })}
-          className={cn(field, errors.position && 'border-destructive')}
-        />
-        <p className="text-xs text-muted-foreground">
-          Ordem entre os banners do mesmo lugar (menor primeiro).
-        </p>
+          {!sampling && warnings.map((warning) => <Notice key={warning}>{warning}</Notice>)}
+        </aside>
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" {...register('isActive')} className="size-4" />
-        Ativo (visível na loja)
-      </label>
-
-      {formError && (
-        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {formError}
-        </p>
-      )}
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={busy}
-          className="h-10 flex-1 rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-        >
-          {busy ? 'Salvando…' : 'Salvar'}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-10 rounded-md border border-border px-4 text-sm hover:bg-accent"
-        >
-          Cancelar
-        </button>
-      </div>
+      {/* Fixa no pé do card enquanto o form rola: salvar nunca exige descer até o
+          fim. Só os botões — no celular, mais que isso cobriria o form. */}
+      <footer className="sticky bottom-0 z-10 flex flex-wrap items-center gap-3 rounded-b-lg border-t border-border bg-card/95 px-5 py-3 backdrop-blur">
+        {formError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {formError}
+          </p>
+        ) : (
+          isDirty && (
+            <span className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span aria-hidden className="size-2 rounded-full bg-primary" />
+              Alterações não salvas
+            </span>
+          )
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={busy}>
+            {saveLabel}
+          </Button>
+        </div>
+      </footer>
     </form>
   )
 }
 
-const PLACEMENT_OPTIONS: { value: BannerPlacement; label: string }[] = [
-  { value: 'HERO', label: 'Topo da página (carrossel)' },
-  { value: 'MIDDLE', label: 'Meio da página (Presentear é criar memórias)' },
-]
+const TITLE_MAX = 140
+const SUBTITLE_MAX = 400
+
+const groupTitleClass = 'text-xs font-medium uppercase tracking-wider text-muted-foreground'
+
+const selectClass =
+  'h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50'
+
+const Group = ({ title, children }: { title: string; children: ReactNode }) => (
+  <section className="flex flex-col gap-4">
+    <h3 className={groupTitleClass}>{title}</h3>
+    {children}
+  </section>
+)
+
+/** Aviso que não impede salvar — só explica o que a loja vai fazer. */
+const Notice = ({ children }: { children: ReactNode }) => (
+  <p className="rounded-md bg-accent px-3 py-2 text-xs text-accent-foreground">{children}</p>
+)
+
+const Counter = ({ value, max }: { value: string | undefined; max: number }) => {
+  const length = value?.length ?? 0
+  return (
+    <span className={cn('text-xs tabular-nums text-muted-foreground', length > max && 'text-destructive')}>
+      {length}/{max}
+    </span>
+  )
+}
+
+/** Controle segmentado: escolha única entre 2–3 opções curtas, tudo à vista. */
+const Segmented = <T extends string>({
+  ariaLabel,
+  value,
+  options,
+  onChange,
+}: {
+  ariaLabel: string
+  value: T
+  options: readonly { value: T; label: string }[]
+  onChange: (value: T) => void
+}) => (
+  <div role="radiogroup" aria-label={ariaLabel} className="inline-flex rounded-md border border-input bg-muted p-0.5">
+    {options.map((option) => {
+      const checked = option.value === value
+      return (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={checked}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            'rounded px-3 py-1 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+            checked ? 'bg-background font-medium text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {option.label}
+        </button>
+      )
+    })}
+  </div>
+)
+
+/** Esquema da posição da foto: blocos do tema, não a foto — vale antes de escolher. */
+const LayoutSketch = ({ layout, active }: { layout: BannerLayout; active: boolean }) => (
+  <span aria-hidden className="relative flex aspect-8/3 w-full items-center overflow-hidden rounded-md bg-muted">
+    <span
+      className={cn(
+        'absolute inset-y-0 right-0 transition-colors',
+        layout === 'COVER' ? 'left-0' : 'w-2/5',
+        active ? 'bg-primary/30' : 'bg-foreground/10',
+      )}
+    />
+    <span className="relative flex w-1/2 flex-col gap-1 pl-3">
+      <span className="h-1.5 w-4/5 rounded-full bg-foreground/40" />
+      <span className="h-1 w-3/5 rounded-full bg-foreground/25" />
+      <span className="mt-1 h-2 w-1/3 rounded-sm bg-primary/60" />
+    </span>
+  </span>
+)
+
+const PLACEMENT_OPTIONS = [
+  { value: 'HERO', label: 'Topo' },
+  { value: 'MIDDLE', label: 'Meio' },
+] as const satisfies readonly { value: BannerPlacement; label: string }[]
+
+const BACKDROP_SOURCE_OPTIONS = [
+  { value: 'image', label: 'Da foto' },
+  { value: 'custom', label: 'Própria' },
+] as const
 
 const LAYOUT_OPTIONS: { value: BannerLayout; label: string; hint: string }[] = [
   { value: 'SIDE', label: 'Foto à direita', hint: 'Para foto quadrada ou em pé: o texto fica ao lado dela.' },
