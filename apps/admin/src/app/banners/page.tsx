@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { Banner } from '@ecommerce/shared/contracts'
 import type { BannerPlacement } from '@ecommerce/shared/constants'
 import { useBanners, useDeleteBanner } from '@/lib/banners'
 import { BannerForm } from '@/components/banner-form'
 import { BannerSection, type OpenItem } from '@/components/banner-section'
+import { useDirtyGuard } from '@/components/inline-edit'
 import { ApiError } from '@/lib/api'
 
 type Editing = { kind: 'edit'; id: string } | { kind: 'new'; placement: BannerPlacement } | null
@@ -34,27 +35,10 @@ export default function BannersPage() {
   const del = useDeleteBanner()
   const [editing, setEditing] = useState<Editing>(null)
 
-  // Ref e não estado: o form avisa a cada mudança, e isto só é lido na hora de
-  // fechar — não precisa renderizar a página.
-  const dirtyRef = useRef(false)
-  const onDirtyChange = useCallback((dirty: boolean) => {
-    dirtyRef.current = dirty
-  }, [])
+  const { onDirtyChange, guard, reset } = useDirtyGuard(DISCARD_MESSAGE)
 
   /** Troca o que está aberto; com alteração não salva, pergunta antes. */
-  const changeEditing = (next: Editing) => {
-    if (dirtyRef.current && !confirm(DISCARD_MESSAGE)) return
-    dirtyRef.current = false
-    setEditing(next)
-  }
-
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current) e.preventDefault()
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [])
+  const changeEditing = (next: Editing) => guard(() => setEditing(next))
 
   const onDelete = (banner: Banner) => {
     if (!confirm(`Excluir o banner "${banner.title}"?`)) return
@@ -62,7 +46,7 @@ export default function BannersPage() {
       // Excluir o banner que está aberto fecha o formulário: salvar depois daria 404.
       onSuccess: () => {
         if (editing?.kind === 'edit' && editing.id === banner.id) {
-          dirtyRef.current = false
+          reset()
           setEditing(null)
         }
       },
@@ -72,7 +56,7 @@ export default function BannersPage() {
   }
 
   const onDone = () => {
-    dirtyRef.current = false
+    reset()
     setEditing(null)
   }
 
