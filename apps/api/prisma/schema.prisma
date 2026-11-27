@@ -113,6 +113,13 @@ enum BannerLayout {
   COVER
 }
 
+/// Onde o banner aparece na home: carrossel do topo ou faixa do meio.
+/// Espelha BANNER_PLACEMENTS em constants.
+enum BannerPlacement {
+  HERO
+  MIDDLE
+}
+
 /// Tipo do cupom. Espelha COUPON_TYPES em constants (guardado pelo drift).
 enum CouponType {
   PERCENTAGE
@@ -816,6 +823,9 @@ model Banner {
   /// fica desfocada com um véu atrás do título (COVER). Desligado = corte reto.
   blurBehindText Boolean      @default(true)
 
+  /// Default HERO: os banners anteriores a este campo eram todos do topo.
+  placement BannerPlacement @default(HERO)
+
   /// Ordem no carrossel. O front ordena por isto, não por data.
   position Int     @default(0)
   isActive Boolean @default(true)
@@ -827,7 +837,7 @@ model Banner {
   /// SetNull como o logo: apagar o upload não derruba o slide — cai no placeholder.
   image Upload? @relation(fields: [imageId], references: [id], onDelete: SetNull)
 
-  @@index([storeId, position])
+  @@index([storeId, placement, position])
 }
 
 /// Post do Instagram na seção "No Instagram" da home. A imagem é baixada do post

@@ -15,6 +15,7 @@ import {
   EMAIL_CAMPAIGN_STATUSES,
   INSTAGRAM_DISPLAY_MODES,
   BANNER_LAYOUTS,
+  BANNER_PLACEMENTS,
   SUPPORT_THREAD_STATUSES,
   SUPPORT_AUTHORS,
   ALERT_CHANNELS,
@@ -63,6 +64,7 @@ describe('enums: shared/constants vs schema.prisma', () => {
       INSTAGRAM_DISPLAY_MODES,
     ],
     ['BannerLayout', ($Enums as Record<string, never>)['BannerLayout'], BANNER_LAYOUTS],
+    ['BannerPlacement', ($Enums as Record<string, never>)['BannerPlacement'], BANNER_PLACEMENTS],
     [
       'SupportThreadStatus',
       ($Enums as Record<string, never>)['SupportThreadStatus'],

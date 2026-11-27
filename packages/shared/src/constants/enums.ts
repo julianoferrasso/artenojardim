@@ -124,6 +124,14 @@ export const BANNER_LAYOUTS = ['SIDE', 'COVER'] as const
 export const bannerLayoutSchema = z.enum(BANNER_LAYOUTS)
 export type BannerLayout = z.infer<typeof bannerLayoutSchema>
 
+/**
+ * Onde o banner aparece na home. HERO = carrossel do topo; MIDDLE = a faixa do
+ * meio ("Presentear é criar memórias"), entre as categorias e a confiança.
+ */
+export const BANNER_PLACEMENTS = ['HERO', 'MIDDLE'] as const
+export const bannerPlacementSchema = z.enum(BANNER_PLACEMENTS)
+export type BannerPlacement = z.infer<typeof bannerPlacementSchema>
+
 /** Situação de uma conversa do atendimento. OPEN = a vez é da loja responder. */
 export const SUPPORT_THREAD_STATUSES = ['OPEN', 'ANSWERED', 'CLOSED'] as const
 export const supportThreadStatusSchema = z.enum(SUPPORT_THREAD_STATUSES)

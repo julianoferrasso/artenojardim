@@ -9,7 +9,7 @@ import {
   type CreateBannerInput,
   type Banner,
 } from '@ecommerce/shared/contracts'
-import type { BannerLayout } from '@ecommerce/shared/constants'
+import type { BannerLayout, BannerPlacement } from '@ecommerce/shared/constants'
 import {
   bannerTextContrast,
   contrastForeground,
@@ -28,15 +28,17 @@ import { cn } from '@/lib/utils'
 
 type Props = {
   initial?: Banner
+  /** Onde o banner NOVO nasce (a seção em que o staff clicou). */
+  placement?: BannerPlacement
   onDone: () => void
   onCancel: () => void
 }
 
 /**
- * Formulário de criar/editar banner do carrossel da home. O MESMO
+ * Formulário de criar/editar banner da home (topo ou meio). O MESMO
  * createBannerSchema que a API usa valida aqui.
  */
-export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
+export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDone, onCancel }: Props) => {
   const create = useCreateBanner()
   const update = useUpdateBanner()
   const [formError, setFormError] = useState<string | null>(null)
@@ -60,10 +62,18 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
           backdrop: initial.backdrop,
           layout: initial.layout,
           blurBehindText: initial.blurBehindText,
+          placement: initial.placement,
           position: initial.position,
           isActive: initial.isActive,
         }
-      : { isActive: true, position: 0, backdrop: null, layout: 'SIDE', blurBehindText: true },
+      : {
+          isActive: true,
+          position: 0,
+          backdrop: null,
+          layout: 'SIDE',
+          blurBehindText: true,
+          placement: initialPlacement,
+        },
   })
 
   // A imagem vive fora do fluxo de texto do RHF, como no form de categoria: o
@@ -79,6 +89,7 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
   const layout = watch('layout') ?? 'SIDE'
   const blur = watch('blurBehindText') ?? true
   const title = watch('title')
+  const placement = watch('placement') ?? 'HERO'
   const [sampling, setSampling] = useState(false)
   const [sampleFailed, setSampleFailed] = useState(false)
   // Não é gravado: só serve para o aviso, e é refeito a cada amostragem.
@@ -134,7 +145,7 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
   const look: BannerLook = { layout, blur, backdrop }
   const ratio = imageSize ? imageSize.width / imageSize.height : 4 / 3
   const warnings = [
-    imageSize && resolutionWarning(imageSize, layout),
+    imageSize && resolutionWarning(imageSize, layout, placement),
     backdrop?.source === 'image' && blur && busyWarning(edgeBusy, layout),
     !sampling && legibilityWarning(look),
   ].filter((w): w is string => Boolean(w))
@@ -166,6 +177,15 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
       noValidate
     >
       <h2 className="font-medium">{initial ? 'Editar banner' : 'Novo banner'}</h2>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="placement" className="text-sm font-medium">Onde aparece</label>
+        <select id="placement" {...register('placement')} className={field}>
+          {PLACEMENT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="title" className="text-sm font-medium">Título</label>
@@ -328,7 +348,9 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
           {...register('position', { valueAsNumber: true })}
           className={cn(field, errors.position && 'border-destructive')}
         />
-        <p className="text-xs text-muted-foreground">Ordem no carrossel (menor primeiro).</p>
+        <p className="text-xs text-muted-foreground">
+          Ordem entre os banners do mesmo lugar (menor primeiro).
+        </p>
       </div>
 
       <label className="flex items-center gap-2 text-sm">
@@ -362,6 +384,11 @@ export const BannerForm = ({ initial, onDone, onCancel }: Props) => {
   )
 }
 
+const PLACEMENT_OPTIONS: { value: BannerPlacement; label: string }[] = [
+  { value: 'HERO', label: 'Topo da página (carrossel)' },
+  { value: 'MIDDLE', label: 'Meio da página (Presentear é criar memórias)' },
+]
+
 const LAYOUT_OPTIONS: { value: BannerLayout; label: string; hint: string }[] = [
   { value: 'SIDE', label: 'Foto à direita', hint: 'Para foto quadrada ou em pé: o texto fica ao lado dela.' },
   { value: 'COVER', label: 'Foto de fundo', hint: 'Para foto larga: ela cobre o banner, por trás do texto.' },
@@ -374,19 +401,27 @@ const suggestLayout = ({ width, height }: { width: number; height: number }): Ba
   width / height >= COVER_SUGGESTION_RATIO ? 'COVER' : 'SIDE'
 
 /**
- * O slide tem ~480 a ~620px de altura no computador e cobre a tela toda de
- * largura na foto de fundo; abaixo disto, a foto é ampliada e fica borrada (o
+ * O slide do topo tem ~480 a ~620px de altura no computador e cobre a tela toda
+ * de largura na foto de fundo; o do meio fica num cartão de ~1120px de largura
+ * e ~320 a ~420px de altura. Abaixo disto, a foto é ampliada e fica borrada (o
  * primeiro banner real tinha 225×225).
  */
-const MIN_SIDE_HEIGHT = 800
-const MIN_COVER_WIDTH = 1600
+const MIN_SIZE: Record<BannerPlacement, { sideHeight: number; coverWidth: number; shownHeight: number; coverWhere: string }> = {
+  HERO: { sideHeight: 800, coverWidth: 1600, shownHeight: 620, coverWhere: 'a tela inteira' },
+  MIDDLE: { sideHeight: 600, coverWidth: 1200, shownHeight: 420, coverWhere: 'o cartão inteiro' },
+}
 
-const resolutionWarning = ({ width, height }: { width: number; height: number }, layout: BannerLayout): string | null => {
-  if (layout === 'COVER' && width < MIN_COVER_WIDTH) {
-    return `Esta foto tem só ${width}×${height} px. Como fundo ela cobre a tela inteira e vai ficar borrada. Use uma foto com pelo menos ${MIN_COVER_WIDTH} px de largura.`
+const resolutionWarning = (
+  { width, height }: { width: number; height: number },
+  layout: BannerLayout,
+  placement: BannerPlacement,
+): string | null => {
+  const min = MIN_SIZE[placement]
+  if (layout === 'COVER' && width < min.coverWidth) {
+    return `Esta foto tem só ${width}×${height} px. Como fundo ela cobre ${min.coverWhere} e vai ficar borrada. Use uma foto com pelo menos ${min.coverWidth} px de largura.`
   }
-  if (layout === 'SIDE' && height < MIN_SIDE_HEIGHT) {
-    return `Esta foto tem só ${width}×${height} px. No banner ela aparece com até ~620 px de altura e vai ficar borrada. Use uma foto com pelo menos ${MIN_SIDE_HEIGHT} px de altura.`
+  if (layout === 'SIDE' && height < min.sideHeight) {
+    return `Esta foto tem só ${width}×${height} px. No banner ela aparece com até ~${min.shownHeight} px de altura e vai ficar borrada. Use uma foto com pelo menos ${min.sideHeight} px de altura.`
   }
   return null
 }

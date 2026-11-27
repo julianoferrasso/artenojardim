@@ -16,8 +16,9 @@ import { audit, diff, type AuditContext } from '../../shared/audit.js'
 import { storage } from '../../integrations/storage/index.js'
 
 /**
- * Banners do carrossel da home. São ~4 registros por loja — por isso não há
- * paginação nem repository: o service faz as chamadas Prisma direto.
+ * Banners da home (carrossel do topo e faixa do meio). São poucos registros por
+ * loja — por isso não há paginação nem repository: o service faz as chamadas
+ * Prisma direto.
  */
 
 const SELECT = {
@@ -30,6 +31,7 @@ const SELECT = {
   backdrop: true,
   layout: true,
   blurBehindText: true,
+  placement: true,
   position: true,
   isActive: true,
   createdAt: true,
@@ -64,6 +66,7 @@ const toDTO = (row: Row): Banner => ({
   backdrop: row.image ? parseBackdrop(row.backdrop) : null,
   layout: row.layout,
   blurBehindText: row.blurBehindText,
+  placement: row.placement,
   position: row.position,
   isActive: row.isActive,
   createdAt: row.createdAt.toISOString(),
@@ -85,6 +88,7 @@ const toPublicDTO = (row: Row): PublicBanner => {
     backdrop: dto.backdrop,
     layout: dto.layout,
     blurBehindText: dto.blurBehindText,
+    placement: dto.placement,
   }
 }
 
@@ -92,7 +96,7 @@ export const listPublicBanners = async (): Promise<PublicBanner[]> => {
   const rows = await prisma.banner.findMany({
     where: { storeId: getActiveStoreId(), isActive: true },
     select: SELECT,
-    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ placement: 'asc' }, { position: 'asc' }, { createdAt: 'asc' }],
   })
   return rows.map(toPublicDTO)
 }
@@ -101,7 +105,7 @@ export const listBanners = async (): Promise<Banner[]> => {
   const rows = await prisma.banner.findMany({
     where: { storeId: getActiveStoreId() },
     select: SELECT,
-    orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ placement: 'asc' }, { position: 'asc' }, { createdAt: 'asc' }],
   })
   return rows.map(toDTO)
 }
@@ -139,6 +143,7 @@ export const createBanner = async (
       backdrop: imageId && input.backdrop ? input.backdrop : Prisma.DbNull,
       layout: input.layout ?? 'SIDE',
       blurBehindText: input.blurBehindText ?? true,
+      placement: input.placement ?? 'HERO',
       position: input.position ?? 0,
       isActive: input.isActive ?? true,
     },
@@ -182,6 +187,7 @@ export const updateBanner = async (
   if (input.imageId !== undefined && !input.imageId) data.backdrop = Prisma.DbNull
   if (input.layout !== undefined) data.layout = input.layout
   if (input.blurBehindText !== undefined) data.blurBehindText = input.blurBehindText
+  if (input.placement !== undefined) data.placement = input.placement
   if (input.position !== undefined) data.position = input.position
   if (input.isActive !== undefined) data.isActive = input.isActive
 
@@ -197,6 +203,7 @@ export const updateBanner = async (
       backdrop: current.backdrop,
       layout: current.layout,
       blurBehindText: current.blurBehindText,
+      placement: current.placement,
       position: current.position,
       isActive: current.isActive,
     },
@@ -209,6 +216,7 @@ export const updateBanner = async (
       backdrop: row.backdrop,
       layout: row.layout,
       blurBehindText: row.blurBehindText,
+      placement: row.placement,
       position: row.position,
       isActive: row.isActive,
     },

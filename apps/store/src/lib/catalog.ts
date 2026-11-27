@@ -56,7 +56,7 @@ export const listProducts = (params: {
 export const getProduct = (slug: string): Promise<Product> =>
   apiFetch<Product>(ROUTES.products.detail(slug), { revalidate: REVALIDATE, tags: [`product:${slug}`] })
 
-/** Banners do carrossel da home — a API já devolve só os ativos, ordenados. */
+/** Banners da home (topo e meio) — a API já devolve só os ativos, ordenados. */
 export const getBanners = (): Promise<PublicBanner[]> =>
   apiFetch<PublicBanner[]>(ROUTES.cms.banners, { revalidate: REVALIDATE, tags: ['banners'] })
 

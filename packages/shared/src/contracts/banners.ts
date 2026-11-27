@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { bannerLayoutSchema } from '../constants/enums.js'
+import { bannerLayoutSchema, bannerPlacementSchema } from '../constants/enums.js'
 import { hexColorSchema } from './store.js'
 
 /**
@@ -44,11 +44,12 @@ export const createBannerSchema = z.object({
    */
   linkUrl: z.string().max(500).trim().optional(),
   imageId: z.string().nullable().optional(),
-  // Sem .default() nestes três: o partial() do update os reaplicaria e
+  // Sem .default() nestes quatro: o partial() do update os reaplicaria e
   // sobrescreveria o que está salvo.
   backdrop: bannerBackdropSchema.nullable().optional(),
   layout: bannerLayoutSchema.optional(),
   blurBehindText: z.boolean().optional(),
+  placement: bannerPlacementSchema.optional(),
   position: z.number().int().nonnegative().optional(),
   isActive: z.boolean().optional(),
 })
@@ -76,6 +77,7 @@ export const bannerSchema = z.object({
   backdrop: bannerBackdropSchema.nullable(),
   layout: bannerLayoutSchema,
   blurBehindText: z.boolean(),
+  placement: bannerPlacementSchema,
   position: z.number().int(),
   isActive: z.boolean(),
   createdAt: z.string(),
@@ -86,7 +88,8 @@ export type Banner = z.infer<typeof bannerSchema>
 
 /**
  * O que o visitante anônimo recebe: sem imageId (detalhe interno do storage)
- * nem isActive/posição (só ativos chegam, já ordenados). Resposta cacheável.
+ * nem isActive/posição (só ativos chegam, já ordenados). Topo e meio vêm
+ * juntos; a loja separa por `placement`. Resposta cacheável.
  */
 export const publicBannerSchema = bannerSchema.pick({
   id: true,
@@ -100,6 +103,7 @@ export const publicBannerSchema = bannerSchema.pick({
   backdrop: true,
   layout: true,
   blurBehindText: true,
+  placement: true,
 })
 
 export type PublicBanner = z.infer<typeof publicBannerSchema>
