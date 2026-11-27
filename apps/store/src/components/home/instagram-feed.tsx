@@ -45,6 +45,7 @@ export const InstagramFeed = ({ posts }: { posts: PublicInstagramPost[] }) => {
       <SnapCarousel
         ariaLabel="Posts do Instagram"
         showArrows
+        loop
         // Legenda é leitura: gira mais devagar que foto pura.
         autoAdvanceMs={posts.some((p) => p.captioned && p.caption) ? 6000 : 3500}
         trackClassName="-mx-1.5 items-start"
