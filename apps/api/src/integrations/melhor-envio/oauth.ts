@@ -1,4 +1,4 @@
-import { ERROR_CODES } from '@ecommerce/shared/contracts'
+import { ERROR_CODES, type ErrorDetail } from '@ecommerce/shared/contracts'
 import { logger } from '../../config/logger.js'
 import { appError, externalServiceError } from '../../shared/errors.js'
 import { getMeAppConfig, meRedirectUri } from './config.js'
@@ -36,6 +36,16 @@ export type MeTokens = {
   expiresInSeconds: number
 }
 
+/**
+ * Por que o ME não entregou tokens. A distinção decide o destino da conexão:
+ * - `GRANT_REJECTED`: o código ou o refresh token morreram — só reautorizando.
+ * - `CLIENT_REJECTED` (`invalid_client`) e `NOT_CONFIGURED`: o problema é a
+ *   credencial do APP, e o refresh token continua bom. Corrigir no admin basta.
+ */
+export type MeTokenRejection = 'GRANT_REJECTED' | 'CLIENT_REJECTED' | 'NOT_CONFIGURED'
+
+export type MeTokenResult = { ok: true; tokens: MeTokens } | { ok: false; reason: MeTokenRejection }
+
 type TokenResponse = {
   token_type: string
   expires_in: number
@@ -43,27 +53,35 @@ type TokenResponse = {
   refresh_token: string
 }
 
-/** Config obrigatória do OAuth. Ausente → frete não configurado (erro de negócio). */
-const meOAuthConfig = async (): Promise<{
-  baseUrl: string
-  clientId: string
-  clientSecret: string
-  redirectUri: string
-}> => {
+type OAuthConfig = { baseUrl: string; clientId: string; clientSecret: string; redirectUri: string }
+
+/** Config do OAuth, ou `null` se faltar Client ID ou Secret no admin. */
+const readOAuthConfig = async (): Promise<OAuthConfig | null> => {
   const { baseUrl, clientId, clientSecret } = await getMeAppConfig()
-  if (!clientId || !clientSecret) {
-    throw appError(
-      ERROR_CODES.SHIPPING_UNAVAILABLE,
-      'Frete não configurado: preencha as credenciais do Melhor Envio em Frete, no admin.',
-      503,
-    )
-  }
+  if (!clientId || !clientSecret) return null
   return { baseUrl, clientId, clientSecret, redirectUri: meRedirectUri() }
+}
+
+const MESSAGES: Record<MeTokenRejection, string> = {
+  NOT_CONFIGURED: 'Frete não configurado: preencha as credenciais do Melhor Envio em Frete, no admin.',
+  CLIENT_REJECTED:
+    'O Melhor Envio recusou as credenciais do aplicativo (Client ID ou Client Secret). Corrija em Frete, no admin.',
+  GRANT_REJECTED: 'Não foi possível autenticar no Melhor Envio. Reconecte a conta.',
+}
+
+/** A recusa como erro de negócio, para quem não precisa distinguir o motivo. */
+export const tokenRejectionError = (reason: MeTokenRejection, details?: ErrorDetail[]) =>
+  appError(ERROR_CODES.SHIPPING_UNAVAILABLE, MESSAGES[reason], reason === 'GRANT_REJECTED' ? 400 : 503, details)
+
+const requireOAuthConfig = async (): Promise<OAuthConfig> => {
+  const c = await readOAuthConfig()
+  if (!c) throw tokenRejectionError('NOT_CONFIGURED')
+  return c
 }
 
 /** URL de consentimento. `state` é o anti-CSRF, validado no callback. */
 export const buildAuthorizeUrl = async (state: string): Promise<string> => {
-  const c = await meOAuthConfig()
+  const c = await requireOAuthConfig()
   const params = new URLSearchParams({
     client_id: c.clientId,
     redirect_uri: c.redirectUri,
@@ -89,7 +107,7 @@ const rejectionReason = async (res: Response): Promise<Record<string, string>> =
   return picked
 }
 
-const postToken = async (baseUrl: string, body: Record<string, string>): Promise<MeTokens> => {
+const postToken = async (baseUrl: string, body: Record<string, string>): Promise<MeTokenResult> => {
   let res: Response
   try {
     res = await fetch(`${baseUrl}/oauth/token`, {
@@ -104,49 +122,49 @@ const postToken = async (baseUrl: string, body: Record<string, string>): Promise
 
   if (!res.ok) {
     // O motivo do ME é o que separa secret errado (`invalid_client`) de refresh
-    // morto (`invalid_grant`). Sem ele no log, o incidente de out/2026 só pôde
-    // ser diagnosticado lendo o banco.
-    logger.warn(
-      { status: res.status, grantType: body.grant_type, ...(await rejectionReason(res)) },
-      'Melhor Envio recusou a troca de token',
-    )
+    // morto (`invalid_grant`/`invalid_request`). Sem ele no log, o incidente de
+    // out/2026 só pôde ser diagnosticado lendo o banco.
+    const reason = await rejectionReason(res)
+    logger.warn({ status: res.status, grantType: body.grant_type, ...reason }, 'Melhor Envio recusou a troca de token')
 
     if (res.status >= 500) {
       throw externalServiceError('Melhor Envio', new Error(`HTTP ${res.status}`))
     }
-
-    // Código expirado/inválido ou refresh revogado: é o lojista que precisa
-    // reautorizar. `token.ts` reconhece este code como falha DEFINITIVA.
-    throw appError(
-      ERROR_CODES.SHIPPING_UNAVAILABLE,
-      'Não foi possível autenticar no Melhor Envio. Reconecte a conta.',
-      400,
-    )
+    return { ok: false, reason: reason.error === 'invalid_client' ? 'CLIENT_REJECTED' : 'GRANT_REJECTED' }
   }
 
   const data = (await res.json()) as TokenResponse
   return {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    expiresInSeconds: data.expires_in,
+    ok: true,
+    tokens: {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresInSeconds: data.expires_in,
+    },
   }
 }
 
 /** Troca o código de autorização por tokens (uma vez, no callback). */
 export const exchangeCodeForTokens = async (code: string): Promise<MeTokens> => {
-  const c = await meOAuthConfig()
-  return postToken(c.baseUrl, {
+  const c = await requireOAuthConfig()
+  const result = await postToken(c.baseUrl, {
     grant_type: 'authorization_code',
     client_id: c.clientId,
     client_secret: c.clientSecret,
     redirect_uri: c.redirectUri,
     code,
   })
+  if (!result.ok) throw tokenRejectionError(result.reason)
+  return result.tokens
 }
 
-/** Renova o access token pelo refresh token (automático, antes de expirar). */
-export const refreshTokens = async (refreshToken: string): Promise<MeTokens> => {
-  const c = await meOAuthConfig()
+/**
+ * Renova o access token pelo refresh token. Recusa definitiva volta como
+ * resultado, com o motivo; só falha transitória (5xx, rede) é exceção.
+ */
+export const refreshTokens = async (refreshToken: string): Promise<MeTokenResult> => {
+  const c = await readOAuthConfig()
+  if (!c) return { ok: false, reason: 'NOT_CONFIGURED' }
   return postToken(c.baseUrl, {
     grant_type: 'refresh_token',
     client_id: c.clientId,

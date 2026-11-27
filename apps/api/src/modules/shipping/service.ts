@@ -12,16 +12,18 @@ import { EVENTS } from '@ecommerce/shared/constants'
 import { prisma } from '../../config/prisma.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { getSetting, setSetting } from '../../shared/settings.js'
-import { appError, isAppError, notFound, validationError } from '../../shared/errors.js'
+import { appError, conflict, isAppError, notFound, validationError } from '../../shared/errors.js'
 import { audit, type AuditContext } from '../../shared/audit.js'
 import {
   buildAuthorizeUrl,
   completeAuthorization,
+  credentialProblemOf,
   forgetConnection,
   getConnectionStatus,
   getValidAccessToken,
   meRedirectUri,
   savePendingState,
+  type MeCredentialProblem,
 } from '../../integrations/melhor-envio/index.js'
 import { revalidateStorefront } from '../../integrations/storefront/revalidate.js'
 import { availableOf, productionDaysOf, splitLine } from '../inventory/domain/availability.js'
@@ -185,6 +187,14 @@ export const updateProviderAppSettings = async (
     throw validationError([{ field: 'clientSecret', message: 'Informe o Client Secret do aplicativo.' }])
   }
   if (Object.keys(plan.changes).length === 0) return toAppSettingsView(plan.next, meRedirectUri())
+  // A confirmação do admin é a barreira de UX; esta é a garantia: nenhum cliente
+  // da API derruba o frete sem dizer que sabe disso.
+  if (plan.resetConnection && input.confirmDisconnect !== true) {
+    throw conflict(
+      'Esta troca desconecta a conta do Melhor Envio e tira o frete do ar. Confirme para continuar.',
+      ERROR_CODES.CONFIRMATION_REQUIRED,
+    )
+  }
 
   await setSetting('melhor_envio_app', plan.next)
   if (plan.resetConnection) await forgetConnection()
@@ -227,11 +237,6 @@ export const startProviderConnection = async (
 export const finishProviderConnection = (code: string, state: string): Promise<void> =>
   completeAuthorization(code, state)
 
-export const providerStatus = async (): Promise<ShippingProviderStatus> => {
-  const { connected, expiresAt } = await getConnectionStatus()
-  return { connected, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null }
-}
-
 /**
  * O access token dura 30 dias e só era renovado quando uma cotação chegava perto
  * do vencimento. Loja com pouco tráfego deixou o refresh token vencer também, e o
@@ -241,19 +246,46 @@ export const providerStatus = async (): Promise<ShippingProviderStatus> => {
 const PROACTIVE_RENEWAL_MARGIN_MS = 7 * 24 * 60 * 60_000
 
 /**
+ * O job roda a cada 6h: depois de uma renovação bem-sucedida, faltam sempre
+ * mais de ~6,75 dias. Com menos de 6, ele já falhou por um dia inteiro.
+ */
+const RENEWAL_OVERDUE_MS = PROACTIVE_RENEWAL_MARGIN_MS - 24 * 60 * 60_000
+
+export const providerStatus = async (now = Date.now()): Promise<ShippingProviderStatus> => {
+  const { connected, expiresAt } = await getConnectionStatus()
+  return {
+    connected,
+    expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+    renewalOverdue: connected && expiresAt !== null && expiresAt - now < RENEWAL_OVERDUE_MS,
+  }
+}
+
+export type ProviderRenewal = {
+  status: ShippingProviderStatus
+  /**
+   * A renovação esbarrou na credencial do app (ausente ou recusada). A conexão
+   * NÃO caiu — o status segue conectado —, mas cai quando o token vencer.
+   */
+  blockedBy: MeCredentialProblem | null
+}
+
+/**
  * Chamado pelo job periódico. Conta não conectada não é erro: só não há o que
  * renovar. A renovação RECUSADA também não: ela zera os tokens e lança
  * SHIPPING_UNAVAILABLE — devolver o status (agora desconectado) é o que deixa o
- * job avisar a equipe na mesma rodada, e não seis horas depois.
+ * job avisar a equipe na mesma rodada, e não seis horas depois. O mesmo vale
+ * para a renovação bloqueada pela credencial, que mantém os tokens.
  */
-export const renewProviderToken = async (): Promise<ShippingProviderStatus> => {
+export const renewProviderToken = async (): Promise<ProviderRenewal> => {
   const before = await getConnectionStatus()
+  let blockedBy: MeCredentialProblem | null = null
   if (before.connected) {
     try {
       await getValidAccessToken(PROACTIVE_RENEWAL_MARGIN_MS)
     } catch (err) {
       if (!isAppError(err) || err.code !== ERROR_CODES.SHIPPING_UNAVAILABLE) throw err
+      blockedBy = credentialProblemOf(err)
     }
   }
-  return providerStatus()
+  return { status: await providerStatus(), blockedBy }
 }

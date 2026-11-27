@@ -37,15 +37,20 @@ const refreshTokens = vi.fn()
 vi.mock('../src/integrations/melhor-envio/oauth.js', () => ({
   refreshTokens: (token: string) => refreshTokens(token),
   exchangeCodeForTokens: vi.fn(),
+  tokenRejectionError: (reason: string, details?: { field: string; message: string }[]) =>
+    appError(ERROR_CODES.SHIPPING_UNAVAILABLE, reason, reason === 'GRANT_REJECTED' ? 400 : 503, details),
 }))
 
-const { getValidAccessToken, getConnectionStatus } = await import(
+const { getValidAccessToken, getConnectionStatus, credentialProblemOf } = await import(
   '../src/integrations/melhor-envio/token.js'
 )
 
 const DAY_MS = 24 * 60 * 60_000
-const rejected = () =>
-  appError(ERROR_CODES.SHIPPING_UNAVAILABLE, 'Não foi possível autenticar no Melhor Envio.', 400)
+const rejected = () => ({ ok: false, reason: 'GRANT_REJECTED' })
+const renewed = (accessToken: string, refreshToken: string, expiresInSeconds = 30 * 24 * 60 * 60) => ({
+  ok: true,
+  tokens: { accessToken, refreshToken, expiresInSeconds },
+})
 
 beforeEach(() => {
   refreshTokens.mockReset()
@@ -65,11 +70,7 @@ describe('getValidAccessToken', () => {
 
   it('com margem de dias (o job), renova antes do vencimento', async () => {
     stored.expiresAt = Date.now() + 5 * DAY_MS
-    refreshTokens.mockResolvedValue({
-      accessToken: 'access-new',
-      refreshToken: 'refresh-new',
-      expiresInSeconds: 30 * 24 * 60 * 60,
-    })
+    refreshTokens.mockResolvedValue(renewed('access-new', 'refresh-new'))
 
     await expect(getValidAccessToken(7 * DAY_MS)).resolves.toBe('access-new')
     expect(refreshTokens).toHaveBeenCalledWith('refresh-old')
@@ -79,11 +80,7 @@ describe('getValidAccessToken', () => {
 
   it('chamadas simultâneas gastam o refresh token UMA vez (ele rotaciona)', async () => {
     stored.expiresAt = Date.now() - 1
-    refreshTokens.mockResolvedValue({
-      accessToken: 'access-new',
-      refreshToken: 'refresh-new',
-      expiresInSeconds: 2_592_000,
-    })
+    refreshTokens.mockResolvedValue(renewed('access-new', 'refresh-new', 2_592_000))
 
     const results = await Promise.all([getValidAccessToken(), getValidAccessToken()])
 
@@ -93,7 +90,7 @@ describe('getValidAccessToken', () => {
 
   it('refresh recusado zera os tokens (preservando o state) e falha com 503', async () => {
     stored = { ...stored, state: 'reconexao-em-curso', expiresAt: Date.now() - 1 }
-    refreshTokens.mockRejectedValue(rejected())
+    refreshTokens.mockResolvedValue(rejected())
 
     await expect(getValidAccessToken()).rejects.toMatchObject({
       code: ERROR_CODES.SHIPPING_UNAVAILABLE,
@@ -118,11 +115,45 @@ describe('getValidAccessToken', () => {
         refreshToken: 'refresh-other',
         expiresAt: Date.now() + 30 * DAY_MS,
       }
-      throw rejected()
+      return rejected()
     })
 
     await expect(getValidAccessToken()).resolves.toBe('access-other')
     expect(stored.refreshToken).toBe('refresh-other')
+  })
+
+  it.each(['CLIENT_REJECTED', 'NOT_CONFIGURED'] as const)(
+    'credencial do app com problema (%s) MANTÉM os tokens: corrige-se no admin, sem reconectar',
+    async (reason) => {
+      stored = { ...stored, expiresAt: Date.now() + 5 * DAY_MS }
+      refreshTokens.mockResolvedValue({ ok: false, reason })
+
+      const err = await getValidAccessToken(7 * DAY_MS).catch((e: unknown) => e)
+
+      expect(err).toMatchObject({ code: ERROR_CODES.SHIPPING_UNAVAILABLE, status: 503 })
+      expect(credentialProblemOf(err)).toBe(reason)
+      expect(stored.accessToken).toBe('access-old')
+      expect(stored.refreshToken).toBe('refresh-old')
+      await expect(getConnectionStatus()).resolves.toMatchObject({ connected: true })
+    },
+  )
+
+  it('corrigida a credencial, a renovação seguinte usa o MESMO refresh token', async () => {
+    stored.expiresAt = Date.now() + 5 * DAY_MS
+    refreshTokens.mockResolvedValueOnce({ ok: false, reason: 'CLIENT_REJECTED' })
+    refreshTokens.mockResolvedValueOnce(renewed('access-new', 'refresh-new'))
+
+    await expect(getValidAccessToken(7 * DAY_MS)).rejects.toMatchObject({ status: 503 })
+    await expect(getValidAccessToken(7 * DAY_MS)).resolves.toBe('access-new')
+    expect(refreshTokens).toHaveBeenNthCalledWith(2, 'refresh-old')
+  })
+
+  it('a recusa do refresh em si não é problema de credencial', async () => {
+    stored.expiresAt = Date.now() - 1
+    refreshTokens.mockResolvedValue(rejected())
+
+    const err = await getValidAccessToken().catch((e: unknown) => e)
+    expect(credentialProblemOf(err)).toBeNull()
   })
 
   it('falha transitória (5xx/rede) mantém os tokens para tentar de novo', async () => {

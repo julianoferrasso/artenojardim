@@ -58,6 +58,11 @@ export type ShippingProviderStatus = {
   connected: boolean
   /** ISO. Vencimento do access token atual — renovado sozinho bem antes disso. */
   expiresAt: string | null
+  /**
+   * Conectado, mas a renovação automática está falhando há um dia ou mais
+   * (credencial do app recusada, ou o ME fora do ar). Cai quando o token vencer.
+   */
+  renewalOverdue: boolean
 }
 
 // ─── Aplicativo do Melhor Envio (credenciais, editadas no admin) ─────────────
@@ -75,6 +80,11 @@ export const meAppSettingsSchema = z.object({
   clientId: z.string().trim().min(1, 'Informe o Client ID').max(64),
   clientSecret: z.string().trim().max(200).optional(),
   contactEmail: z.string().trim().email('Informe um e-mail válido'),
+  /**
+   * Trocar de app ou de ambiente descarta a conexão atual e tira o frete do ar.
+   * Sem `true` aqui, a API recusa com CONFIRMATION_REQUIRED.
+   */
+  confirmDisconnect: z.boolean().optional(),
 })
 
 export type MeAppSettingsInput = z.infer<typeof meAppSettingsSchema>

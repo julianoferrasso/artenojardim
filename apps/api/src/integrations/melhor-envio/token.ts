@@ -2,7 +2,13 @@ import { ERROR_CODES } from '@ecommerce/shared/contracts'
 import { getSetting, setSetting } from '../../shared/settings.js'
 import { appError, isAppError } from '../../shared/errors.js'
 import { logger } from '../../config/logger.js'
-import { exchangeCodeForTokens, refreshTokens, type MeTokens } from './oauth.js'
+import {
+  exchangeCodeForTokens,
+  refreshTokens,
+  tokenRejectionError,
+  type MeTokenRejection,
+  type MeTokens,
+} from './oauth.js'
 
 /**
  * Ciclo de vida do access token do Melhor Envio, persistido em Setting.
@@ -62,7 +68,7 @@ const notConnected = () =>
   )
 
 /**
- * Refresh recusado pelo ME (refresh vencido/revogado ou secret errado).
+ * Refresh recusado pelo ME (refresh vencido ou revogado).
  *
  * Antes de zerar, relê o banco: se o refresh token gravado já não é o que
  * tentamos, outro processo renovou no meio do caminho (o nosso virou inválido
@@ -86,20 +92,42 @@ const handleRejectedRefresh = async (triedRefreshToken: string): Promise<string>
   throw notConnected()
 }
 
+/** Problema na credencial do APP: corrige-se no admin, sem reautorizar. */
+export type MeCredentialProblem = Exclude<MeTokenRejection, 'GRANT_REJECTED'>
+
+const CREDENTIAL_DETAIL = 'appCredentials'
+
+/**
+ * O refresh token continua bom: só a credencial do app falhou. Zerar os tokens
+ * aqui (como era até 27/11/2026) transformava um Client Secret errado, ou ainda
+ * não preenchido, em reautorização obrigatória no navegador — e frete fora do ar
+ * até alguém perceber. O motivo vai em `details` para o job avisar a equipe.
+ */
+const blockedByCredentials = (problem: MeCredentialProblem): never => {
+  logger.error(
+    { problem },
+    'Melhor Envio: renovação bloqueada pelas credenciais do aplicativo. Corrija em /frete no admin (não precisa reconectar).',
+  )
+  throw tokenRejectionError(problem, [{ field: CREDENTIAL_DETAIL, message: problem }])
+}
+
+/** Se o erro veio de uma renovação bloqueada pela credencial do app, qual foi o problema. */
+export const credentialProblemOf = (err: unknown): MeCredentialProblem | null => {
+  if (!isAppError(err) || err.code !== ERROR_CODES.SHIPPING_UNAVAILABLE) return null
+  const problem = err.details?.find((d) => d.field === CREDENTIAL_DETAIL)?.message
+  return problem === 'NOT_CONFIGURED' || problem === 'CLIENT_REJECTED' ? problem : null
+}
+
+/** EXTERNAL_SERVICE_ERROR (5xx, rede) sobe como exceção e mantém os tokens. */
 const renew = async (refreshToken: string): Promise<string> => {
-  try {
-    const renewed = await refreshTokens(refreshToken)
-    await persist(renewed)
+  const result = await refreshTokens(refreshToken)
+  if (result.ok) {
+    await persist(result.tokens)
     logger.info('Melhor Envio: token renovado')
-    return renewed.accessToken
-  } catch (err) {
-    // EXTERNAL_SERVICE_ERROR (5xx, rede) é transitório: mantém os tokens e
-    // tenta de novo na próxima chamada.
-    if (isAppError(err) && err.code === ERROR_CODES.SHIPPING_UNAVAILABLE) {
-      return handleRejectedRefresh(refreshToken)
-    }
-    throw err
+    return result.tokens.accessToken
   }
+  if (result.reason === 'GRANT_REJECTED') return handleRejectedRefresh(refreshToken)
+  return blockedByCredentials(result.reason)
 }
 
 /**

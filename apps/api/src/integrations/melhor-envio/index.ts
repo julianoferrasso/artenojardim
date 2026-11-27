@@ -10,6 +10,8 @@ export {
   savePendingState,
   getValidAccessToken,
   forgetConnection,
+  credentialProblemOf,
+  type MeCredentialProblem,
 } from './token.js'
 export { meRedirectUri } from './config.js'
 export { calculateShipping, type MeProduct, type MeCalculateOption } from './quote.js'

@@ -13,6 +13,9 @@ export const ERROR_CODES = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
   CONFLICT: 'CONFLICT',
+  /// Ação com efeito colateral grave (ex.: desconectar o frete) chegou sem a
+  /// confirmação explícita. O front mostra a confirmação e reenvia.
+  CONFIRMATION_REQUIRED: 'CONFIRMATION_REQUIRED',
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 

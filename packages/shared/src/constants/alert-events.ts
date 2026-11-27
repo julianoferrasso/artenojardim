@@ -76,7 +76,8 @@ export const ALERT_EVENT_CATALOG: Record<AlertEventType, AlertEventInfo> = {
   },
   SHIPPING_DISCONNECTED: {
     label: 'Frete desconectado',
-    description: 'A conta do Melhor Envio caiu: a loja não calcula frete até reconectar.',
+    description:
+      'A conta do Melhor Envio caiu, ou não consegue renovar o acesso: sem ação, a loja para de calcular frete.',
     group: 'system',
     defaultOn: true,
   },

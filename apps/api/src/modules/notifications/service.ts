@@ -24,6 +24,7 @@ import {
   staffProductionDueNotice,
   staffRefundFailedNotice,
   staffShippingDisconnectedNotice,
+  staffShippingRenewalBlockedNotice,
   staffSiteDownNotice,
   staffSiteUpNotice,
   type LowStockItem,
@@ -427,6 +428,15 @@ export const notifyBackInStock = (variantIds: string[], opts: { madeToOrder?: bo
 export const notifyShippingDisconnected = (): Promise<void> =>
   safely('frete desconectado', {}, async () => {
     await toStaff(['SHIPPING_DISCONNECTED'], staffShippingDisconnectedNotice({ shippingUrl: adminShippingUrl() }))
+  })
+
+/** Mesmo tipo de alerta do "desconectado": é o mesmo risco, só que antes da queda. */
+export const notifyShippingRenewalBlocked = (p: {
+  problem: 'NOT_CONFIGURED' | 'CLIENT_REJECTED'
+  expiresAt: string | null
+}): Promise<void> =>
+  safely('renovação do frete bloqueada', { problem: p.problem }, async () => {
+    await toStaff(['SHIPPING_DISCONNECTED'], staffShippingRenewalBlockedNotice({ ...p, shippingUrl: adminShippingUrl() }))
   })
 
 export const notifySiteStatus = (

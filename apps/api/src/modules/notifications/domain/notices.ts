@@ -459,6 +459,31 @@ export const staffShippingDisconnectedNotice = (p: { shippingUrl: string }): Not
   footerNote: STAFF_FOOTER,
 })
 
+/**
+ * A renovação do acesso esbarrou na credencial do app. A conexão segue de pé até
+ * o token vencer — o aviso é para corrigir ANTES, e sem reconectar.
+ */
+export const staffShippingRenewalBlockedNotice = (p: {
+  problem: 'NOT_CONFIGURED' | 'CLIENT_REJECTED'
+  expiresAt: string | null
+  shippingUrl: string
+}): NoticeContent => ({
+  subject: '[Ação necessária] Frete: a renovação do acesso ao Melhor Envio falhou',
+  heading: 'A renovação do frete falhou',
+  paragraphs: [
+    p.problem === 'NOT_CONFIGURED'
+      ? 'O Client ID ou o Client Secret do aplicativo do Melhor Envio não estão preenchidos, e a loja não conseguiu renovar o acesso.'
+      : 'O Melhor Envio recusou o Client ID ou o Client Secret do aplicativo, e a loja não conseguiu renovar o acesso.',
+    p.expiresAt
+      ? `O frete continua funcionando até ${formatSpDeadline(p.expiresAt)}. Depois disso a loja para de calcular frete, e nenhum cliente fecha pedido.`
+      : 'Sem correção, a loja para de calcular frete quando o acesso atual vencer.',
+    'Confira as credenciais na tela Frete do painel (exige administrador): devem ser as do aplicativo no painel do Melhor Envio, em Integrações → Área Dev. Não precisa reconectar. Este aviso se repete a cada 6 horas até a renovação dar certo.',
+  ],
+  ctaLabel: 'Corrigir as credenciais',
+  ctaUrl: p.shippingUrl,
+  footerNote: STAFF_FOOTER,
+})
+
 export type SiteTargetStatus = { name: string; url: string; detail: string }
 
 const joinNames = (names: string[]): string =>
