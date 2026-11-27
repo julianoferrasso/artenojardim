@@ -7,7 +7,7 @@ import {
 import { validate } from '../../middlewares/validate.js'
 import {
   authenticate,
-  authenticateCustomer,
+  optionalAuthenticateCustomer,
   requireStaff,
 } from '../../middlewares/authenticate.js'
 import { couponValidateLimiter } from '../../middlewares/rate-limit.js'
@@ -30,12 +30,16 @@ adminCouponRoutes.patch(
 )
 adminCouponRoutes.delete('/:id', controller.deleteController)
 
-/** O cliente confere um código contra o próprio carrinho, antes de confirmar. */
+/**
+ * O cliente confere um código contra o próprio carrinho, antes de confirmar.
+ * Aceita o visitante anônimo: no checkout ele só confirma o e-mail ao pagar, e o
+ * total com desconto precisa aparecer antes disso.
+ */
 export const couponRoutes: Router = Router()
 
 couponRoutes.post(
   '/validate',
-  authenticateCustomer,
+  optionalAuthenticateCustomer,
   couponValidateLimiter,
   validate({ body: validateCouponSchema }),
   controller.validateController,

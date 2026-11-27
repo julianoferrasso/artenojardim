@@ -23,7 +23,8 @@ type CartState = {
   add: (input: AddToCartInput) => Promise<void>
   setQuantity: (itemId: string, quantity: number) => Promise<void>
   remove: (itemId: string) => Promise<void>
-  refresh: () => Promise<void>
+  /** Relê da API e devolve o snapshot novo — o checkout compara o antes e o depois do login. */
+  refresh: () => Promise<Cart | null>
   /** Estado do minicarrinho. Abrir o carrinho É estado de carrinho — não vale
    *  um provider de UI só para isto (arquitetura §mais simples que cresce). */
   isOpen: boolean
@@ -40,11 +41,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { customer } = useAuth()
   const lastCustomerId = useRef<string | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<Cart | null> => {
     try {
-      setCart(await call<Cart>(ROUTES.cart.get))
+      const fresh = await call<Cart>(ROUTES.cart.get)
+      setCart(fresh)
+      return fresh
     } catch {
       // Sem carrinho ainda (visitante que nunca adicionou) — normal.
+      return null
     } finally {
       setLoading(false)
     }

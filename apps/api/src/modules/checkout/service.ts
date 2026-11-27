@@ -48,6 +48,18 @@ type Prepared = {
 
 /** Passo comum a summary e confirm: valida e recalcula, sem criar nada. */
 const prepare = async (customerId: string, req: CheckoutSummaryRequest): Promise<Prepared> => {
+  // O cliente PRIMEIRO: pedido de conta sem e-mail confirmado não sai daqui —
+  // invariante do servidor, não só da tela, e conferida antes de ir ao Melhor
+  // Envio, que custa cota e segundos.
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, storeId: getActiveStoreId(), deletedAt: null },
+    select: { email: true, phone: true, document: true, emailVerifiedAt: true },
+  })
+  if (!customer) throw appError(ERROR_CODES.ACCOUNT_DISABLED, 'Conta indisponível.', 403)
+  if (!customer.emailVerifiedAt) {
+    throw appError(ERROR_CODES.EMAIL_NOT_VERIFIED, 'Confirme o seu e-mail para finalizar a compra.', 403)
+  }
+
   const { cartId } = await resolveCart({ customerId })
   const cart = await getCart(cartId)
 
@@ -113,12 +125,15 @@ const prepare = async (customerId: string, req: CheckoutSummaryRequest): Promise
     }
   }
 
-  const customer = await prisma.customer.findUniqueOrThrow({
-    where: { id: customerId },
-    select: { email: true, phone: true, document: true },
-  })
-
-  return { cartId, address, items, shipping, totals, coupon, customer }
+  return {
+    cartId,
+    address,
+    items,
+    shipping,
+    totals,
+    coupon,
+    customer: { email: customer.email, phone: customer.phone, document: customer.document },
+  }
 }
 
 const addressSnapshot = (a: Address): Order['shippingAddress'] => ({

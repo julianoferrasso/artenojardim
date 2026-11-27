@@ -10,7 +10,7 @@ import { EVENTS } from '@ecommerce/shared/constants'
 import { prisma } from '../../config/prisma.js'
 import { env } from '../../config/env.js'
 import { logger } from '../../config/logger.js'
-import { appError, conflict, unauthorized } from '../../shared/errors.js'
+import { appError, conflict, unauthorized, validationError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit } from '../../shared/audit.js'
 import { getEmailBranding } from '../../shared/email-branding.js'
@@ -60,11 +60,12 @@ const assertPassword = async (
     select: { id: true, name: true, email: true, passwordHash: true },
   })
 
-  // Cliente sem senha só existe em conta de guest checkout, e ela não consegue
-  // logar (loginCustomer recusa passwordHash null) — logo não chega aqui. Isto é
-  // uma guarda contra um futuro com magic link, não um caminho da interface: por
-  // isso responde "sessão inválida", e não "crie uma senha".
-  if (!customer?.passwordHash) throw unauthorized('Sessão inválida')
+  if (!customer) throw unauthorized('Sessão inválida')
+  // Conta que nasceu pelo código do e-mail: não há senha atual a provar. A loja
+  // esconde estas ações e oferece "criar senha"; isto é a guarda do servidor.
+  if (!customer.passwordHash) {
+    throw appError(ERROR_CODES.PASSWORD_NOT_SET, 'Crie uma senha antes de continuar.', 409)
+  }
 
   if (!(await verifyPassword(customer.passwordHash, currentPassword))) {
     throw appError(ERROR_CODES.INVALID_CREDENTIALS, 'Senha atual incorreta', 401)
@@ -74,7 +75,8 @@ const assertPassword = async (
 }
 
 /**
- * Troca de senha por quem SABE a senha atual. Devolve uma sessão NOVA.
+ * Troca de senha por quem SABE a senha atual — ou a primeira senha de uma conta
+ * que nasceu sem. Devolve uma sessão NOVA.
  *
  * Revogar tudo e reemitir, em vez de deslogar: quem acabou de provar a senha
  * atual não é o invasor que a revogação existe para expulsar. Mandá-lo para o
@@ -91,13 +93,30 @@ export const changeCustomerPassword = async (
   input: ChangePasswordInput,
   ctx: SessionContext,
 ): Promise<CustomerSession> => {
-  await assertPassword(customerId, input.currentPassword)
+  const current = await prisma.customer.findFirst({
+    where: { id: customerId, storeId: getActiveStoreId(), deletedAt: null },
+    select: { passwordHash: true },
+  })
+  if (!current) throw unauthorized('Sessão inválida')
+
+  // PRIMEIRA senha de conta que nasceu pelo código do e-mail: a sessão é a prova
+  // (ela veio de um código entregue nesta caixa). Com senha, vale a regra de
+  // sempre — provar a atual.
+  const firstPassword = current.passwordHash === null
+  if (!firstPassword) {
+    if (!input.currentPassword) {
+      throw validationError([{ field: 'currentPassword', message: 'Informe a senha atual' }])
+    }
+    await assertPassword(customerId, input.currentPassword)
+  }
 
   const passwordHash = await hashPassword(input.password)
 
   await prisma.$transaction(async (tx) => {
-    await tx.customer.update({
-      where: { id: customerId },
+    const { count } = await tx.customer.updateMany({
+      // `passwordHash: null` no WHERE da primeira senha: se outra aba criou uma
+      // no meio do caminho, esta não a sobrescreve sem provar a senha dela.
+      where: { id: customerId, storeId: getActiveStoreId(), ...(firstPassword ? { passwordHash: null } : {}) },
       data: {
         passwordHash,
         // Trocar a senha CANCELA uma troca de e-mail pendente. É o que o aviso
@@ -107,6 +126,7 @@ export const changeCustomerPassword = async (
         pendingEmail: null,
       },
     })
+    if (count === 0) throw conflict('Esta conta já tem senha. Use "trocar senha".')
     await tx.customerToken.updateMany({
       where: { customerId, purpose: 'EMAIL_CHANGE', usedAt: null },
       data: { usedAt: new Date() },
@@ -115,7 +135,7 @@ export const changeCustomerPassword = async (
   })
 
   await audit({
-    action: EVENTS.customer.passwordChanged,
+    action: firstPassword ? EVENTS.customer.passwordCreated : EVENTS.customer.passwordChanged,
     entityType: 'Customer',
     entityId: customerId,
     context: { ip: ctx.ip, userAgent: ctx.userAgent },

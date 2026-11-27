@@ -3,6 +3,7 @@ import { renewMelhorEnvioToken } from './melhor-envio-token.js'
 import { monitorSite } from './site-monitor.js'
 import { releaseExpiredReservations } from './release-reservations.js'
 import { checkProductionDeadlines } from './production-deadlines.js'
+import { purgeEmailCodes } from './purge-email-codes.js'
 
 /**
  * Varreduras periódicas — `jobs/` é cron; reação a fato consumado mora em `queues/`.
@@ -23,6 +24,7 @@ const JOBS: Job[] = [
   { name: 'site-monitor', everyMs: 2 * MINUTE_MS, run: monitorSite },
   { name: 'release-reservations', everyMs: 5 * MINUTE_MS, run: releaseExpiredReservations },
   { name: 'production-deadlines', everyMs: HOUR_MS, run: checkProductionDeadlines },
+  { name: 'purge-email-codes', everyMs: 6 * HOUR_MS, run: purgeEmailCodes },
 ]
 
 /** A primeira execução espera o boot assentar antes de ir à rede. */

@@ -15,13 +15,14 @@ import { revokeAllSessions } from './refresh-tokens.js'
  */
 export const anonymizeCustomerData = async (customerId: string): Promise<void> => {
   await prisma.$transaction(async (tx) => {
-    // Lido antes do update, que sobrescreve o e-mail: o "Avise-me" é por
-    // endereço (o visitante não precisa de conta), e só o original o encontra.
+    // Lido antes do update, que sobrescreve o e-mail: o "Avise-me" e os códigos
+    // de acesso são por endereço (não precisam de conta), e só o original os encontra.
     const { storeId, email } = await tx.customer.findUniqueOrThrow({
       where: { id: customerId },
       select: { storeId: true, email: true },
     })
     await tx.stockNotification.deleteMany({ where: { storeId, email } })
+    await tx.customerEmailCode.deleteMany({ where: { storeId, email } })
 
     await tx.customer.update({
       where: { id: customerId },

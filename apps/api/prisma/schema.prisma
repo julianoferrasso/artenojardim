@@ -189,6 +189,7 @@ model Store {
 
   users                 User[]
   customers             Customer[]
+  customerEmailCodes    CustomerEmailCode[]
   settings              Setting[]
   auditLogs             AuditLog[]
   uploads               Upload[]
@@ -350,6 +351,36 @@ model CustomerToken {
   /// a emissão usa para invalidar os anteriores.
   @@index([customerId, purpose])
   @@index([expiresAt])
+}
+
+/// Código de 6 dígitos enviado por e-mail (checkout, "entrar com código",
+/// confirmação do cadastro). Indexado pelo E-MAIL e não pelo Customer: a conta
+/// só nasce quando o código confere — pedir código não cria cliente fantasma.
+///
+/// `codeHash` é HMAC com segredo do servidor, não SHA puro: 6 dígitos são 1
+/// milhão de combinações, e quem lesse o banco reverteria um SHA na hora.
+/// Linhas com mais de 24h somem pelo job `purge-email-codes` (e-mail de quem
+/// nunca virou cliente é dado pessoal sem finalidade).
+model CustomerEmailCode {
+  id        String    @id @default(cuid())
+  storeId   String
+  /// Minúsculo, como em Customer.email.
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  /// Consumido, ou aposentado por um código mais novo. Só `usedAt: null` vale.
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  ip        String?
+  userAgent String?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// "O código vivo mais novo deste e-mail" — a busca de toda verificação e da espera do reenvio.
+  @@index([storeId, email, createdAt])
+  @@index([createdAt])
 }
 
 /// Endereço do cliente (entrega/cobrança). Filho de Customer — a posse é sempre

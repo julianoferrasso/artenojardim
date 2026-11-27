@@ -7,36 +7,49 @@ import type {
   ChangePasswordInput,
   CustomerSessionItem,
   DeleteAccountInput,
+  EmailCodeSent,
   ForgotPasswordInput,
   RegisterInput,
   ResetPasswordInput,
   UpdateCustomerProfileInput,
+  VerifyEmailCodeInput,
 } from '@ecommerce/shared/contracts'
 import { clientFetch } from './client'
 import type { SessionResp } from './auth'
 
 /**
- * Chamadas de conta que acontecem FORA de uma sessão: confirmar e-mail, pedir e
- * concluir a recuperação de senha, e o cadastro (que hoje não emite sessão).
+ * Chamadas de conta que acontecem FORA de uma sessão: cadastro, código e link de
+ * confirmação, recuperação de senha.
  *
- * Não moram em `auth.tsx` porque nenhuma delas mexe no estado de quem está
- * logado — o provider cuida da sessão, este arquivo cuida do e-mail.
+ * Não moram em `auth.tsx`: as que devolvem sessão (código, link) só a DEVOLVEM —
+ * quem chama decide quando aplicá-la com `applySession`, depois do que mais
+ * precisar fazer (o checkout, por exemplo, guarda a escolha de frete antes).
  */
 
 const post = <T>(path: string, body: unknown): Promise<T> =>
   clientFetch<T>(path, { method: 'POST', body: JSON.stringify(body) })
 
-export type RegisterResult = { emailVerificationRequired: true; email: string }
+export type RegisterResult = { emailVerificationRequired: true; email: string; resendInSeconds: number }
 
-/** Cria a conta. Não loga: devolve o e-mail para a tela pedir a confirmação. */
+/** Cria a conta. Não loga e não leva a senha: devolve o e-mail para a tela pedir o código. */
 export const registerAccount = (input: RegisterInput): Promise<RegisterResult> =>
   post<RegisterResult>(ROUTES.auth.register, input)
 
-export const verifyEmail = (token: string): Promise<{ verified: true }> =>
-  post<{ verified: true }>(ROUTES.auth.verifyEmail, { token })
+/** Consome o link do cadastro. Devolve SESSÃO: confirmar é entrar. */
+export const verifyEmail = (token: string): Promise<SessionResp> =>
+  post<SessionResp>(ROUTES.auth.verifyEmail, { token })
 
-export const resendVerification = (email: string): Promise<{ success: true }> =>
-  post<{ success: true }>(ROUTES.auth.resendVerification, { email })
+/** Manda um código de 6 dígitos para o e-mail. Mesma resposta para cliente e não cliente. */
+export const requestEmailCode = (email: string): Promise<EmailCodeSent> =>
+  post<EmailCodeSent>(ROUTES.auth.requestEmailCode, { email })
+
+/**
+ * Confere o código e devolve SESSÃO — criando a conta se o e-mail não tiver uma
+ * (aí o `name` é obrigatório: sem ele vem NAME_REQUIRED e o código segue valendo).
+ * O carrinho anônimo deste navegador é mesclado na mesma resposta.
+ */
+export const verifyEmailCode = (input: VerifyEmailCodeInput): Promise<SessionResp> =>
+  post<SessionResp>(ROUTES.auth.verifyEmailCode, input)
 
 /**
  * Descadastro pelo link do rodapé do e-mail. Sem sessão de propósito: quem
@@ -61,7 +74,8 @@ export const updateProfile = (input: UpdateCustomerProfileInput): Promise<{ cust
   })
 
 /**
- * Troca a senha sabendo a atual. Devolve uma sessão NOVA: a API revogou as
+ * Troca a senha sabendo a atual — ou cria a PRIMEIRA, sem `currentPassword`, em
+ * conta que nasceu pelo código. Devolve uma sessão NOVA: a API revogou as
  * outras, e quem provou a senha atual não deve ser deslogado da própria aba.
  *
  * Quem chama PRECISA aplicar o resultado com `applySession` — senão a aba fica

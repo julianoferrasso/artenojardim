@@ -1,154 +1,108 @@
 'use client'
 
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { resendVerification, verifyEmail } from '@/lib/account'
-import { authErrorMessage } from '@/lib/auth'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { verifyEmail } from '@/lib/account'
+import { authErrorMessage, useAuth } from '@/lib/auth'
+import { safeNextPath } from '@/lib/next-path'
 import { AuthShell as Shell } from '@/components/auth-shell'
-import { fieldClass, submitButtonClass } from '@/lib/utils'
+import { submitButtonClass } from '@/lib/utils'
 
 /**
- * Confirmação de e-mail. O token chega por query string e é apagado da URL assim
- * que lido: sem isso ele fica no histórico do navegador e no Referer.
+ * O link do e-mail de cadastro: confirma e JÁ ENTRA, voltando para onde o
+ * cliente estava (`next`, ex.: o checkout).
+ *
+ * Por BOTÃO, e não automático ao abrir: scanners de e-mail corporativo (Safe
+ * Links e afins) abrem o link — alguns rodando JavaScript — antes do cliente, e
+ * um POST disparado no carregamento gastava o token de uso único. Ninguém além
+ * do cliente clica no botão.
  *
  * O <Suspense> não é enfeite — `useSearchParams` sem ele quebra o `next build`
  * (e passa no `next dev`, que é como o erro chega em produção).
  */
 export default function VerificarEmailPage() {
   return (
-    <Suspense fallback={<Shell title="Confirmando…" />}>
+    <Suspense fallback={<Shell title="Confirme o seu e-mail" />}>
       <VerificarEmail />
     </Suspense>
   )
 }
 
-type Status = 'verifying' | 'success' | 'error'
-
 function VerificarEmail() {
   const params = useSearchParams()
   const router = useRouter()
-  const pathname = usePathname()
-  const [status, setStatus] = useState<Status>('verifying')
+  const { applySession } = useAuth()
+  const [state, setState] = useState<'idle' | 'verifying' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  // O StrictMode do dev roda o efeito duas vezes. Sem esta trava, a segunda
-  // chamada usa um token já consumido e mostra "link inválido" numa confirmação
-  // que, na verdade, deu certo.
-  const started = useRef(false)
+  const token = params.get('token')
+  const next = safeNextPath(params.get('next'))
 
-  useEffect(() => {
-    if (started.current) return
-    started.current = true
-
-    const token = params.get('token')
-    if (!token) {
-      setStatus('error')
-      setError('Link incompleto. Abra o endereço exatamente como está no e-mail.')
-      return
-    }
-
-    void (async () => {
-      try {
-        await verifyEmail(token)
-        setStatus('success')
-        // Só depois do sucesso: o token foi consumido e não serve mais. Limpar a
-        // URL numa falha de rede tiraria do cliente a chance de recarregar a
-        // página com um token que ainda é válido.
-        router.replace(pathname)
-      } catch (e) {
-        setStatus('error')
-        setError(authErrorMessage(e))
-      }
-    })()
-  }, [params, pathname, router])
-
-  if (status === 'verifying') return <Shell title="Confirmando o seu e-mail…" />
-
-  if (status === 'success') {
+  if (!token) {
     return (
-      <Shell title="E-mail confirmado!">
+      <Shell title="Link incompleto">
         <p className="mb-6 text-center text-sm text-muted-foreground">
-          Sua conta está pronta. Agora é só entrar.
+          Abra o endereço exatamente como está no e-mail — ou entre com um código.
         </p>
-        <Link href="/entrar" className={`${submitButtonClass} flex items-center justify-center`}>
-          Entrar na minha conta
-        </Link>
+        <CodeLink next={next} />
+      </Shell>
+    )
+  }
+
+  const confirm = async () => {
+    setState('verifying')
+    setError(null)
+    try {
+      applySession(await verifyEmail(token))
+      // O token já foi gasto: `replace` tira da URL (e do histórico) o que não vale mais.
+      router.replace(next)
+    } catch (e) {
+      setState('error')
+      setError(authErrorMessage(e))
+    }
+  }
+
+  if (state === 'error') {
+    return (
+      <Shell title="Não foi possível confirmar">
+        {error && (
+          <p role="alert" className="mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <p className="mb-6 text-center text-sm text-muted-foreground">
+          Sem problema: entre com um código enviado ao seu e-mail. Ele também confirma a conta.
+        </p>
+        <CodeLink next={next} />
       </Shell>
     )
   }
 
   return (
-    <Shell title="Não foi possível confirmar">
-      {error && (
-        <p role="alert" className="mb-4 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <ResendForm />
+    <Shell title="Confirme o seu e-mail">
+      <p className="mb-6 text-center text-sm text-muted-foreground">
+        Toque no botão para confirmar que este e-mail é seu. Você já entra na sua conta.
+      </p>
+      <button
+        type="button"
+        onClick={() => void confirm()}
+        disabled={state === 'verifying'}
+        className={`${submitButtonClass} w-full`}
+      >
+        {state === 'verifying' ? 'Confirmando…' : 'Confirmar e entrar'}
+      </button>
     </Shell>
   )
 }
 
-/** Reenvio a partir do e-mail digitado: o token que falhou é um hash, não temos
- *  como saber de quem ele era — e descobrir por tentativa seria enumeração. */
-function ResendForm() {
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
-  const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  if (sent) {
-    return (
-      <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-        Se existir uma conta com esse e-mail aguardando confirmação, enviamos um link novo.
-        Confira também a caixa de spam.
-      </p>
-    )
-  }
-
+function CodeLink({ next }: { next: string }) {
   return (
-    <form
-      onSubmit={async (e) => {
-        e.preventDefault()
-        setError(null)
-        setSending(true)
-        try {
-          await resendVerification(email.trim().toLowerCase())
-          setSent(true)
-        } catch (err) {
-          setError(authErrorMessage(err))
-        } finally {
-          setSending(false)
-        }
-      }}
-      className="flex flex-col gap-4"
-      noValidate
+    <Link
+      href={`/entrar?modo=codigo&next=${encodeURIComponent(next)}`}
+      className={`${submitButtonClass} flex items-center justify-center`}
     >
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="v-email" className="text-sm font-medium">
-          Receber um link novo
-        </label>
-        <input
-          id="v-email"
-          type="email"
-          autoComplete="username"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="seu@email.com"
-          className={fieldClass}
-        />
-      </div>
-      {error && (
-        <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <button type="submit" disabled={sending} className={submitButtonClass}>
-        {sending ? 'Enviando…' : 'Reenviar confirmação'}
-      </button>
-    </form>
+      Entrar com código
+    </Link>
   )
 }
-

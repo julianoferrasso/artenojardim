@@ -5,6 +5,7 @@ import type {
   ValidateCouponInput,
 } from '@ecommerce/shared/contracts'
 import { ok, created, noContent } from '../../shared/http.js'
+import { readCartSession } from '../cart/cookies.js'
 import * as service from './service.js'
 
 const auditContext = (req: Request) => ({
@@ -38,7 +39,15 @@ export const deleteController = async (req: Request, res: Response): Promise<voi
 }
 
 /** `authenticateCustomer` no router garante o `sub`. */
+/** Logado, o carrinho do cliente; anônimo (checkout antes do código), o da sessão do navegador. */
 export const validateController = async (req: Request, res: Response): Promise<void> => {
   const { code } = req.body as ValidateCouponInput
-  ok(res, await service.validateCouponForCart(req.auth!.sub, code))
+  const sessionToken = readCartSession(req)
+  const owner =
+    req.auth?.type === 'customer'
+      ? { customerId: req.auth.sub }
+      : sessionToken
+        ? { sessionToken }
+        : null
+  ok(res, await service.validateCouponForCart(owner, code))
 }

@@ -19,6 +19,7 @@ import {
 import { ApiError } from '@/lib/api'
 import { useAuth, authErrorMessage } from '@/lib/auth'
 import { fieldClass, formatDateTime, maskCpf, submitButtonClass } from '@/lib/utils'
+import { CreatePasswordForm } from '@/components/create-password-form'
 
 /**
  * Meus dados. Cinco blocos, cada um com o seu formulário e o seu estado.
@@ -351,6 +352,11 @@ function EmailCard() {
             </button>
           </div>
         </div>
+      ) : !customer.hasPassword ? (
+        // A troca pede a senha atual, e esta conta (nascida pelo código) ainda não tem.
+        <p className="mt-4 text-sm text-muted-foreground">
+          Para trocar o e-mail, crie uma senha antes, no quadro Senha abaixo.
+        </p>
       ) : (
         !open && (
           <button
@@ -473,7 +479,7 @@ const passwordFormSchema = z
 type PasswordFormInput = z.infer<typeof passwordFormSchema>
 
 function PasswordCard() {
-  const { applySession } = useAuth()
+  const { customer, applySession } = useAuth()
   const [saved, setSaved] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -483,6 +489,23 @@ function PasswordCard() {
     reset,
     formState: { errors, isSubmitting },
   } = useForm<PasswordFormInput>({ resolver: zodResolver(passwordFormSchema) })
+
+  // Conta que nasceu pelo código do e-mail: não há senha atual para trocar.
+  if (customer && !customer.hasPassword) {
+    return (
+      <section className={cardClass}>
+        <h2 className="text-lg font-semibold tracking-tight">Criar senha</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Hoje você entra com um código enviado ao seu e-mail. Se preferir, crie uma senha — o código
+          continua funcionando.
+        </p>
+        <CreatePasswordForm
+          className="mt-5 max-w-sm"
+          onCreated={() => setSaved('Senha criada. Esta sessão continua ativa; as outras foram encerradas.')}
+        />
+      </section>
+    )
+  }
 
   return (
     <section className={cardClass}>
@@ -671,7 +694,7 @@ const CONFIRM_WORD = 'EXCLUIR'
  * Duas travas (senha + palavra digitada) porque é irreversível e não há desfazer.
  */
 function DangerZoneCard() {
-  const { logout } = useAuth()
+  const { logout, customer } = useAuth()
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
@@ -702,7 +725,12 @@ function DangerZoneCard() {
         sem identificação, porque a nota fiscal emitida não pode ser apagada. Não há como desfazer.
       </p>
 
-      {!open ? (
+      {customer && !customer.hasPassword ? (
+        // A exclusão confirma com a senha atual; a conta nascida pelo código ainda não tem.
+        <p className="mt-4 text-sm text-muted-foreground">
+          Para excluir a conta, crie uma senha antes, no quadro Senha acima. É ela que confirma que é você.
+        </p>
+      ) : !open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}

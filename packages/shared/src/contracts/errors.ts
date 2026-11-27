@@ -42,6 +42,17 @@ export const ERROR_CODES = {
   /// Pedido sem CPF do destinatário: a transportadora exige na declaração de
   /// conteúdo. O checkout reage pedindo o CPF, não mostrando o texto.
   DOCUMENT_REQUIRED: 'DOCUMENT_REQUIRED',
+  /// Código do e-mail errado, ainda com tentativas: a message diz quantas restam.
+  EMAIL_CODE_INVALID: 'EMAIL_CODE_INVALID',
+  /// Código vencido, já usado ou com as tentativas esgotadas: o front oferece outro.
+  EMAIL_CODE_EXPIRED: 'EMAIL_CODE_EXPIRED',
+  /// Pediu outro código cedo demais. `details[{ field: 'resendInSeconds' }]` traz a espera.
+  EMAIL_CODE_RESEND_TOO_SOON: 'EMAIL_CODE_RESEND_TOO_SOON',
+  /// O código conferiu mas o e-mail não tem conta, e conta não nasce sem nome.
+  /// O código NÃO foi gasto: o front pede o nome e reenvia o mesmo código.
+  NAME_REQUIRED: 'NAME_REQUIRED',
+  /// Ação que exige a senha atual numa conta que nunca criou senha.
+  PASSWORD_NOT_SET: 'PASSWORD_NOT_SET',
 
   // Catálogo
   SLUG_ALREADY_EXISTS: 'SLUG_ALREADY_EXISTS',

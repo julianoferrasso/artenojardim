@@ -65,6 +65,9 @@ export const EVENTS = {
      *  `passwordReset`: quem investiga um incidente precisa distinguir "trocou
      *  sabendo a senha" de "trocou por link de e-mail". */
     passwordChanged: 'customer.password_changed',
+    /** PRIMEIRA senha de uma conta que nasceu pelo código do e-mail. Separada de
+     *  `passwordChanged` porque não houve senha atual a provar — só a sessão. */
+    passwordCreated: 'customer.password_created',
     /** Troca de e-mail SOLICITADA. Fica na auditoria mesmo que nunca se conclua:
      *  o pedido que não virou troca é o rastro de uma tentativa de tomada. */
     emailChangeRequested: 'customer.email_change_requested',

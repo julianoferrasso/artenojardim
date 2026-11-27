@@ -4,31 +4,55 @@ import type {
   ForgotPasswordInput,
   LoginInput,
   RegisterInput,
+  RequestEmailCodeInput,
   ResendVerificationInput,
   ResetPasswordInput,
+  VerifyEmailCodeInput,
   VerifyEmailInput,
 } from '@ecommerce/shared/contracts'
 import { ok, created } from '../../shared/http.js'
 import { unauthorized } from '../../shared/errors.js'
 import { sessionContext } from '../../shared/session-context.js'
 import { confirmEmailChange } from '../customer-profile/credentials.js'
+import { mergeSessionCart } from '../cart/cookies.js'
 import { CUSTOMER_REFRESH_COOKIE, cookieOptions, respondWithSession as respond } from './cookies.js'
 import * as service from './service.js'
 
 /**
  * Cadastro não devolve sessão nem cookie: a conta só entra depois da confirmação
- * por e-mail. O `email` volta para a tela dizer "enviamos para ..." e oferecer o
- * reenvio sem pedir o endereço de novo.
+ * por e-mail (código ou link). O `email` volta para a tela dizer "enviamos para
+ * ..." e oferecer o reenvio sem pedir o endereço de novo.
  */
 export const registerController = async (req: Request, res: Response): Promise<void> => {
   const result = await service.registerCustomer(req.body as RegisterInput, sessionContext(req))
-  created(res, { emailVerificationRequired: true, email: result.email })
+  created(res, {
+    emailVerificationRequired: true,
+    email: result.email,
+    resendInSeconds: result.resendInSeconds,
+  })
 }
 
+/** O link do cadastro confirma e já entra: devolve sessão como o login. */
 export const verifyEmailController = async (req: Request, res: Response): Promise<void> => {
   const { token } = req.body as VerifyEmailInput
-  await service.verifyCustomerEmail(token, sessionContext(req))
-  ok(res, { verified: true })
+  respond(res, await service.verifyCustomerEmail(token, sessionContext(req)))
+}
+
+export const requestEmailCodeController = async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body as RequestEmailCodeInput
+  ok(res, await service.requestEmailCode(email, sessionContext(req)))
+}
+
+/**
+ * Confere o código, entra, e mescla o carrinho anônimo NESTA resposta. Mesclar
+ * pela loja depois disputaria com o efeito do carrinho, que também mescla ao ver
+ * o cliente novo — e as duas chamadas juntas podiam criar um carrinho vazio
+ * duplicado, que o checkout lia como "carrinho vazio".
+ */
+export const verifyEmailCodeController = async (req: Request, res: Response): Promise<void> => {
+  const session = await service.verifyEmailCode(req.body as VerifyEmailCodeInput, sessionContext(req))
+  await mergeSessionCart(req, res, session.customer.id, { strict: false })
+  respond(res, session)
 }
 
 /** Sempre 200: revelar se o e-mail existe seria enumerar a base de clientes. */

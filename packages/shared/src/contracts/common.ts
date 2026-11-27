@@ -78,6 +78,19 @@ export const optionalSlugSchema = z
 export const emailSchema = z.string().email('E-mail inválido').toLowerCase().trim()
 
 /**
+ * Caminho da loja para onde voltar depois de entrar (`?next=`). Só caminho
+ * relativo: `//site.com` e `/\site.com` o navegador lê como OUTRO host, e um
+ * "volte para lá" aberto vira redirecionamento de phishing com o nosso domínio.
+ */
+export const internalPathSchema = z
+  .string()
+  .max(300)
+  .refine(
+    (v) => v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\'),
+    'Caminho inválido',
+  )
+
+/**
  * Senha: mínimo de 6, sem exigir composição.
  *
  * 6 caracteres é curto e cabe em wordlist — a escolha é deliberada, por

@@ -16,6 +16,9 @@ import { cn, fieldClass, maskCep } from '@/lib/utils'
  *
  * Aberto com um CEP já conhecido (o do simulador), consulta na hora e põe o foco
  * no número: o cliente não digita de novo o que já informou.
+ *
+ * Com `onDraft` (checkout de quem ainda não confirmou o e-mail) não salva nada:
+ * devolve os dados, e o endereço só vai para a conta depois do código.
  */
 
 type FormState = {
@@ -71,12 +74,12 @@ const toPayload = (f: FormState): CreateAddressInput => ({
   ...(f.complement.trim() ? { complement: f.complement.trim() } : {}),
 })
 
-type Props = {
+type BaseProps = {
   /** Endereço em edição; sem ele, o form cria um novo. */
   address?: Address | undefined
-  /** Pré-preenchimento de um endereço novo. */
-  defaults?: { zipCode?: string | undefined; recipient?: string | undefined } | undefined
-  onSaved: (address: Address) => void
+  /** Pré-preenchimento de um endereço novo: o CEP do simulador, ou o rascunho
+   *  inteiro do checkout quando o cliente toca em "Alterar". */
+  defaults?: Partial<CreateAddressInput> | undefined
   onCancel?: (() => void) | undefined
   /** CEP completo (8 dígitos) ou null a cada mudança — o checkout cota por ele. */
   onZipCodeChange?: ((digits: string | null) => void) | undefined
@@ -86,28 +89,48 @@ type Props = {
   className?: string | undefined
 }
 
-export const AddressForm = ({
-  address,
-  defaults,
-  onSaved,
-  onCancel,
-  onZipCodeChange,
-  submitLabel = 'Salvar',
-  minimal = false,
-  className,
-}: Props) => {
-  const [form, setForm] = useState<FormState>(() =>
-    address
-      ? toForm(address)
-      : { ...EMPTY, zipCode: maskCep(defaults?.zipCode ?? ''), recipient: defaults?.recipient ?? '' },
+/** Salva na conta (`onSaved`) OU só devolve o rascunho (`onDraft`) — nunca os dois. */
+type Props = BaseProps &
+  (
+    | { onSaved: (address: Address) => void; onDraft?: undefined }
+    | { onDraft: (payload: CreateAddressInput) => void; onSaved?: undefined }
   )
+
+const fromDefaults = (d: Partial<CreateAddressInput> | undefined): FormState => ({
+  ...EMPTY,
+  zipCode: maskCep(d?.zipCode ?? ''),
+  recipient: d?.recipient ?? '',
+  street: d?.street ?? '',
+  number: d?.number ?? '',
+  complement: d?.complement ?? '',
+  district: d?.district ?? '',
+  city: d?.city ?? '',
+  state: d?.state ?? '',
+})
+
+export const AddressForm = (props: Props) => {
+  const {
+    address,
+    defaults,
+    onCancel,
+    onZipCodeChange,
+    submitLabel = 'Salvar',
+    minimal = false,
+    className,
+  } = props
+  // Rascunho reaberto já tem rua: consultar o CEP de novo apagaria o que o
+  // cliente corrigiu nela.
+  const reopenedDraft = !address && !!defaults?.street
+  const [form, setForm] = useState<FormState>(() => (address ? toForm(address) : fromDefaults(defaults)))
   const [cepLoading, setCepLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const numberRef = useRef<HTMLInputElement>(null)
   // Sem isto, sair do campo CEP sem mudá-lo consultaria de novo e apagaria a
   // correção que o cliente fez na rua.
-  const lastLookup = useRef<string | null>(address ? address.zipCode : null)
+  const lastLookup = useRef<string | null>(
+    address ? address.zipCode : reopenedDraft ? (defaults?.zipCode ?? '').replace(/\D/g, '') : null,
+  )
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -137,7 +160,7 @@ export const AddressForm = ({
   }
 
   useEffect(() => {
-    if (address) return
+    if (address || reopenedDraft) return
     void fillFromCep(form.zipCode.replace(/\D/g, '')).then((ok) => {
       if (ok) numberRef.current?.focus()
     })
@@ -158,7 +181,11 @@ export const AddressForm = ({
     setError(null)
     try {
       const payload = toPayload(form)
-      onSaved(address ? await updateAddress(address.id, payload) : await createAddress(payload))
+      if (props.onDraft) {
+        props.onDraft(payload)
+        return
+      }
+      props.onSaved(address ? await updateAddress(address.id, payload) : await createAddress(payload))
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
         setError('Confira os campos: algum dado está inválido.')

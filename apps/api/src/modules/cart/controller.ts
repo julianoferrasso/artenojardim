@@ -1,24 +1,13 @@
 import type { Request, Response } from 'express'
 import type { AddToCartInput, UpdateCartItemInput } from '@ecommerce/shared/contracts'
-import { env, isProduction } from '../../config/env.js'
 import { ok } from '../../shared/http.js'
+import { CART_SESSION_COOKIE, cartSessionCookieOptions, mergeSessionCart, readCartSession } from './cookies.js'
 import * as service from './service.js'
 
 /**
- * O carrinho é do CLIENTE logado (req.auth) ou de uma SESSÃO anônima (cookie).
- * O cookie de sessão não é HttpOnly-restrito a um path como o de auth — ele
- * precisa ser enviado em toda chamada de carrinho.
+ * O carrinho é do CLIENTE logado (req.auth) ou de uma SESSÃO anônima (cookie,
+ * ver `cookies.ts`).
  */
-const CART_SESSION_COOKIE = 'cart_session'
-
-const sessionCookieOptions = () =>
-  ({
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: 'lax' as const,
-    domain: env.COOKIE_DOMAIN,
-    maxAge: 30 * 86400 * 1000,
-  }) as const
 
 /**
  * Resolve o dono do carrinho e garante que ele exista. Cliente logado → por
@@ -33,13 +22,13 @@ const resolveOwner = async (
     return service.resolveCart({ customerId: req.auth.sub })
   }
 
-  const existing = req.cookies?.[CART_SESSION_COOKIE] as string | undefined
+  const existing = readCartSession(req)
   const sessionToken = existing ?? service.generateSessionToken()
 
   const result = await service.resolveCart({ sessionToken })
 
   if (!existing) {
-    res.cookie(CART_SESSION_COOKIE, sessionToken, sessionCookieOptions())
+    res.cookie(CART_SESSION_COOKIE, sessionToken, cartSessionCookieOptions())
   }
   return { cartId: result.cartId }
 }
@@ -74,14 +63,5 @@ export const mergeController = async (req: Request, res: Response): Promise<void
     ok(res, { merged: false })
     return
   }
-  const sessionToken = req.cookies?.[CART_SESSION_COOKIE] as string | undefined
-  if (!sessionToken) {
-    ok(res, { merged: false })
-    return
-  }
-
-  await service.mergeCarts(sessionToken, req.auth.sub)
-  // O carrinho anônimo foi consumido; limpa o cookie de sessão.
-  res.clearCookie(CART_SESSION_COOKIE, { domain: env.COOKIE_DOMAIN, path: '/' })
-  ok(res, { merged: true })
+  ok(res, { merged: await mergeSessionCart(req, res, req.auth.sub, { strict: true }) })
 }

@@ -168,6 +168,25 @@ export const resendVerificationLimiter = build({
 })
 
 /**
+ * Pedir código por e-mail. O teto POR E-MAIL é o que segura o chute: são 5
+ * tentativas por código, e 10 códigos por dia dão no máximo 50 chutes num
+ * milhão. Ele também impede usar a loja para entupir a caixa de alguém. A espera
+ * de 60 s entre envios mora no service.
+ */
+export const emailCodeRequestLimiter = build({
+  name: 'email-code-request',
+  windowMs: 24 * 60 * 60_000,
+  max: 10,
+  keyBy: (req, ip) => (req.body as { email?: string })?.email?.toLowerCase().trim() || ip,
+})
+
+/** Por IP, folgado: atrás do CGNAT das operadoras móveis, muita gente divide o mesmo IP. */
+export const emailCodeRequestIpLimiter = build({ name: 'email-code-request-ip', windowMs: 60 * 60_000, max: 30 })
+
+/** Conferir código, por IP. As 5 tentativas por código já seguram o chute; isto segura a varredura de e-mails. */
+export const emailCodeVerifyLimiter = build({ name: 'email-code-verify', windowMs: 15 * 60_000, max: 30 })
+
+/**
  * Cotação de frete: cada chamada bate no Melhor Envio (custo e latência de 1–3s).
  * Público (loja anônima cota no produto), então o limite protege a nossa cota na
  * API deles contra abuso.
@@ -262,12 +281,16 @@ export const paymentAttemptLimiter = build({
 /**
  * Conferir cupom. O teto é contra chutar códigos ("BLACK10", "BLACK15"...) até
  * achar uma campanha; 20/h sobra para quem digita errado e tenta de novo.
+ *
+ * Por cliente OU por IP: a rota aceita o visitante anônimo do checkout, e sem
+ * o IP todos eles dividiriam um único balde "anonymous". O `ip` já chega
+ * normalizado (IPv6 reduzido ao /64), então não há o bypass do `byCustomer`.
  */
 export const couponValidateLimiter = build({
   name: 'coupon-validate',
   windowMs: 60 * 60_000,
   max: 20,
-  keyBy: byCustomer,
+  keyBy: (req, ip) => req.auth?.sub ?? ip,
 })
 
 /** Comprar de novo escreve no carrinho e lê estoque item a item. */

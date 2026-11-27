@@ -17,6 +17,7 @@ import { StripePayment } from './stripe-payment'
 import { MercadoPagoPayment } from './mercadopago-payment'
 import { buttonVariants } from '@/components/ui/button'
 import { ReadyByDate } from '@/components/ready-by-date'
+import { CreatePasswordForm } from '@/components/create-password-form'
 import { cn, formatBRL } from '@/lib/utils'
 
 /**
@@ -128,6 +129,35 @@ const NextStep = ({ order }: { order: CustomerOrder }) => {
   )
 }
 
+/**
+ * A conta que nasceu pelo código do checkout não tem senha. Aqui, com a compra
+ * feita, é a hora de oferecer — antes disso seria atrito no caminho do
+ * pagamento. Opcional de verdade: sem senha, ela entra sempre por código.
+ */
+const CreatePasswordOffer = () => {
+  const { customer } = useAuth()
+  const [done, setDone] = useState(false)
+
+  if (done) {
+    return (
+      <p role="status" className="mt-6 text-sm text-muted-foreground">
+        Senha criada. Da próxima vez, é só entrar com o e-mail e a senha.
+      </p>
+    )
+  }
+  if (!customer || customer.hasPassword) return null
+
+  return (
+    <div className="mt-6 w-full max-w-sm rounded-lg border border-border bg-muted/30 p-4 text-left">
+      <p className="text-sm font-medium">Quer entrar mais rápido da próxima vez?</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Crie uma senha (opcional). Sem ela, você entra sempre com um código enviado ao seu e-mail.
+      </p>
+      <CreatePasswordForm className="mt-3" onCreated={() => setDone(true)} />
+    </div>
+  )
+}
+
 const PaidHero = ({ order }: { order: CustomerOrder }) => {
   const headingRef = useRef<HTMLHeadingElement>(null)
 
@@ -157,6 +187,7 @@ const PaidHero = ({ order }: { order: CustomerOrder }) => {
         <NextStep order={order} />
       </p>
       <OrderActions orderId={order.id} className="mt-6 w-full sm:w-auto" />
+      <CreatePasswordOffer />
     </Card>
   )
 }

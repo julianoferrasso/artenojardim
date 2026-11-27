@@ -19,9 +19,9 @@ import { clientFetch as call, setAccessToken } from './client'
 export type SessionResp = { customer: AuthCustomer; tokens: { accessToken: string } }
 
 /**
- * `register` NÃO está aqui: o cadastro não cria sessão — o cliente precisa
- * confirmar o e-mail antes de entrar. Ele vive em `lib/account.ts`, junto das
- * outras chamadas que acontecem fora de uma sessão.
+ * `register` e o código por e-mail NÃO estão aqui: o cadastro não cria sessão, e
+ * o código devolve uma que quem chama aplica com `applySession` na hora certa.
+ * Vivem em `lib/account.ts`, junto das outras chamadas fora de uma sessão.
  */
 type AuthState = {
   customer: AuthCustomer | null
@@ -123,11 +123,15 @@ export const authErrorMessage = (err: unknown): string => {
   if (!(err instanceof ApiError)) return 'Não foi possível conectar. Tente novamente.'
   switch (err.code) {
     case 'INVALID_CREDENTIALS':
-      return 'E-mail ou senha inválidos.'
+      // Conta criada pelo código do checkout não tem senha: o "senha errada" é,
+      // para ela, "você nunca criou uma".
+      return 'E-mail ou senha inválidos. Comprou sem criar senha? Entre com um código por e-mail.'
     case 'EMAIL_ALREADY_EXISTS':
-      return 'Já existe uma conta com este e-mail. Faça login.'
+      return 'Já existe uma conta com este e-mail. Entre com a senha ou com um código por e-mail.'
     case 'EMAIL_NOT_VERIFIED':
-      return 'Confirme o seu e-mail antes de entrar. Verifique a sua caixa de entrada.'
+      return 'Falta confirmar o seu e-mail.'
+    case 'NAME_REQUIRED':
+      return 'Informe seu nome para criar a conta.'
     case 'EMAIL_TOKEN_INVALID':
       return 'Este link expirou ou já foi utilizado. Solicite um novo.'
     case 'EMAIL_ALREADY_VERIFIED':

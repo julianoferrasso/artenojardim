@@ -13,6 +13,7 @@ export {
 } from './send.js'
 export { type EmailBranding } from './layout.js'
 export { renderVerifyEmail } from './templates/verify-email.js'
+export { renderEmailCode } from './templates/email-code.js'
 export { renderResetPassword } from './templates/reset-password.js'
 export { renderConfirmEmailChange } from './templates/confirm-email-change.js'
 export { renderEmailChangeNotice } from './templates/email-change-notice.js'

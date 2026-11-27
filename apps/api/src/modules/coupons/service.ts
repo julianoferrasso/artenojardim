@@ -12,7 +12,7 @@ import { prisma } from '../../config/prisma.js'
 import { appError, conflict, notFound, type AppError } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { audit, diff, type AuditContext } from '../../shared/audit.js'
-import { resolveCart, getCart } from '../cart/service.js'
+import { resolveCart, getCart, type CartOwner } from '../cart/service.js'
 import {
   checkCouponEligibility,
   computeCouponDiscount,
@@ -226,9 +226,13 @@ const ineligible = (code: CouponIneligibility, minOrderValue?: number | null): A
 /**
  * Acha o cupom e confere se vale para este cliente e este subtotal. Lança com o
  * code do motivo. Usado pela validação da loja e pelo prepare do checkout.
+ *
+ * `customerId` null é o visitante do checkout que ainda não confirmou o e-mail:
+ * o limite POR CLIENTE não tem como ser conferido aqui, e quem segura é o
+ * confirm, que recota com o cliente já identificado (`claimCouponUse`).
  */
 export const resolveCoupon = async (
-  customerId: string,
+  customerId: string | null,
   code: string,
   subtotal: number,
 ): Promise<CheckoutCoupon> => {
@@ -240,7 +244,7 @@ export const resolveCoupon = async (
   if (!coupon) throw ineligible(ERROR_CODES.COUPON_NOT_FOUND)
 
   const customerUses =
-    coupon.usageLimitPerCustomer === null
+    coupon.usageLimitPerCustomer === null || customerId === null
       ? 0
       : await prisma.order.count({
           where: { storeId, couponId: coupon.id, customerId, canceledAt: null },
@@ -253,21 +257,23 @@ export const resolveCoupon = async (
 }
 
 /**
- * Prévia para a tela de checkout, contra o carrinho atual. O frete ainda não
- * entra: em FREE_SHIPPING a loja mostra como desconto o frete que o cliente
+ * Prévia para a tela de checkout, contra o carrinho atual — do cliente logado ou
+ * da sessão anônima (`owner` null = nem cookie de carrinho há). O frete ainda
+ * não entra: em FREE_SHIPPING a loja mostra como desconto o frete que o cliente
  * escolher. O confirm recalcula tudo — este número nunca é usado para cobrar.
  */
 export const validateCouponForCart = async (
-  customerId: string,
+  owner: CartOwner | null,
   code: string,
 ): Promise<AppliedCoupon> => {
-  const { cartId } = await resolveCart({ customerId })
-  const cart = await getCart(cartId)
-  if (cart.subtotal === 0) {
-    throw appError(ERROR_CODES.CART_EMPTY, 'Seu carrinho está vazio.', 400)
-  }
+  const cartEmpty = () => appError(ERROR_CODES.CART_EMPTY, 'Seu carrinho está vazio.', 400)
+  if (!owner) throw cartEmpty()
 
-  const coupon = await resolveCoupon(customerId, code, cart.subtotal)
+  const { cartId } = await resolveCart(owner)
+  const cart = await getCart(cartId)
+  if (cart.subtotal === 0) throw cartEmpty()
+
+  const coupon = await resolveCoupon('customerId' in owner ? owner.customerId : null, code, cart.subtotal)
   const { products } = computeCouponDiscount(coupon, { subtotal: cart.subtotal, shipping: 0 })
   return { code: coupon.code, type: coupon.type, discountCents: products }
 }

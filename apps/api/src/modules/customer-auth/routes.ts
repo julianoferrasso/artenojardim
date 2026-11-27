@@ -4,14 +4,19 @@ import {
   forgotPasswordSchema,
   loginSchema,
   registerSchema,
+  requestEmailCodeSchema,
   resendVerificationSchema,
   resetPasswordSchema,
+  verifyEmailCodeSchema,
   verifyEmailSchema,
 } from '@ecommerce/shared/contracts'
 import { validate } from '../../middlewares/validate.js'
 import { authenticateCustomer } from '../../middlewares/authenticate.js'
 import {
   confirmEmailChangeLimiter,
+  emailCodeRequestIpLimiter,
+  emailCodeRequestLimiter,
+  emailCodeVerifyLimiter,
   forgotPasswordLimiter,
   loginLimiter,
   refreshLimiter,
@@ -40,6 +45,10 @@ customerAuthRoutes.post('/logout', controller.logoutController)
 customerAuthRoutes.get('/me', authenticateCustomer, controller.meController)
 
 customerAuthRoutes.post('/verify-email', verifyEmailLimiter, validate({ body: verifyEmailSchema }), controller.verifyEmailController)
+/** Código por e-mail (checkout, "entrar com código", cadastro). O limite POR
+ *  E-MAIL vem depois do validate: pedido malformado não gasta a cota de ninguém. */
+customerAuthRoutes.post('/email-code/request', emailCodeRequestIpLimiter, validate({ body: requestEmailCodeSchema }), emailCodeRequestLimiter, controller.requestEmailCodeController)
+customerAuthRoutes.post('/email-code/verify', emailCodeVerifyLimiter, validate({ body: verifyEmailCodeSchema }), controller.verifyEmailCodeController)
 customerAuthRoutes.post('/resend-verification', resendVerificationLimiter, validate({ body: resendVerificationSchema }), controller.resendVerificationController)
 customerAuthRoutes.post('/forgot-password', forgotPasswordLimiter, validate({ body: forgotPasswordSchema }), controller.forgotPasswordController)
 customerAuthRoutes.post('/reset-password', resetPasswordLimiter, validate({ body: resetPasswordSchema }), controller.resetPasswordController)

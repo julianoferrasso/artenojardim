@@ -24,6 +24,9 @@ export const ROUTES = {
     resetPassword: `${base}/auth/reset-password`,
     verifyEmail: `${base}/auth/verify-email`,
     resendVerification: `${base}/auth/resend-verification`,
+    /** Código de 6 dígitos por e-mail: checkout, "entrar com código" e confirmação. */
+    requestEmailCode: `${base}/auth/email-code/request`,
+    verifyEmailCode: `${base}/auth/email-code/verify`,
     /** Consome o link da troca de e-mail. PÚBLICA, como as outras rotas de link:
      *  quem clica costuma estar deslogado, e a posse do token é a prova. */
     confirmEmailChange: `${base}/auth/confirm-email-change`,

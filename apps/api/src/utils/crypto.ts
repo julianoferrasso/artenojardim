@@ -1,5 +1,5 @@
 import argon2 from 'argon2'
-import { randomBytes, randomInt, createHash, timingSafeEqual } from 'node:crypto'
+import { randomBytes, randomInt, createHash, createHmac, timingSafeEqual } from 'node:crypto'
 
 /**
  * Argon2id e não bcrypt/SHA.
@@ -64,6 +64,14 @@ export const generateOpaqueToken = (): string => randomBytes(32).toString('base6
  */
 export const hashToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex')
+
+/**
+ * HMAC-SHA256 em hex — para segredo de BAIXA entropia, como o código de 6
+ * dígitos. O SHA puro dele se reverte testando o milhão de combinações; o HMAC
+ * exige também a chave, que não mora no banco.
+ */
+export const hmacSha256 = (key: string, value: string): string =>
+  createHmac('sha256', key).update(value).digest('hex')
 
 /** Comparação sem vazar, pelo tempo, ONDE os valores divergem. */
 export const safeCompare = (a: string, b: string): boolean => {

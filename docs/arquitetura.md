@@ -595,7 +595,10 @@ Projeção materializada. `available = onHand - reserved`. Não é a verdade —
 #### Clientes
 
 **`Customer`** — `id`, `storeId`, `name`, `email`, `passwordHash?`, `phone?`, `document?`, `documentType?`, `birthDate?`, `emailVerifiedAt?`, `acceptsMarketing`, `deletedAt?`, timestamps. `@@unique([storeId, email])`.
-`passwordHash` opcional: guest checkout cria o cliente sem senha; ele pode definir uma depois e assumir o histórico.
+`passwordHash` opcional: o checkout sem conta cria o cliente **sem senha** quando o código do e-mail confere; ele pode definir uma depois (página do pedido pago, `/conta/dados`).
+**Invariante: senha só existe em conta com e-mail confirmado.** O cadastro não grava senha (a loja a guarda na aba e grava como "primeira senha" logo após a confirmação), e confirmar uma conta que tinha senha anterior à confirmação a descarta — senão quem cadastrasse o e-mail alheio com uma senha sua teria a conta quando o dono confirmasse a caixa (pré-sequestro).
+
+**`CustomerEmailCode`** — código de 6 dígitos por e-mail (checkout, "entrar com código", cadastro): `storeId`, `email`, `codeHash` (HMAC com chave derivada de `JWT_CUSTOMER_ACCESS_SECRET`, nunca SHA puro), `expiresAt`, `attempts`, `usedAt?`. Indexado por **e-mail**, não por cliente: a conta só nasce quando o código confere. O job `purge-email-codes` apaga linhas com mais de 24 h.
 
 **`Address`** — `id`, `customerId`, `label?`, `recipient`, `zipCode`, `street`, `number`, `complement?`, `district`, `city`, `state`, `country`, `isDefault`, timestamps.
 
@@ -936,7 +939,7 @@ Data, tipo, quantidade com sinal, saldo acumulado (`SUM() OVER (ORDER BY created
 
 ```text
 1. CARRINHO      GET/POST /cart              valida disponibilidade
-2. IDENTIFICAÇÃO login | cadastro | guest    e-mail obrigatório
+2. IDENTIFICAÇÃO sem conta: e-mail + nome     código de 6 dígitos SÓ no "Ir para o pagamento"
 3. ENDEREÇO      POST /checkout/address      CEP → ViaCEP → autopreenche
 4. FRETE         POST /checkout/shipping     Melhor Envio → opções
 5. RESUMO        GET  /checkout/summary      backend recalcula TUDO
@@ -960,6 +963,22 @@ O passo 6 **recalcula do zero, a partir do banco**, ignorando integralmente o qu
 - total ← `checkout/domain/totals.ts`, função pura, testada isoladamente
 
 O request de `confirm` carrega, no máximo, **ids e escolhas**. Nunca valores. Um cliente que edite o preço no DevTools recebe o preço real.
+
+### Checkout sem conta — o e-mail é confirmado por código, na hora de pagar
+
+Desde 27/11/2026 o `/checkout` abre para quem não entrou: e-mail, nome, endereço (rascunho só na tela),
+frete (cotação pública por CEP), CPF e cupom (validado contra o carrinho da sessão anônima; o limite por
+cliente fica para o `confirm`). No "Ir para o pagamento" a API manda um **código de 6 dígitos** (assunto do
+e-mail começa pelo código); digitado no próprio checkout, ele cria a conta sem senha (ou entra na que
+existia) e devolve sessão — a resposta já mescla o carrinho anônimo, no servidor. A loja então salva o
+rascunho como endereço da conta e chama o `confirm` de sempre.
+
+Por que código e não link: o link abre no navegador do app de e-mail, longe da aba do carrinho, e scanners
+de e-mail corporativo consomem token de uso único. O link continua no e-mail do cadastro — por botão
+("Confirmar e entrar", nunca POST automático) e já entrando.
+
+`prepare` (summary e confirm) recusa com `EMAIL_NOT_VERIFIED` conta sem e-mail confirmado, **antes** de
+cotar frete: pedido sem e-mail confirmado é invariante do servidor, não só da tela.
 
 **A reserva vem antes do pedido** (desde a encomenda): é ela que decide quanto de cada linha é produzido, e isso
 vai para o snapshot e para `Order.productionDays` (o maior prazo entre as linhas com parte produzida). Itens em
@@ -1564,7 +1583,8 @@ Escolhido sobre header (`Accept: application/vnd...`) porque é visível, testá
 /api/v1
 ├── /auth
 │   ├── /admin/{login,refresh,logout}
-│   └── /{register,login,refresh,logout,forgot-password,reset-password}
+│   ├── /{register,login,refresh,logout,forgot-password,reset-password,verify-email}
+│   └── /email-code/{request,verify}   código de 6 dígitos (público; verify devolve sessão)
 ├── /store                       público: dados da loja + flags públicas
 ├── /products                    GET público | POST/PATCH/DELETE admin
 │   └── /:id/variants
@@ -1709,6 +1729,8 @@ Regra de ouro: **verificação de posse é no service, não só na rota**. `GET 
 | `POST /auth/login` | 5 / 15 min por IP+email |
 | `POST /auth/register` | 3 / hora por IP |
 | `forgot-password` | 3 / hora por e-mail |
+| `POST /auth/email-code/request` | 10 / dia por e-mail + 30 / hora por IP (CGNAT) + 60 s entre envios |
+| `POST /auth/email-code/verify` | 30 / 15 min por IP + **5 tentativas por código**, validade de 10 min |
 | `POST /checkout/confirm` | 10 / hora por cliente |
 | `POST /checkout/shipping` | 30 / hora por IP (a API do Melhor Envio tem custo) |
 | `/webhooks/stripe` | **sem limite** (nunca bloqueie o Stripe) |

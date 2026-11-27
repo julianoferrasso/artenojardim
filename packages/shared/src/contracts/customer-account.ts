@@ -12,7 +12,12 @@ import { emailSchema, passwordSchema } from './common.js'
  */
 
 /**
- * Troca de senha por quem SABE a senha atual.
+ * Troca de senha por quem SABE a senha atual — ou a PRIMEIRA senha de uma conta
+ * que nasceu pelo código do e-mail.
+ *
+ * `currentPassword` é opcional só no formato: a API exige sempre que a conta já
+ * tem senha. Conta sem senha não tem o que provar além da sessão, que já veio
+ * de um código entregue na caixa dela.
  *
  * `currentPassword` é `min(1)` e não `passwordSchema`: a senha antiga pode ter
  * nascido sob outra regra, e recusá-la por comprimento diria ao cliente que ele
@@ -24,7 +29,7 @@ import { emailSchema, passwordSchema } from './common.js'
  */
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, 'Informe a senha atual'),
+    currentPassword: z.string().min(1, 'Informe a senha atual').optional(),
     password: passwordSchema,
   })
   .refine((v) => v.currentPassword !== v.password, {

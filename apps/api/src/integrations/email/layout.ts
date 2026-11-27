@@ -43,8 +43,14 @@ export type EmailLayoutParams = {
   heading: string
   /** Parágrafos do corpo, em texto puro — a função escapa e envolve em <p>. */
   paragraphs: string[]
-  ctaLabel: string
-  ctaUrl: string
+  /**
+   * Botão. Opcional: o e-mail do código NÃO leva link de propósito — link abre no
+   * navegador do app de e-mail, longe da aba onde o cliente está comprando.
+   */
+  ctaLabel?: string | undefined
+  ctaUrl?: string | undefined
+  /** Código de uso único, em destaque acima dos parágrafos. */
+  code?: string | undefined
   /** Aviso final: o que fazer se o cliente não pediu isto. */
   footerNote: string
   /** Opcional: ausente nos transacionais, que não têm produto para mostrar. */
@@ -60,7 +66,7 @@ export type EmailLayoutParams = {
 }
 
 export const renderEmailLayout = (params: EmailLayoutParams): string => {
-  const { branding, heading, paragraphs, ctaLabel, ctaUrl, footerNote, hero, lineItems } = params
+  const { branding, heading, paragraphs, ctaLabel, ctaUrl, footerNote, hero, lineItems, code } = params
 
   const logo = branding.logoUrl
     ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.storeName)}" width="56" style="display:block;margin:0 auto 16px;border:0;max-width:56px;height:auto;">`
@@ -107,6 +113,25 @@ export const renderEmailLayout = (params: EmailLayoutParams): string => {
         .join('')
     : ''
 
+  // Fonte monoespaçada e espaço entre os dígitos: é lido de relance e às vezes
+  // digitado à mão no celular, olhando para outra tela.
+  const codeBlock = code
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
+            <tr><td align="center" style="padding:14px 24px;border-radius:8px;background-color:#faf7f5;border:1px solid #ece7e3;font-family:'SFMono-Regular',Menlo,Consolas,'Courier New',monospace;font-size:30px;font-weight:600;letter-spacing:8px;color:#1c1917;">${escapeHtml(code)}</td></tr>
+          </table>`
+    : ''
+
+  const ctaBlock =
+    ctaLabel && ctaUrl
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;">
+            <tr><td align="center" style="border-radius:8px;background-color:#b4654a;">
+              <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:12px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;font-weight:500;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeHtml(ctaLabel)}</a>
+            </td></tr>
+          </table>
+          <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#78716c;">Se o botão não funcionar, copie e cole este endereço no navegador:</p>
+          <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;color:#78716c;">${escapeHtml(ctaUrl)}</p>`
+      : ''
+
   const itemsBlock = lineItems
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
             ${itemRows}${totalRows}
@@ -134,16 +159,11 @@ export const renderEmailLayout = (params: EmailLayoutParams): string => {
         </td></tr>
         ${heroBlock}
         <tr><td style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+          ${codeBlock}
           ${body}
           ${itemsBlock}
-          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto;">
-            <tr><td align="center" style="border-radius:8px;background-color:#b4654a;">
-              <a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:12px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;font-weight:500;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeHtml(ctaLabel)}</a>
-            </td></tr>
-          </table>
-          <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#78716c;">Se o botão não funcionar, copie e cole este endereço no navegador:</p>
-          <p style="margin:0 0 24px;font-size:12px;line-height:1.5;word-break:break-all;color:#78716c;">${escapeHtml(ctaUrl)}</p>
-          <p style="margin:0;padding-top:20px;border-top:1px solid #ece7e3;font-size:13px;line-height:1.6;color:#78716c;">${escapeHtml(footerNote)}</p>
+          ${ctaBlock}
+          <p style="margin:${ctaBlock ? '0' : '8px 0 0'};padding-top:20px;border-top:1px solid #ece7e3;font-size:13px;line-height:1.6;color:#78716c;">${escapeHtml(footerNote)}</p>
         </td></tr>
       </table>
       <p style="margin:20px 0 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:12px;color:#a8a29e;">
@@ -162,6 +182,7 @@ export const renderEmailText = (params: EmailLayoutParams): string =>
   [
     params.heading,
     '',
+    ...(params.code ? [`Seu código: ${params.code}`, ''] : []),
     ...params.paragraphs,
     ...(params.hero ? ['', params.hero.priceLabel] : []),
     ...(params.lineItems
@@ -172,8 +193,7 @@ export const renderEmailText = (params: EmailLayoutParams): string =>
           ...params.lineItems.totals.map((total) => `${total.label}: ${total.value}`),
         ]
       : []),
-    '',
-    `${params.ctaLabel}: ${params.ctaUrl}`,
+    ...(params.ctaLabel && params.ctaUrl ? ['', `${params.ctaLabel}: ${params.ctaUrl}`] : []),
     '',
     params.footerNote,
     '',

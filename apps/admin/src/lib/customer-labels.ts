@@ -64,10 +64,12 @@ export const accountState = (
   },
 ): string => {
   if (customer.deletedAt) return 'Conta removida/anonimizada.'
-  if (!customer.activity.hasPassword) return 'Comprou como convidado — nunca criou senha.'
+  // Não confirmada ANTES de "sem senha": o cadastro novo não grava senha até a
+  // confirmação, então toda conta pendente também está sem senha.
   if (customer.activity.pendingEmailVerification) {
-    return 'Cadastrou-se mas ainda não confirmou o e-mail (não consegue entrar).'
+    return 'Cadastrou-se mas ainda não confirmou o e-mail (confirma pelo código ou pelo link que recebeu).'
   }
+  if (!customer.activity.hasPassword) return 'Entra com código por e-mail — ainda não criou senha.'
   return 'Conta ativa e com e-mail confirmado.'
 }
 
