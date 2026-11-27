@@ -38,11 +38,10 @@ export const createBannerSchema = z.object({
   subtitle: z.string().max(400).optional(),
   buttonLabel: z.string().max(40).optional(),
   /*
-   * Caminho relativo ("/categorias/velas") ou URL completa. Validação leve de
-   * propósito: quem cadastra é staff, e um regex de URL rígido só atrapalharia
-   * âncoras e paths com query.
+   * O destino do botão é uma categoria da loja, escolhida numa lista — não uma
+   * URL digitada (que abria brecha para link quebrado). null = sem botão.
    */
-  linkUrl: z.string().max(500).trim().optional(),
+  linkCategoryId: z.string().nullable().optional(),
   imageId: z.string().nullable().optional(),
   // Sem .default() nestes quatro: o partial() do update os reaplicaria e
   // sobrescreveria o que está salvo.
@@ -67,6 +66,11 @@ export const bannerSchema = z.object({
   title: z.string(),
   subtitle: z.string().nullable(),
   buttonLabel: z.string().nullable(),
+  linkCategoryId: z.string().nullable(),
+  /**
+   * Derivado da categoria a cada leitura (/categorias/{slug}), nunca persistido.
+   * Na visão pública, categoria inativa = null (o slide fica sem botão).
+   */
   linkUrl: z.string().nullable(),
   imageId: z.string().nullable(),
   /** Derivada da key do Upload a cada leitura, nunca persistida. */
@@ -87,7 +91,8 @@ export const bannerSchema = z.object({
 export type Banner = z.infer<typeof bannerSchema>
 
 /**
- * O que o visitante anônimo recebe: sem imageId (detalhe interno do storage)
+ * O que o visitante anônimo recebe: sem imageId (detalhe interno do storage) nem
+ * linkCategoryId (a loja só precisa da URL pronta)
  * nem isActive/posição (só ativos chegam, já ordenados). Topo e meio vêm
  * juntos; a loja separa por `placement`. Resposta cacheável.
  */

@@ -26,7 +26,7 @@ const SELECT = {
   title: true,
   subtitle: true,
   buttonLabel: true,
-  linkUrl: true,
+  linkCategoryId: true,
   imageId: true,
   backdrop: true,
   layout: true,
@@ -37,6 +37,7 @@ const SELECT = {
   createdAt: true,
   updatedAt: true,
   image: { select: { key: true, width: true, height: true } },
+  linkCategory: { select: { slug: true, isActive: true } },
 } satisfies Prisma.BannerSelect
 
 type Row = Prisma.BannerGetPayload<{ select: typeof SELECT }>
@@ -56,7 +57,10 @@ const toDTO = (row: Row): Banner => ({
   title: row.title,
   subtitle: row.subtitle,
   buttonLabel: row.buttonLabel,
-  linkUrl: row.linkUrl,
+  linkCategoryId: row.linkCategoryId,
+  // Derivada do slug a cada leitura: renomear o endereço da categoria não pode
+  // quebrar o botão do banner.
+  linkUrl: row.linkCategory ? `/categorias/${row.linkCategory.slug}` : null,
   imageId: row.imageId,
   // URL derivada da key a cada leitura, nunca persistida — trocar de provedor
   // de storage não pode exigir um UPDATE.
@@ -81,7 +85,8 @@ const toPublicDTO = (row: Row): PublicBanner => {
     title: dto.title,
     subtitle: dto.subtitle,
     buttonLabel: dto.buttonLabel,
-    linkUrl: dto.linkUrl,
+    // Categoria inativa não abre na loja: sem ela, o slide fica sem botão.
+    linkUrl: row.linkCategory?.isActive ? dto.linkUrl : null,
     imageUrl: dto.imageUrl,
     imageWidth: dto.imageWidth,
     imageHeight: dto.imageHeight,
@@ -114,6 +119,15 @@ export const listBanners = async (): Promise<Banner[]> => {
  * Posse verificada no SERVICE, não na rota: `requireStaff` diz quem é, não diz
  * que este upload é desta loja. Sem isto, um id forjado vira imagem do banner.
  */
+/** Mesma regra do upload: um id de categoria de outra loja não vira link. */
+const assertCategoryOwned = async (categoryId: string): Promise<void> => {
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, storeId: getActiveStoreId() },
+    select: { id: true },
+  })
+  if (!category) throw appError(ERROR_CODES.VALIDATION_ERROR, 'Categoria do link não encontrada', 422)
+}
+
 const assertImageOwned = async (imageId: string): Promise<void> => {
   const upload = await prisma.upload.findFirst({
     where: { id: imageId, storeId: getActiveStoreId() },
@@ -127,6 +141,7 @@ export const createBanner = async (
   ctx: AuditContext,
 ): Promise<Banner> => {
   if (input.imageId) await assertImageOwned(input.imageId)
+  if (input.linkCategoryId) await assertCategoryOwned(input.linkCategoryId)
 
   // `||` e não `??`: string vazia também precisa virar null (FK inexistente).
   const imageId = input.imageId || null
@@ -137,7 +152,7 @@ export const createBanner = async (
       title: input.title,
       subtitle: input.subtitle ?? null,
       buttonLabel: input.buttonLabel ?? null,
-      linkUrl: input.linkUrl ?? null,
+      linkCategoryId: input.linkCategoryId || null,
       imageId,
       // Fundo é a borda DA FOTO: sem foto, não há o que prolongar.
       backdrop: imageId && input.backdrop ? input.backdrop : Prisma.DbNull,
@@ -173,12 +188,15 @@ export const updateBanner = async (
   if (!current) throw notFound('Banner')
 
   if (input.imageId) await assertImageOwned(input.imageId)
+  if (input.linkCategoryId) await assertCategoryOwned(input.linkCategoryId)
 
   const data: Prisma.BannerUpdateInput = {}
   if (input.title !== undefined) data.title = input.title
   if (input.subtitle !== undefined) data.subtitle = input.subtitle
   if (input.buttonLabel !== undefined) data.buttonLabel = input.buttonLabel
-  if (input.linkUrl !== undefined) data.linkUrl = input.linkUrl
+  if (input.linkCategoryId !== undefined) data.linkCategory = input.linkCategoryId
+    ? { connect: { id: input.linkCategoryId } }
+    : { disconnect: true }
   if (input.imageId !== undefined) data.image = input.imageId
     ? { connect: { id: input.imageId } }
     : { disconnect: true }
@@ -198,7 +216,7 @@ export const updateBanner = async (
       title: current.title,
       subtitle: current.subtitle,
       buttonLabel: current.buttonLabel,
-      linkUrl: current.linkUrl,
+      linkCategoryId: current.linkCategoryId,
       imageId: current.imageId,
       backdrop: current.backdrop,
       layout: current.layout,
@@ -211,7 +229,7 @@ export const updateBanner = async (
       title: row.title,
       subtitle: row.subtitle,
       buttonLabel: row.buttonLabel,
-      linkUrl: row.linkUrl,
+      linkCategoryId: row.linkCategoryId,
       imageId: row.imageId,
       backdrop: row.backdrop,
       layout: row.layout,

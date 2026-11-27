@@ -20,6 +20,7 @@ import {
   type BannerLook,
 } from '@ecommerce/shared/utils'
 import { useCreateBanner, useUpdateBanner } from '@/lib/banners'
+import { flattenForSelect, useCategoryTree } from '@/lib/categories'
 import { sampleImageBackdrop } from '@/lib/backdrop'
 import { useStoreTheme } from '@/lib/store-theme'
 import { ImageUploader } from '@/components/image-uploader'
@@ -57,7 +58,7 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
           title: initial.title,
           subtitle: initial.subtitle ?? undefined,
           buttonLabel: initial.buttonLabel ?? undefined,
-          linkUrl: initial.linkUrl ?? undefined,
+          linkCategoryId: initial.linkCategoryId,
           imageId: initial.imageId,
           backdrop: initial.backdrop,
           layout: initial.layout,
@@ -70,6 +71,7 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
           isActive: true,
           position: 0,
           backdrop: null,
+          linkCategoryId: null,
           layout: 'SIDE',
           blurBehindText: true,
           placement: initialPlacement,
@@ -90,6 +92,20 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
   const blur = watch('blurBehindText') ?? true
   const title = watch('title')
   const placement = watch('placement') ?? 'HERO'
+  const buttonLabel = watch('buttonLabel')?.trim()
+  const linkCategoryId = watch('linkCategoryId') || null
+
+  const categoryTree = useCategoryTree()
+  const categories = flattenForSelect(categoryTree.data ?? [])
+  const linkCategory = categories.find((c) => c.id === linkCategoryId)
+  const linkWarning =
+    buttonLabel && !linkCategoryId
+      ? 'Escolha a categoria do botão: sem ela, o banner aparece sem botão.'
+      : linkCategory && !linkCategory.isActive
+        ? 'Esta categoria está inativa: enquanto estiver, o banner aparece sem botão.'
+        : !buttonLabel && linkCategoryId
+          ? 'Escreva o texto do botão: sem ele, o banner aparece sem botão.'
+          : null
   const [sampling, setSampling] = useState(false)
   const [sampleFailed, setSampleFailed] = useState(false)
   // Não é gravado: só serve para o aviso, e é refeito a cada amostragem.
@@ -154,8 +170,13 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
 
   const onSubmit = (values: CreateBannerInput) => {
     setFormError(null)
-    // '' do input hidden vira null — '' viajaria até o Prisma como FK inválida.
-    const input = { ...values, imageId: values.imageId || null }
+    // '' do input hidden e do "sem link" vira null — '' viajaria até o Prisma
+    // como FK inválida.
+    const input = {
+      ...values,
+      imageId: values.imageId || null,
+      linkCategoryId: values.linkCategoryId || null,
+    }
 
     const onError = (e: unknown) =>
       setFormError(e instanceof ApiError ? e.message : 'Não foi possível salvar.')
@@ -206,12 +227,32 @@ export const BannerForm = ({ initial, placement: initialPlacement = 'HERO', onDo
       <div className="flex flex-col gap-1.5">
         <label htmlFor="buttonLabel" className="text-sm font-medium">Texto do botão</label>
         <input id="buttonLabel" placeholder="Ex.: Ver produtos" {...register('buttonLabel')} className={field} />
-        <p className="text-xs text-muted-foreground">Sem texto, o slide fica sem botão.</p>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="linkUrl" className="text-sm font-medium">Link do botão</label>
-        <input id="linkUrl" placeholder="Ex.: /categorias/velas" {...register('linkUrl')} className={field} />
+        <label htmlFor="linkCategoryId" className="text-sm font-medium">Link do botão</label>
+        {/* Só monta com as opções na mão: o select não-controlado do RHF pega o
+            valor salvo ao montar, e sem a opção ainda ele mostraria "Sem link". */}
+        {categoryTree.isLoading ? (
+          <p className="text-xs text-muted-foreground">Carregando categorias…</p>
+        ) : (
+          <select id="linkCategoryId" {...register('linkCategoryId')} className={field}>
+            <option value="">Sem link (banner sem botão)</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.label}
+                {category.isActive ? '' : ' (inativa)'}
+              </option>
+            ))}
+          </select>
+        )}
+        {categoryTree.error && (
+          <p className="text-xs text-destructive">Não foi possível carregar as categorias.</p>
+        )}
+        {linkCategory && (
+          <p className="text-xs text-muted-foreground">Leva para /categorias/{linkCategory.slug}</p>
+        )}
+        {linkWarning && <p className="rounded-md bg-accent px-3 py-2 text-xs">{linkWarning}</p>}
       </div>
 
       <input type="hidden" {...register('imageId')} />

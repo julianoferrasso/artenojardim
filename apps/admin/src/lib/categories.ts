@@ -55,11 +55,11 @@ export const flattenForSelect = (
   tree: CategoryTreeNode[],
   excludeId?: string,
   depth = 0,
-): Array<{ id: string; label: string }> => {
-  const out: Array<{ id: string; label: string }> = []
+): Array<{ id: string; label: string; slug: string; isActive: boolean }> => {
+  const out: Array<{ id: string; label: string; slug: string; isActive: boolean }> = []
   for (const node of tree) {
     if (node.id === excludeId) continue // pula a subárvore inteira
-    out.push({ id: node.id, label: `${'  '.repeat(depth)}${node.name}` })
+    out.push({ id: node.id, slug: node.slug, isActive: node.isActive, label:`${'  '.repeat(depth)}${node.name}` })
     out.push(...flattenForSelect(node.children, excludeId, depth + 1))
   }
   return out
