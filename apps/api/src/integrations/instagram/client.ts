@@ -21,6 +21,8 @@ export type InstagramPostImage = {
   body: Buffer
   mimeType: (typeof ALLOWED_IMAGE_TYPES)[number]
   caption: string | null
+  /** De onde veio a foto: o `/embed/` entrega o quadro inteiro, a og:image é o recorte. */
+  source: 'embed' | 'og'
 }
 
 const unavailable = (reason: string, extra?: Record<string, unknown>) => {
@@ -101,8 +103,59 @@ export const fetchPostMeta = async (permalink: string): Promise<InstagramPostMet
   return { imageUrl, caption: extractCaption(html) }
 }
 
+/**
+ * A foto do post no quadro inteiro, lida da página `/embed/` (o HTML que o
+ * iframe oficial carrega). A og:image NÃO serve de foto: o Instagram a entrega
+ * como o topo-centro com 60% da largura, ampliado para 640px
+ * (`stp=c216.0.648.648a_…_s640x640`), e na loja ela parecia "com zoom".
+ * O `srcset` traz o original (1080–1440px): fica o maior.
+ */
+export const extractEmbedImageUrl = (html: string): string | null => {
+  const tag = /<img\b[^>]*\bclass="[^"]*\bEmbeddedMediaImage\b[^"]*"[^>]*>/i.exec(html)?.[0]
+  if (!tag) return null
+  const attr = (name: string) => {
+    const value = new RegExp(`\\s${name}="([^"]*)"`, 'i').exec(tag)?.[1]
+    return value ? decodeEntities(value) : null
+  }
+
+  const best = (attr('srcset') ?? '')
+    .split(',')
+    .map((candidate) => {
+      const [url, width] = candidate.trim().split(/\s+/)
+      return { url, width: Number.parseInt(width ?? '', 10) || 0 }
+    })
+    .filter((c): c is { url: string; width: number } => !!c.url)
+    .sort((a, b) => b.width - a.width)[0]
+
+  const url = best?.url ?? attr('src')
+  return url && /^https:\/\//.test(url) ? url : null
+}
+
+const SHORTCODE_IN_PERMALINK = /\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/
+
+/** Sem a página `/embed/` (bloqueio, HTML mudou), o post ainda entra com a og:image. */
+const fetchEmbedImageUrl = async (permalink: string): Promise<string | null> => {
+  const shortcode = SHORTCODE_IN_PERMALINK.exec(permalink)?.[1]
+  if (!shortcode) return null
+  try {
+    const page = await fetchWithTimeout(`https://www.instagram.com/p/${shortcode}/embed/`, {
+      headers: { 'User-Agent': CRAWLER_UA, 'Accept-Language': 'pt-BR,pt;q=0.9' },
+    })
+    if (!page.ok || page.url.includes('/accounts/login')) return null
+    return extractEmbedImageUrl(await page.text())
+  } catch {
+    return null
+  }
+}
+
 export const fetchPostImage = async (permalink: string): Promise<InstagramPostImage> => {
-  const { imageUrl, caption } = await fetchPostMeta(permalink)
+  const [meta, embedImageUrl] = await Promise.all([fetchPostMeta(permalink), fetchEmbedImageUrl(permalink)])
+  const { caption } = meta
+  const source = embedImageUrl ? 'embed' : 'og'
+  if (!embedImageUrl) {
+    logger.warn({ permalink }, 'Instagram sem foto no /embed/: usando a og:image, que vem recortada')
+  }
+  const imageUrl = embedImageUrl ?? meta.imageUrl
 
   const image = await fetchWithTimeout(imageUrl)
   if (!image.ok) throw unavailable('imagem', { permalink, status: image.status })
@@ -124,5 +177,6 @@ export const fetchPostImage = async (permalink: string): Promise<InstagramPostIm
     body,
     mimeType: mimeType as InstagramPostImage['mimeType'],
     caption,
+    source,
   }
 }

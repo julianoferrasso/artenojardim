@@ -193,6 +193,16 @@
   [role='button'][aria-disabled='true'] {
     cursor: not-allowed;
   }
+
+  /*
+   * <dialog> modal aberto (o post do Instagram): o fundo não rola por baixo. O
+   * gutter estável segura o espaço da barra de rolagem que some — sem ele, a
+   * página inteira anda ~15px para o lado ao abrir.
+   */
+  :root:has(dialog[open]) {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+  }
 }
 
 /*

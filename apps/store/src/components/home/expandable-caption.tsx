@@ -4,9 +4,9 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * Legenda do post incorporado: 2 linhas e "ver mais", o mesmo gesto do
- * Instagram. É NOSSA e não a do iframe porque a do iframe não encolhe — é
- * cross-origin, e com ela o cartão passava de 1000px de altura.
+ * Legenda de um post do Instagram (no cartão e na janela): 2 linhas e "ver
+ * mais", o mesmo gesto do Instagram. É NOSSA e não a do iframe porque a do
+ * iframe não encolhe — é cross-origin, e com ela o cartão passava de 1000px.
  *
  * O `aria-expanded` não é só acessibilidade: o SnapCarousel pausa o autoplay
  * enquanto houver um aberto no trilho, senão o slide sai no meio da leitura.

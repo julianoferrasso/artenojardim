@@ -90,7 +90,13 @@ const isUniqueViolation = (err: unknown): boolean =>
 const countActive = (tx: Prisma.TransactionClient = prisma) =>
   tx.instagramPost.count({ where: { storeId: getActiveStoreId(), isActive: true } })
 
-type ImportedImage = { uploadId: string; caption: string | null; key: string }
+type ImportedImage = {
+  uploadId: string
+  caption: string | null
+  key: string
+  source: 'embed' | 'og'
+  size: number
+}
 
 /** Baixa a imagem do post e a registra como Upload. */
 const importImage = async (
@@ -119,12 +125,13 @@ const importImage = async (
     select: { id: true },
   })
 
-  return { uploadId: upload.id, caption: image.caption, key }
+  return { uploadId: upload.id, caption: image.caption, key, source: image.source, size: image.body.length }
 }
 
 /**
- * No modo EMBED a imagem é só a miniatura do admin: se o Instagram não a
- * entregar, o post entra do mesmo jeito — quem pinta a loja é o iframe.
+ * No modo EMBED a foto também pinta a vitrine (o iframe só abre no clique), mas
+ * o post entra mesmo sem ela: a loja mostra um tile com ícone e a janela ainda
+ * carrega o post oficial.
  */
 const tryImportImage = async (
   permalink: string,
@@ -334,44 +341,76 @@ export const reorderInstagramPosts = async (ids: string[], ctx: AuditContext): P
   return listInstagramPosts()
 }
 
+const IMAGE_REFS = {
+  id: true,
+  key: true,
+  filename: true,
+  _count: { select: { productImages: true, banners: true, categories: true, instagramPosts: true } },
+} satisfies Prisma.UploadSelect
+
+type ImageRefs = Prisma.UploadGetPayload<{ select: typeof IMAGE_REFS }>
+
 /**
- * Hard delete. A imagem sai junto quando era só deste post (o caso normal);
- * se o mesmo upload ilustra outra coisa, fica — apagar quebraria a outra tela.
+ * Apaga a imagem que o post deixou de usar, se era só dele (o caso normal). Se o
+ * mesmo upload ilustra outra coisa, fica — apagar quebraria a outra tela.
+ * `image._count` é o lido ANTES da troca/remoção: o próprio post conta 1.
  */
+const deleteUploadIfExclusive = async (image: ImageRefs): Promise<void> => {
+  const refs = image._count
+  if (refs.productImages + refs.banners + refs.categories > 0 || refs.instagramPosts !== 1) return
+  try {
+    await storage().delete(image.key)
+    await prisma.upload.delete({ where: { id: image.id } })
+  } catch (err) {
+    // O post já não a usa; uma imagem que sobrou é lixo recuperável pela biblioteca de mídia.
+    logger.warn({ err, uploadId: image.id }, 'Falha ao apagar a imagem do post do Instagram')
+  }
+}
+
+export type ReimportResult =
+  | { status: 'updated'; source: 'embed' | 'og'; size: number }
+  | { status: 'skipped'; reason: string }
+
+/**
+ * Manutenção: baixa de novo a foto de um post (as primeiras vieram da og:image,
+ * recortada). Só troca foto IMPORTADA — a que o lojista enviou à mão tem outro
+ * nome de arquivo e fica como está.
+ */
+export const reimportInstagramPostImage = async (id: string): Promise<ReimportResult> => {
+  const post = await prisma.instagramPost.findFirst({
+    where: { id, storeId: getActiveStoreId() },
+    select: { id: true, shortcode: true, permalink: true, image: { select: IMAGE_REFS } },
+  })
+  if (!post) throw notFound('Post')
+  if (post.image && !post.image.filename.startsWith(`${post.shortcode}.`)) {
+    return { status: 'skipped', reason: 'foto enviada à mão' }
+  }
+
+  const imported = await importImage(post.permalink, post.shortcode, undefined)
+  try {
+    await prisma.instagramPost.update({ where: { id }, data: { imageId: imported.uploadId }, select: { id: true } })
+  } catch (err) {
+    await discardImport(imported.uploadId, imported.key)
+    throw err
+  }
+
+  if (post.image) await deleteUploadIfExclusive(post.image)
+  return { status: 'updated', source: imported.source, size: imported.size }
+}
+
+/** Hard delete. A imagem sai junto quando era só deste post. */
 export const deleteInstagramPost = async (id: string, ctx: AuditContext): Promise<void> => {
   const storeId = getActiveStoreId()
   const post = await prisma.instagramPost.findFirst({
     where: { id, storeId },
-    select: {
-      id: true,
-      permalink: true,
-      image: {
-        select: {
-          id: true,
-          key: true,
-          _count: { select: { productImages: true, banners: true, categories: true, instagramPosts: true } },
-        },
-      },
-    },
+    select: { id: true, permalink: true, image: { select: IMAGE_REFS } },
   })
   if (!post) throw notFound('Post')
-
-  const refs = post.image?._count
-  const exclusive =
-    refs !== undefined && refs.productImages + refs.banners + refs.categories === 0 && refs.instagramPosts === 1
 
   // O post sai primeiro: com SetNull, apagar só o Upload o deixaria órfão de imagem.
   await prisma.instagramPost.delete({ where: { id } })
 
-  if (exclusive && post.image) {
-    try {
-      await storage().delete(post.image.key)
-      await prisma.upload.delete({ where: { id: post.image.id } })
-    } catch (err) {
-      // O post já saiu; uma imagem que sobrou é lixo recuperável pela biblioteca de mídia.
-      logger.warn({ err, uploadId: post.image.id }, 'Falha ao apagar a imagem do post do Instagram')
-    }
-  }
+  if (post.image) await deleteUploadIfExclusive(post.image)
 
   await audit({
     action: EVENTS.instagramPost.deleted,

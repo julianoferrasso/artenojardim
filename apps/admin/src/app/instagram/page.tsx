@@ -64,13 +64,14 @@ const MODES: Array<{ value: InstagramDisplayMode; label: string; hint: string }>
   {
     value: 'IMAGE',
     label: 'Foto (recomendado)',
-    hint: 'A foto do post no visual da loja. Leve, rápida e sem rastreadores do Instagram. Ideal para fotos.',
+    hint: 'A foto do post no visual da loja. O clique abre o post no Instagram. Leve e sem rastreadores da Meta.',
   },
   {
     value: 'EMBED',
     label: 'Post incorporado',
     hint:
-      'O post original do Instagram, com vídeo, carrossel e curtidas. Mais pesado e carrega scripts da Meta. ' +
+      'A mesma foto na vitrine; o clique abre o post original (vídeo, carrossel, curtidas) numa janela da loja. ' +
+      'Os scripts da Meta só carregam nesse clique. ' +
       'Só funciona com a conta pública e com “Incorporações” ligada nas configurações do Instagram.',
   },
 ]
