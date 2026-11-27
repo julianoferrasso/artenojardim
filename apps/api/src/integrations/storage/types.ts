@@ -45,7 +45,24 @@ export type StorageProvider = {
   /** Derivada, nunca persistida. É o que mantém o dado independente do provedor. */
   getPublicUrl: (key: string) => string
 
+  /**
+   * URL que o navegador BAIXA em vez de abrir. A pública não serve: o bucket é
+   * outra origem, e o navegador ignora o atributo `download` em link de outra
+   * origem. Assinada com Content-Disposition: attachment, o próprio storage
+   * manda salvar — sem CORS e sem a imagem passar pela API.
+   */
+  getDownloadUrl: (key: string, filename: string) => Promise<string>
+
   delete: (key: string) => Promise<void>
 
   exists: (key: string) => Promise<boolean>
+}
+
+/**
+ * Content-Disposition de download. O nome vai em `filename*` (RFC 5987) para
+ * acento não virar lixo, e num `filename` ASCII de reserva para navegador antigo.
+ */
+export const attachmentDisposition = (filename: string): string => {
+  const ascii = filename.normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/["\\]/g, '') || 'imagem'
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`
 }

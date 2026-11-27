@@ -54,6 +54,9 @@ export const ERROR_CODES = {
   /// Produto sob encomenda (ou híbrido) sem prazo de produção: o cliente não
   /// saberia quando recebe. 422 antes de gravar — a CHECK do banco viraria 500.
   PRODUCTION_DAYS_REQUIRED: 'PRODUCTION_DAYS_REQUIRED',
+  /// Imagem da biblioteca que ainda ilustra produto, banner, categoria ou post:
+  /// apagar quebraria a foto na loja (ou a tiraria em silêncio, nos SetNull).
+  UPLOAD_IN_USE: 'UPLOAD_IN_USE',
 
   // Estoque
   INSUFFICIENT_STOCK: 'INSUFFICIENT_STOCK',

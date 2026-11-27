@@ -6,6 +6,7 @@ import type { CategoryTreeNode } from '@ecommerce/shared/contracts'
 import { useCategoryTree, useDeleteCategory, flattenForSelect } from '@/lib/categories'
 import { CategoryForm } from '@/components/category-form'
 import { InlineEditItem, NewItemShell, Thumb, useDirtyGuard } from '@/components/inline-edit'
+import { useDialogs } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,7 @@ export default function CategoriesPage() {
   const { data: tree, isLoading, error } = useCategoryTree()
   const del = useDeleteCategory()
   const [editing, setEditing] = useState<Editing>(null)
+  const { confirm, notify } = useDialogs()
   const { onDirtyChange, guard, reset } = useDirtyGuard('Descartar as alterações desta categoria?')
 
   const changeEditing = (next: Editing) => guard(() => setEditing(next))
@@ -29,22 +31,45 @@ export default function CategoriesPage() {
     setEditing(null)
   }
 
-  const onDelete = (node: CategoryTreeNode) => {
+  const onDelete = async (node: CategoryTreeNode) => {
     if (node.children.length > 0) {
-      alert(`"${node.name}" tem subcategorias. Mova ou exclua as subcategorias primeiro.`)
+      const n = node.children.length
+      void notify({
+        title: `"${node.name}" tem ${n} subcategoria${n === 1 ? '' : 's'}`,
+        description: 'Mova as subcategorias para outro lugar ou exclua-as antes. Assim nenhuma fica sem categoria-mãe.',
+      })
       return
     }
-    const products =
-      node.productCount > 0
-        ? `\n\n${node.productCount} produto${node.productCount === 1 ? '' : 's'} vai sair desta categoria (os produtos não são excluídos).`
-        : ''
-    if (!confirm(`Excluir a categoria "${node.name}"?${products}`)) return
+    const ok = await confirm({
+      title: `Excluir a categoria "${node.name}"?`,
+      description: (
+        <>
+          {node.productCount > 0 ? (
+            <p>
+              {node.productCount === 1
+                ? '1 produto vai sair desta categoria. Ele não é excluído e continua na loja.'
+                : `${node.productCount} produtos vão sair desta categoria. Eles não são excluídos e continuam na loja.`}
+            </p>
+          ) : (
+            <p>Nenhum produto está nesta categoria.</p>
+          )}
+          <p>A página da categoria na loja deixa de existir. Não dá para desfazer.</p>
+        </>
+      ),
+      confirmLabel: 'Excluir categoria',
+      tone: 'danger',
+    })
+    if (!ok) return
     del.mutate(node.id, {
       // Excluir a categoria aberta fecha o formulário: salvar depois daria 404.
       onSuccess: () => {
         if (editing?.kind === 'edit' && editing.id === node.id) close()
       },
-      onError: (e) => alert(e instanceof ApiError ? e.message : 'Não foi possível excluir a categoria.'),
+      onError: (e) =>
+        void notify({
+          title: 'Não foi possível excluir a categoria',
+          description: e instanceof ApiError ? e.message : 'Tente de novo em instantes.',
+        }),
     })
   }
 

@@ -107,3 +107,18 @@ export const uploadImage = async (
 
 export const deleteUpload = (id: string): Promise<void> =>
   apiFetch<void>(ROUTES.uploads.detail(id), { method: 'DELETE' })
+
+/**
+ * Baixa o arquivo original. A API devolve uma URL assinada de 60s com
+ * Content-Disposition: attachment — o navegador salva e a página fica onde está.
+ * Um <a download> direto na URL pública não funciona: o bucket é outra origem.
+ */
+export const downloadUpload = async (id: string): Promise<void> => {
+  const { url } = await apiFetch<{ url: string }>(ROUTES.uploads.download(id))
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}

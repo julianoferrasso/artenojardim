@@ -81,6 +81,9 @@ export const createLocalStorage = (): StorageProvider => ({
 
   getPublicUrl: (key: string): string => `${env.API_URL}/uploads/${key}`,
 
+  // ?download=1 faz o express.static do app.ts responder com attachment.
+  getDownloadUrl: async (key: string): Promise<string> => `${env.API_URL}/uploads/${key}?download=1`,
+
   delete: async (key: string): Promise<void> => {
     try {
       await unlink(safePath(key))

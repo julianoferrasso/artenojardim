@@ -58,8 +58,10 @@ export const createApp = (): Express => {
   if (env.STORAGE_DRIVER === 'local') {
     app.use(
       '/uploads',
-      (_req, res, next) => {
+      (req, res, next) => {
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+        // Espelha o Content-Disposition da URL assinada de download do S3.
+        if (req.query['download']) res.attachment(req.path.split('/').pop())
         next()
       },
       express.static(env.LOCAL_UPLOAD_DIR, { maxAge: '1h', index: false }),

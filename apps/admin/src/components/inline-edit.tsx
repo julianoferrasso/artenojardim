@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { useDialogs } from '@/components/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 /**
@@ -175,14 +176,25 @@ export const useDirtyGuard = (message = 'Descartar as alterações não salvas?'
     dirtyRef.current = dirty
   }, [])
 
+  const { confirm } = useDialogs()
+
   /** Roda `action` se não há o que perder — ou se a pessoa confirmar o descarte. */
   const guard = useCallback(
     (action: () => void) => {
-      if (dirtyRef.current && !confirm(message)) return
-      dirtyRef.current = false
-      action()
+      const run = () => {
+        dirtyRef.current = false
+        action()
+      }
+      if (!dirtyRef.current) return run()
+      void confirm({
+        title: message,
+        description: 'O que você mudou neste formulário e ainda não salvou será perdido.',
+        confirmLabel: 'Descartar',
+        cancelLabel: 'Continuar editando',
+        tone: 'danger',
+      }).then((ok) => ok && run())
     },
-    [message],
+    [message, confirm],
   )
 
   /** Depois de salvar ou excluir: não há mais o que perder. */

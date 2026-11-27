@@ -36,6 +36,8 @@ uploadRoutes.post(
   controller.confirmController,
 )
 
+uploadRoutes.get('/:id/download', authenticate, requireStaff, controller.downloadController)
+
 uploadRoutes.delete('/:id', authenticate, requireStaff, controller.deleteController)
 
 /**

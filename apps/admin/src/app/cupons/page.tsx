@@ -14,6 +14,7 @@ import {
 } from '@/lib/coupons'
 import { CouponForm } from '@/components/coupon-form'
 import { InlineEditItem, NewItemShell, useDirtyGuard } from '@/components/inline-edit'
+import { useDialogs } from '@/components/confirm-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/lib/api'
@@ -35,6 +36,7 @@ export default function CouponsPage() {
   const { data: coupons, isLoading, error } = useCoupons()
   const del = useDeleteCoupon()
   const [editing, setEditing] = useState<Editing>(null)
+  const { confirm, notify } = useDialogs()
   const { onDirtyChange, guard, reset } = useDirtyGuard('Descartar as alterações deste cupom?')
 
   const changeEditing = (next: Editing) => guard(() => setEditing(next))
@@ -44,8 +46,19 @@ export default function CouponsPage() {
     setEditing(null)
   }
 
-  const onDelete = (coupon: Coupon) => {
-    if (!confirm(`Excluir o cupom ${coupon.code}?`)) return
+  const onDelete = async (coupon: Coupon) => {
+    const ok = await confirm({
+      title: `Excluir o cupom ${coupon.code}?`,
+      description: (
+        <>
+          <p>O código para de funcionar no checkout na hora. Não dá para desfazer.</p>
+          <p>Cupom que já foi usado em pedido não pode ser excluído, só desativado.</p>
+        </>
+      ),
+      confirmLabel: 'Excluir cupom',
+      tone: 'danger',
+    })
+    if (!ok) return
     del.mutate(coupon.id, {
       // Excluir o cupom aberto fecha o formulário: salvar depois daria 404.
       onSuccess: () => {
@@ -54,10 +67,16 @@ export default function CouponsPage() {
       onError: (e) => {
         // Reagimos ao CODE, nunca ao texto.
         if (e instanceof ApiError && e.code === ERROR_CODES.COUPON_IN_USE) {
-          alert('Este cupom já foi usado em pedidos e não pode ser excluído. Edite-o e desligue "Ativo".')
+          void notify({
+            title: `O cupom ${coupon.code} já foi usado`,
+            description: 'Ele aparece em pedidos e não pode ser excluído. Para ele parar de funcionar, edite o cupom e desligue "Ativo".',
+          })
           return
         }
-        alert(e instanceof ApiError ? e.message : 'Não foi possível excluir o cupom.')
+        void notify({
+          title: 'Não foi possível excluir o cupom',
+          description: e instanceof ApiError ? e.message : 'Tente de novo em instantes.',
+        })
       },
     })
   }

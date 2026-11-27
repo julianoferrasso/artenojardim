@@ -1,9 +1,9 @@
-import { S3Client, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
 import { env } from '../../config/env.js'
 import { externalServiceError } from '../../shared/errors.js'
-import type { StorageProvider, UploadTarget } from './types.js'
+import { attachmentDisposition, type StorageProvider, type UploadTarget } from './types.js'
 
 /**
  * Driver de PRODUÇÃO: Cloudflare R2, S3-compatível.
@@ -68,6 +68,22 @@ export const createR2Storage = (): StorageProvider => {
     },
 
     getPublicUrl: (key: string): string => `${publicUrl}/${key}`,
+
+    getDownloadUrl: async (key: string, filename: string): Promise<string> => {
+      try {
+        return await getSignedUrl(
+          s3,
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            ResponseContentDisposition: attachmentDisposition(filename),
+          }),
+          { expiresIn: 60 },
+        )
+      } catch (err) {
+        throw externalServiceError('R2', err)
+      }
+    },
 
     delete: async (key: string): Promise<void> => {
       try {

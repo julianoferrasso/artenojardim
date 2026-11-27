@@ -7,6 +7,7 @@ import { useBanners, useDeleteBanner } from '@/lib/banners'
 import { BannerForm } from '@/components/banner-form'
 import { BannerSection, type OpenItem } from '@/components/banner-section'
 import { useDirtyGuard } from '@/components/inline-edit'
+import { useDialogs } from '@/components/confirm-dialog'
 import { ApiError } from '@/lib/api'
 
 type Editing = { kind: 'edit'; id: string } | { kind: 'new'; placement: BannerPlacement } | null
@@ -34,14 +35,26 @@ export default function BannersPage() {
   const { data: banners, isLoading, error } = useBanners()
   const del = useDeleteBanner()
   const [editing, setEditing] = useState<Editing>(null)
+  const { confirm, notify } = useDialogs()
 
   const { onDirtyChange, guard, reset } = useDirtyGuard(DISCARD_MESSAGE)
 
   /** Troca o que está aberto; com alteração não salva, pergunta antes. */
   const changeEditing = (next: Editing) => guard(() => setEditing(next))
 
-  const onDelete = (banner: Banner) => {
-    if (!confirm(`Excluir o banner "${banner.title}"?`)) return
+  const onDelete = async (banner: Banner) => {
+    const ok = await confirm({
+      title: `Excluir o banner "${banner.title}"?`,
+      description: (
+        <>
+          <p>Ele sai da home da loja na hora. Não dá para desfazer.</p>
+          <p>A foto continua na biblioteca de mídia.</p>
+        </>
+      ),
+      confirmLabel: 'Excluir banner',
+      tone: 'danger',
+    })
+    if (!ok) return
     del.mutate(banner.id, {
       // Excluir o banner que está aberto fecha o formulário: salvar depois daria 404.
       onSuccess: () => {
@@ -51,7 +64,10 @@ export default function BannersPage() {
         }
       },
       onError: (e) =>
-        alert(e instanceof ApiError ? e.message : 'Não foi possível excluir o banner.'),
+        void notify({
+          title: 'Não foi possível excluir o banner',
+          description: e instanceof ApiError ? e.message : 'Tente de novo em instantes.',
+        }),
     })
   }
 

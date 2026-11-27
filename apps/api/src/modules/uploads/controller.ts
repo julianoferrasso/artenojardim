@@ -27,6 +27,10 @@ export const confirmController = async (req: Request, res: Response): Promise<vo
   created(res, upload)
 }
 
+export const downloadController = async (req: Request, res: Response): Promise<void> => {
+  ok(res, await service.getUploadDownloadUrl(req.params['id'] as string))
+}
+
 export const deleteController = async (req: Request, res: Response): Promise<void> => {
   await service.deleteUpload(req.params['id'] as string)
   noContent(res)

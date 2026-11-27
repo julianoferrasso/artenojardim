@@ -48,6 +48,7 @@ import {
   useUpdateInstagramPost,
 } from '@/lib/instagram'
 import { ImageUploader } from '@/components/image-uploader'
+import { useDialogs } from '@/components/confirm-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,6 +83,8 @@ export default function InstagramPage() {
   const update = useUpdateInstagramPost()
   const reorder = useReorderInstagramPosts()
   const del = useDeleteInstagramPost()
+  const { confirm, notify } = useDialogs()
+  const showError = (title: string, description: string) => void notify({ title, description })
 
   const [mode, setMode] = useState<InstagramDisplayMode>('IMAGE')
   const [source, setSource] = useState('')
@@ -151,7 +154,7 @@ export default function InstagramPage() {
   const onToggleActive = (post: InstagramPost) => {
     update.mutate(
       { id: post.id, input: { isActive: !post.isActive } },
-      { onError: (e) => alert(errorMessage(e, 'Não foi possível alterar o post.')) },
+      { onError: (e) => showError('Não foi possível alterar o post', errorMessage(e, 'Tente de novo em instantes.')) },
     )
   }
 
@@ -160,10 +163,11 @@ export default function InstagramPage() {
       { id: post.id, input: { displayMode } },
       {
         onError: (e) =>
-          alert(
+          showError(
+            'Não foi possível alterar o post',
             e instanceof ApiError && e.code === ERROR_CODES.INSTAGRAM_POST_UNAVAILABLE
               ? 'Não foi possível carregar a foto deste post. Para exibi-lo como foto, exclua e adicione de novo enviando a imagem manualmente.'
-              : errorMessage(e, 'Não foi possível alterar o post.'),
+              : errorMessage(e, 'Tente de novo em instantes.'),
           ),
       },
     )
@@ -172,14 +176,25 @@ export default function InstagramPage() {
   const onToggleCaption = (post: InstagramPost) => {
     update.mutate(
       { id: post.id, input: { captioned: !post.captioned } },
-      { onError: (e) => alert(errorMessage(e, 'Não foi possível alterar o post.')) },
+      { onError: (e) => showError('Não foi possível alterar o post', errorMessage(e, 'Tente de novo em instantes.')) },
     )
   }
 
-  const onDelete = (post: InstagramPost) => {
-    if (!confirm('Remover este post da loja?')) return
+  const onDelete = async (post: InstagramPost) => {
+    const ok = await confirm({
+      title: 'Remover este post da loja?',
+      description: (
+        <>
+          <p>Ele sai da seção do Instagram na home. No Instagram, nada muda.</p>
+          <p>A foto salva para este post também é apagada, se não estiver em uso em outro lugar.</p>
+        </>
+      ),
+      confirmLabel: 'Remover post',
+      tone: 'danger',
+    })
+    if (!ok) return
     del.mutate(post.id, {
-      onError: (e) => alert(errorMessage(e, 'Não foi possível remover o post.')),
+      onError: (e) => showError('Não foi possível remover o post', errorMessage(e, 'Tente de novo em instantes.')),
     })
   }
 
@@ -197,7 +212,7 @@ export default function InstagramPage() {
     const to = posts.findIndex((p) => p.id === over.id)
     if (from < 0 || to < 0) return
     reorder.mutate(arrayMove(posts, from, to), {
-      onError: (e) => alert(errorMessage(e, 'Não foi possível salvar a nova ordem.')),
+      onError: (e) => showError('Não foi possível salvar a nova ordem', errorMessage(e, 'Tente de novo em instantes.')),
     })
   }
 

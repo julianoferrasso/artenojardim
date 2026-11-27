@@ -1,11 +1,15 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Download, Trash2 } from 'lucide-react'
 import { ROUTES } from '@ecommerce/shared/constants'
-import type { Upload } from '@ecommerce/shared/contracts'
-import { apiFetchPaginated } from '@/lib/api'
-import { deleteUpload } from '@/lib/upload'
+import { ERROR_CODES, type Upload } from '@ecommerce/shared/contracts'
+import { ApiError, apiFetchPaginated } from '@/lib/api'
+import { deleteUpload, downloadUpload } from '@/lib/upload'
 import { ImageUploader } from '@/components/image-uploader'
+import { useDialogs } from '@/components/confirm-dialog'
+import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/utils'
 
 /**
@@ -20,10 +24,53 @@ export default function UploadsPage() {
     queryFn: () => apiFetchPaginated<Upload>(`${ROUTES.uploads.list}?perPage=60`),
   })
 
+  const { confirm, notify } = useDialogs()
+  const [downloading, setDownloading] = useState<string | null>(null)
+
   const remove = useMutation({
     mutationFn: deleteUpload,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['uploads'] }),
+    onError: (e) =>
+      void notify({
+        title:
+          e instanceof ApiError && e.code === ERROR_CODES.UPLOAD_IN_USE
+            ? 'Esta imagem está em uso'
+            : 'Não foi possível excluir a imagem',
+        description: e instanceof ApiError ? e.message : 'Tente de novo em instantes.',
+      }),
   })
+
+  const onDelete = async (upload: Upload) => {
+    const ok = await confirm({
+      title: 'Excluir esta imagem?',
+      description: (
+        <>
+          <p>O arquivo é apagado do armazenamento. Não dá para desfazer.</p>
+          <p>
+            Se ela ainda estiver em um produto, banner, categoria ou post do Instagram, a exclusão é
+            recusada. Troque a imagem lá primeiro.
+          </p>
+        </>
+      ),
+      confirmLabel: 'Excluir imagem',
+      tone: 'danger',
+    })
+    if (ok) remove.mutate(upload.id)
+  }
+
+  const onDownload = async (upload: Upload) => {
+    setDownloading(upload.id)
+    try {
+      await downloadUpload(upload.id)
+    } catch (e) {
+      void notify({
+        title: 'Não foi possível baixar a imagem',
+        description: e instanceof ApiError ? e.message : 'Tente de novo em instantes.',
+      })
+    } finally {
+      setDownloading(null)
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-8">
@@ -70,15 +117,31 @@ export default function UploadsPage() {
                         {upload.width ? ` · ${upload.width}×${upload.height}` : ''}
                       </p>
                     </div>
-                    <button
-                      onClick={() => {
-                        if (confirm('Excluir esta imagem?')) remove.mutate(upload.id)
-                      }}
-                      disabled={remove.isPending}
-                      className="absolute right-2 top-2 rounded-md bg-destructive px-2 py-1 text-xs text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-50"
-                    >
-                      Excluir
-                    </button>
+                    {/* Sempre visíveis no toque (não há hover); no mouse, aparecem no hover/foco. */}
+                    <div className="absolute right-2 top-2 flex gap-1 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="secondary"
+                        onClick={() => void onDownload(upload)}
+                        disabled={downloading === upload.id}
+                        aria-label="Baixar imagem"
+                        title="Baixar imagem"
+                      >
+                        <Download />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="destructive"
+                        onClick={() => void onDelete(upload)}
+                        disabled={remove.isPending}
+                        aria-label="Excluir imagem"
+                        title="Excluir imagem"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ConfirmProvider } from '@/components/confirm-dialog'
 
 export const Providers = ({ children }: { children: ReactNode }) => {
   // useState e não módulo: um QueryClient no escopo do módulo é compartilhado
@@ -34,7 +35,9 @@ export const Providers = ({ children }: { children: ReactNode }) => {
     <QueryClientProvider client={client}>
       <AuthProvider>
         {/* Um provider só, no topo: cada Tooltip solto sem ele quebra em runtime. */}
-        <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+        <TooltipProvider delayDuration={200}>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
   )

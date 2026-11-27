@@ -5,7 +5,7 @@ import {
   type Upload,
 } from '@ecommerce/shared/contracts'
 import { prisma } from '../../config/prisma.js'
-import { appError, notFound } from '../../shared/errors.js'
+import { appError, conflict, notFound } from '../../shared/errors.js'
 import { getActiveStoreId } from '../../shared/store-context.js'
 import { storage, buildUploadKey } from '../../integrations/storage/index.js'
 
@@ -154,12 +154,38 @@ export const listUploads = async (params: {
   return { items: rows.map(toDTO), total }
 }
 
+/** URL assinada de 60s: só vale o tempo de o navegador começar o download. */
+export const getUploadDownloadUrl = async (id: string): Promise<{ url: string }> => {
+  const upload = await prisma.upload.findFirst({
+    where: { id, storeId: getActiveStoreId() },
+    select: { key: true, filename: true },
+  })
+  if (!upload) throw notFound('Upload')
+
+  return { url: await storage().getDownloadUrl(upload.key, upload.filename) }
+}
+
 export const deleteUpload = async (id: string): Promise<void> => {
   const upload = await prisma.upload.findFirst({
     where: { id, storeId: getActiveStoreId() },
-    select: { id: true, key: true },
+    select: {
+      id: true,
+      key: true,
+      _count: { select: { productImages: true, banners: true, categories: true, instagramPosts: true } },
+    },
   })
   if (!upload) throw notFound('Upload')
+
+  // Antes do storage: o ProductImage é Restrict, e o arquivo já teria sumido do
+  // bucket quando o DELETE batesse na FK. Os outros são SetNull — passariam, e o
+  // banner ficaria sem foto sem ninguém ter pedido isso.
+  const usage = describeUsage(upload._count)
+  if (usage) {
+    throw conflict(
+      `Esta imagem está em uso em ${usage}. Troque-a por outra lá antes de excluir.`,
+      ERROR_CODES.UPLOAD_IN_USE,
+    )
+  }
 
   // Remove do storage ANTES do banco: se a ordem fosse inversa e o storage
   // falhasse, o registro sumiria e o arquivo ficaria órfão para sempre, sem
@@ -167,6 +193,25 @@ export const deleteUpload = async (id: string): Promise<void> => {
   // storage aborta tudo e o registro permanece — recuperável.
   await storage().delete(upload.key)
   await prisma.upload.delete({ where: { id: upload.id } })
+}
+
+const plural = (n: number, one: string, many: string): string | null =>
+  n === 0 ? null : `${n} ${n === 1 ? one : many}`
+
+const describeUsage = (c: {
+  productImages: number
+  banners: number
+  categories: number
+  instagramPosts: number
+}): string | null => {
+  const parts = [
+    plural(c.productImages, 'foto de produto', 'fotos de produto'),
+    plural(c.banners, 'banner', 'banners'),
+    plural(c.categories, 'categoria', 'categorias'),
+    plural(c.instagramPosts, 'post do Instagram', 'posts do Instagram'),
+  ].filter((p): p is string => p !== null)
+  if (parts.length === 0) return null
+  return parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(', ')} e ${parts.at(-1)}`
 }
 
 const MIME_BY_EXT: Record<string, string> = {
